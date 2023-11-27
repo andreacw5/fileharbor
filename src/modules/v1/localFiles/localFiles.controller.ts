@@ -11,8 +11,10 @@ import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
 import { join } from 'path';
+import {ApiTags} from "@nestjs/swagger";
 
 @Controller()
+@ApiTags('Files')
 @UseInterceptors(ClassSerializerInterceptor)
 export default class LocalFilesController {
     constructor(private readonly localFilesService: LocalFilesService) {}

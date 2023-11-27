@@ -13,8 +13,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from "uuid";
 import LocalFilesInterceptor from "../localFiles/localFiles.interceptor";
+import {ApiTags} from "@nestjs/swagger";
 
 @Controller()
+@ApiTags('Users')
 export class UsersController {
     constructor(
         private readonly usersService: UsersService,
