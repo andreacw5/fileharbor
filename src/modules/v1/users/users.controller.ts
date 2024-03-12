@@ -65,8 +65,6 @@ export class UsersController {
   )
   async addAvatar(@Req() req, @UploadedFile() file: Express.Multer.File) {
     this.logger.log(`Received new avatar file: ${file.originalname}`);
-    // Optimize uploaded file
-    await this.usersService.optimizeImage(file.path);
     const uuid = uuidv4();
     Logger.log(`Generated UUID: ${uuid}`);
     return this.usersService.addAvatar({
@@ -74,6 +72,7 @@ export class UsersController {
       path: file.path,
       filename: file.originalname,
       mimetype: 'image/webp',
+      description: req.body.description || 'User avatar',
     });
   }
 }

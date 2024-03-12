@@ -10,9 +10,8 @@ import {
   UseGuards,
   Post,
   UploadedFile,
-  BadRequestException,
-  Inject,
-} from '@nestjs/common';
+  BadRequestException, Query, Body
+} from "@nestjs/common";
 import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
@@ -22,7 +21,7 @@ import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from './localFiles.interceptor';
 import { CacheInterceptor } from '@nestjs/cache-manager';
 
-const GENERAL_UPLOADS_DIR: string = './uploads/files/';
+const GENERAL_UPLOADS_DIR: string = './uploads/';
 
 @Controller()
 @ApiTags('Files')
@@ -110,8 +109,17 @@ export default class LocalFilesController {
       },
     }),
   )
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    this.logger.log(`Received and saved a new file: ${file.originalname}`);
-    return this.localFilesService.addFile(file);
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() { description }: { description: string },
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    this.logger.log(
+      `Received and saved a new file: ${file.originalname}`,
+    );
+    return this.localFilesService.addFile(file, description);
   }
 }

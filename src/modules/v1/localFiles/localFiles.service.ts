@@ -1,13 +1,23 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { LocalFile } from '@prisma/client';
 import * as fs from 'fs';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 class LocalFilesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly httpService: HttpService,
+  ) {}
 
-  async saveFile(data: LocalFile): Promise<LocalFile> {
+  async saveFile(data: {
+    path: string;
+    filename: string;
+    description: string;
+    mimetype: string;
+    id: string;
+  }) {
     return this.prisma.localFile.create({
       data,
     });
@@ -21,22 +31,13 @@ class LocalFilesService {
     return this.prisma.localFile.findMany({});
   }
 
-  async optimizeImage(path: string) {
-    // Transform image to webp
-    const image = fs.readFileSync(path);
-    Logger.debug(`Optimizing image ${path}`);
-    /*        const webp = await sharp(image).webp({
-            quality: 60,
-            lossless: true,
-        }).toBuffer();*/
-  }
-
-  addFile(file: Express.Multer.File) {
+  addFile(file: Express.Multer.File, description: string) {
     return this.saveFile({
       id: file.filename,
       path: file.path,
       filename: file.originalname,
       mimetype: file.mimetype,
+      description,
     });
   }
 }
