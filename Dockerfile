@@ -1,4 +1,4 @@
-FROM node:20.11.1-alpine as builder
+FROM node:20.11.1-alpine AS base
 
 ENV NODE_ENV build
 
@@ -12,20 +12,27 @@ RUN yarn install --frozen-lockfile
 
 COPY . .
 
+RUN yarn run prisma:generate
+
 RUN yarn build
 
-FROM node:20.11.1-alpine
+FROM base as prod-build
 
+# Set the NODE_ENV to production
 ENV NODE_ENV production
 
 # Create app directory
 WORKDIR /usr/src/app
+
+COPY prisma prisma
+
+RUN yarn run prisma:generate
 
 # Install app dependencies
 COPY package.json yarn.lock ./
 
 RUN yarn install --production --frozen-lockfile
 
-COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=base /usr/src/app/dist ./dist
 
 CMD [ "node", "dist/main.js" ]
