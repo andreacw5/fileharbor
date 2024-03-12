@@ -1,11 +1,21 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { CacheModule } from '@nestjs/cache-manager';
+import {ConfigModule, ConfigService} from '@nestjs/config';
 import LocalFilesService from './localFiles.service';
 import LocalFilesController from './localFiles.controller';
 import {PrismaService} from "../../../prisma.service";
 
 @Module({
-    imports: [ConfigModule],
+    imports: [
+        ConfigModule,
+        CacheModule.registerAsync({
+            imports: [ConfigModule],
+            useFactory: async (configService: ConfigService) => ({
+                ttl: configService.get('CACHE_TTL'),
+            }),
+            inject: [ConfigService],
+        }),
+    ],
     providers: [LocalFilesService, PrismaService],
     exports: [LocalFilesService],
     controllers: [LocalFilesController],

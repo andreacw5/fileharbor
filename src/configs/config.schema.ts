@@ -1,6 +1,12 @@
 import Joi from 'joi';
 
-export const configValidationSchema = Joi.object({
-    APP_PORT: Joi.number().default(8080).required(),
-    DATABASE_URL: Joi.string().required(),
+export default () => ({
+    port: parseInt(process.env.APP_PORT) || 3000,
+    database: process.env.DATABASE_URL,
+    cache: {
+        ttl: parseInt(process.env.CACHE_TTL) || 60,
+    },
+    auth: {
+        key: process.env.API_KEY,
+    },
 });

@@ -12,4 +12,8 @@ export class UsersService {
         const avatar = await this.localFilesService.saveFile(data);
         return avatar.id;
     }
+
+    async optimizeImage(path: string) {
+        return this.localFilesService.optimizeImage(path);
+    }
 }

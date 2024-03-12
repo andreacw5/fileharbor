@@ -3,6 +3,7 @@ import { AppModule } from './modules/app/app.module';
 import {HttpExceptionFilter} from "./filters/http-exception.filter";
 import {Logger} from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   const appOptions = { cors: true };
@@ -10,6 +11,8 @@ async function bootstrap() {
 
   app.useGlobalFilters(new HttpExceptionFilter());
   app.setGlobalPrefix('api');
+
+  const configService = app.get(ConfigService);
 
   // Swagger setup
   const options = new DocumentBuilder()
@@ -20,9 +23,20 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('/docs', app, document);
 
-  await app.listen(3000);
+  const appPort = configService.get<number>('APP_PORT', 3000);
+  await app.listen(appPort);
+
+  Logger.log('Swagger available at: http://localhost:' + appPort + '/docs');
+  Logger.log('Listening at: http://localhost:' + appPort + '/api/v1/status');
+
+  // Log all environment variables
+  Logger.debug('Configured environment variables:', {
+      cache: {
+          ttl: configService.get('cache.ttl'),
+      },
+  });
+
 }
-bootstrap().then(r => {
-  Logger.log('Swagger available at: http://localhost:' + 3000 + '/docs');
-  Logger.log('App is running and is listening at: http://localhost:' + 3000 + '/api/v1/status');
+bootstrap().then(() => {
+  Logger.log('App running now!');
 });
