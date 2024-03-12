@@ -4,40 +4,40 @@ import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer
 import { diskStorage } from 'multer';
 
 interface LocalFilesInterceptorOptions {
-    fieldName: string;
-    path?: string;
-    fileFilter?: MulterOptions['fileFilter'];
-    limits?: MulterOptions['limits'];
+  fieldName: string;
+  path?: string;
+  fileFilter?: MulterOptions['fileFilter'];
+  limits?: MulterOptions['limits'];
 }
 
 function LocalFilesInterceptor(
-    options: LocalFilesInterceptorOptions,
+  options: LocalFilesInterceptorOptions,
 ): Type<NestInterceptor> {
-    @Injectable()
-    class Interceptor implements NestInterceptor {
-        fileInterceptor: NestInterceptor;
-        constructor() {
-            const destination = `${options.path}`;
+  @Injectable()
+  class Interceptor implements NestInterceptor {
+    fileInterceptor: NestInterceptor;
+    constructor() {
+      const destination = `${options.path}`;
 
-            const multerOptions: MulterOptions = {
-                storage: diskStorage({
-                    destination,
-                }),
-                fileFilter: options.fileFilter,
-                limits: options.limits,
-            };
+      const multerOptions: MulterOptions = {
+        storage: diskStorage({
+          destination,
+        }),
+        fileFilter: options.fileFilter,
+        limits: options.limits,
+      };
 
-            this.fileInterceptor = new (FileInterceptor(
-                options.fieldName,
-                multerOptions,
-            ))();
-        }
-
-        intercept(...args: Parameters<NestInterceptor['intercept']>) {
-            return this.fileInterceptor.intercept(...args);
-        }
+      this.fileInterceptor = new (FileInterceptor(
+        options.fieldName,
+        multerOptions,
+      ))();
     }
-    return mixin(Interceptor);
+
+    intercept(...args: Parameters<NestInterceptor['intercept']>) {
+      return this.fileInterceptor.intercept(...args);
+    }
+  }
+  return mixin(Interceptor);
 }
 
 export default LocalFilesInterceptor;

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './modules/app/app.module';
-import {HttpExceptionFilter} from "./filters/http-exception.filter";
-import {Logger} from "@nestjs/common";
+import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 
@@ -16,10 +16,10 @@ async function bootstrap() {
 
   // Swagger setup
   const options = new DocumentBuilder()
-      .setTitle('Image Uploader API')
-      .setDescription('Image updloader service')
-      .setVersion('1.0')
-      .build();
+    .setTitle('Image Uploader API')
+    .setDescription('Image updloader service')
+    .setVersion('1.0')
+    .build();
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('/docs', app, document);
 
@@ -31,11 +31,10 @@ async function bootstrap() {
 
   // Log all environment variables
   Logger.debug('Configured environment variables:', {
-      cache: {
-          ttl: configService.get('cache.ttl'),
-      },
+    cache: {
+      ttl: configService.get('cache.ttl'),
+    },
   });
-
 }
 bootstrap().then(() => {
   Logger.log('App running now!');
