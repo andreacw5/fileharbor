@@ -11,10 +11,11 @@ datasource db {
 }
 
 model LocalFile {
-  id       String @id @default(uuid())
-  filename String
-  path     String
-  mimetype String
+  id          String  @id @default(uuid())
+  filename    String
+  path        String
+  mimetype    String
+  description String?
 
   @@map(name: "localFiles")
 }
