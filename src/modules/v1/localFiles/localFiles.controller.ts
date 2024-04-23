@@ -23,6 +23,7 @@ import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from './localFiles.interceptor';
 import { CacheInterceptor } from '@nestjs/cache-manager';
 import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -33,6 +34,7 @@ export default class LocalFilesController {
   constructor(
     private readonly localFilesService: LocalFilesService,
     private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
   ) {}
   private readonly logger = new Logger(LocalFilesController.name);
 
@@ -125,7 +127,11 @@ export default class LocalFilesController {
     }
 
     this.logger.log(`Received and saved a new file: ${file.originalname}`);
-    return this.localFilesService.addFile(file, description);
+    const uploaded = await this.localFilesService.addFile(file, description);
+    return {
+      ...uploaded,
+      fullPath: `${this.configService.get<string>('url')}/v1/files/${uploaded.id}`,
+    };
   }
 
   /**

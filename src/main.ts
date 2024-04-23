@@ -34,9 +34,9 @@ async function bootstrap() {
 
   // Log all environment variables
   Logger.debug('Configured environment variables:', {
-    cache: {
-      ttl: configService.get('cache.ttl'),
-    },
+    url: configService.get('url'),
+    port: configService.get('port'),
+    ttl: configService.get('cache.ttl'),
   });
 }
 bootstrap().then(() => {
