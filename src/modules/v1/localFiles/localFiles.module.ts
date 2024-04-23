@@ -4,7 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import LocalFilesService from './localFiles.service';
 import LocalFilesController from './localFiles.controller';
 import { PrismaService } from '../../../prisma.service';
-import { HttpModule } from "@nestjs/axios";
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [

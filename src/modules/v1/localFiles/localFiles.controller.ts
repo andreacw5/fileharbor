@@ -10,8 +10,10 @@ import {
   UseGuards,
   Post,
   UploadedFile,
-  BadRequestException, Query, Body
-} from "@nestjs/common";
+  BadRequestException,
+  Body,
+  Delete,
+} from '@nestjs/common';
 import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
@@ -20,6 +22,7 @@ import { ApiBasicAuth, ApiHeaders, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from './localFiles.interceptor';
 import { CacheInterceptor } from '@nestjs/cache-manager';
+import { HttpService } from '@nestjs/axios';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -27,7 +30,10 @@ const GENERAL_UPLOADS_DIR: string = './uploads/';
 @ApiTags('Files')
 @UseInterceptors(ClassSerializerInterceptor)
 export default class LocalFilesController {
-  constructor(private readonly localFilesService: LocalFilesService) {}
+  constructor(
+    private readonly localFilesService: LocalFilesService,
+    private readonly httpService: HttpService,
+  ) {}
   private readonly logger = new Logger(LocalFilesController.name);
 
   @Get()
@@ -46,13 +52,13 @@ export default class LocalFilesController {
 
   @Get(':id')
   @UseInterceptors(CacheInterceptor)
-  async getDatabaseFileById(
+  async getFileById(
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.logger.debug(`Received request for file with id: ${id}`);
     const file = await this.localFilesService.getFileById(id);
-
+    await this.localFilesService.updateViews(id);
     const stream = createReadStream(join(process.cwd(), file.path));
 
     response.set({
@@ -70,6 +76,7 @@ export default class LocalFilesController {
   ) {
     this.logger.debug(`Received request for file with id: ${id}`);
     const file = await this.localFilesService.getFileById(id);
+    await this.localFilesService.updateDownloads(id);
 
     const stream = createReadStream(join(process.cwd(), file.path));
 
@@ -97,7 +104,7 @@ export default class LocalFilesController {
         if (!file.mimetype.includes('image')) {
           return callback(
             new BadRequestException(
-              'Image type not allowed, chose another file',
+              'Image type not allowed, chose another file' + file.mimetype,
             ),
             false,
           );
@@ -117,9 +124,25 @@ export default class LocalFilesController {
       throw new BadRequestException('No file uploaded');
     }
 
-    this.logger.log(
-      `Received and saved a new file: ${file.originalname}`,
-    );
+    this.logger.log(`Received and saved a new file: ${file.originalname}`);
     return this.localFilesService.addFile(file, description);
+  }
+
+  /**
+   * Deletes a file by id
+   * @param {string} id
+   */
+  @Delete(':id')
+  @ApiHeaders([
+    {
+      name: 'X-API-KEY',
+      description: 'Auth API key',
+    },
+  ])
+  @ApiBasicAuth('api-key')
+  @UseGuards(AuthGuard('api-key'))
+  async deleteFile(@Param('id') id: string) {
+    this.logger.log(`Received a request to delete file with id: ${id}`);
+    return this.localFilesService.deleteFile(id);
   }
 }
