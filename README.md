@@ -9,7 +9,8 @@
 This project is a small service built with Nest.js dedicated to handling image uploads, such as avatars, post covers, and other assets.
 </p>
 <p align="center">
-    <a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
+    <a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@andreacw5/fileharbor" alt="NPM Version" /></a>
+    <a href="https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md" target="_blank"><img alt="GitHub License" src="https://img.shields.io/github/license/andreacw5/fileharbor"></a>
 </p>
 
 ## Getting Started
@@ -66,6 +67,8 @@ Contributions are welcome! If you want to contribute to this project, please fol
 | code         | description                  | default value |
 |--------------|------------------------------|---------------|
 | DATABASE_URL | database url                 |               |
+| APP_PORT     | app port                     | 3000          |
+| APP_URL      | app url                      |               |
 | CACHE_TTL    | Cache ttl value              | 60            |
 | API_KEY      | auth token for CUD Endpoints |               |
 

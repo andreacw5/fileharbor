@@ -10,6 +10,7 @@ COPY package.json yarn.lock ./
 
 RUN yarn install --frozen-lockfile
 
+# Bundle app source
 COPY . .
 
 RUN yarn run prisma:generate
@@ -35,4 +36,5 @@ RUN yarn install --production --frozen-lockfile
 
 COPY --from=base /usr/src/app/dist ./dist
 
+# Start the server using the production build
 CMD [ "node", "dist/main.js" ]

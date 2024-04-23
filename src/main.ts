@@ -4,6 +4,7 @@ import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { json } from 'express';
 
 async function bootstrap() {
   const appOptions = { cors: true };
@@ -11,6 +12,8 @@ async function bootstrap() {
 
   app.useGlobalFilters(new HttpExceptionFilter());
   app.setGlobalPrefix('api');
+
+  app.use(json({ limit: '5mb' }));
 
   const configService = app.get(ConfigService);
 
@@ -31,9 +34,9 @@ async function bootstrap() {
 
   // Log all environment variables
   Logger.debug('Configured environment variables:', {
-    cache: {
-      ttl: configService.get('cache.ttl'),
-    },
+    url: configService.get('url'),
+    port: configService.get('port'),
+    ttl: configService.get('cache.ttl'),
   });
 }
 bootstrap().then(() => {
