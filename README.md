@@ -67,6 +67,8 @@ Contributions are welcome! If you want to contribute to this project, please fol
 | code         | description                  | default value |
 |--------------|------------------------------|---------------|
 | DATABASE_URL | database url                 |               |
+| APP_PORT     | app port                     | 3000          |
+| APP_URL      | app url                      |               |
 | CACHE_TTL    | Cache ttl value              | 60            |
 | API_KEY      | auth token for CUD Endpoints |               |
 
