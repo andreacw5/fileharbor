@@ -143,6 +143,6 @@ export default class LocalFilesController {
   @UseGuards(AuthGuard('api-key'))
   async deleteFile(@Param('id') id: string) {
     this.logger.log(`Received a request to delete file with id: ${id}`);
-    return this.localFilesService.deleteFile(id);
+    return this.localFilesService.deleteFileById(id);
   }
 }
