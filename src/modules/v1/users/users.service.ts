@@ -5,14 +5,18 @@ import { Injectable } from '@nestjs/common';
 export class UsersService {
   constructor(private localFilesService: LocalFilesService) {}
 
-  async addAvatar(data: {
-    path: string;
-    filename: string;
-    description: string;
-    mimetype: string;
-    id: string;
-  }) {
-    const avatar = await this.localFilesService.saveFile(data);
-    return avatar.id;
+  /**
+   * Adds a file to the database
+   * @param file
+   * @param description
+   */
+  async addFile(file: Express.Multer.File, description: string) {
+    return await this.localFilesService.saveFile({
+      id: file.filename,
+      path: file.path,
+      filename: file.originalname,
+      mimetype: 'image/webp',
+      description,
+    });
   }
 }

@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { Express } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-import { v4 as uuidv4 } from 'uuid';
 import LocalFilesInterceptor from '../localFiles/localFiles.interceptor';
 import {
   ApiBasicAuth,
@@ -19,6 +18,7 @@ import {
   ApiHeaders,
   ApiTags,
 } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 
 const AVATAR_UPLOADS_DIR: string = './uploads/avatars/';
 
@@ -28,7 +28,10 @@ const AVATAR_UPLOADS_DIR: string = './uploads/avatars/';
 @UseGuards(AuthGuard('api-key'))
 @ApiConsumes('multipart/form-data')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
+  ) {}
   private readonly logger = new Logger(UsersController.name);
 
   /**
@@ -65,14 +68,13 @@ export class UsersController {
   )
   async addAvatar(@Req() req, @UploadedFile() file: Express.Multer.File) {
     this.logger.log(`Received new avatar file: ${file.originalname}`);
-    const uuid = uuidv4();
-    Logger.log(`Generated UUID: ${uuid}`);
-    return this.usersService.addAvatar({
-      id: uuid,
-      path: file.path,
-      filename: file.originalname,
-      mimetype: 'image/webp',
-      description: req.body.description || 'User avatar',
-    });
+    const uploaded = await this.usersService.addFile(
+      file,
+      req.body.description || 'User avatar',
+    );
+    return {
+      ...uploaded,
+      fullPath: `${this.configService.get<string>('url')}/v1/files/${uploaded.id}`,
+    };
   }
 }
