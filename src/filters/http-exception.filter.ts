@@ -17,6 +17,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const status = exception.getStatus();
 
+    if (request.url === '/favicon.ico') {
+      Logger.debug('Ignoring favicon.ico request');
+      return;
+    }
+
     this.logger.error(
       exception.message + ' exception raised on: ' + request.url,
     );

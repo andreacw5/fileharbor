@@ -21,6 +21,8 @@ class LocalFilesService {
     description: string;
     mimetype: string;
     id: string;
+    type: string;
+    tags: string[];
   }) {
     return this.prisma.localFile.create({
       data,
@@ -75,15 +77,20 @@ class LocalFilesService {
   /**
    * Adds a file to the database
    * @param file
-   * @param description
+   * @param content
    */
-  addFile(file: Express.Multer.File, description: string) {
+  addFile(
+    file: Express.Multer.File,
+    content: { description: string; tags: string[]; type: string },
+  ) {
     return this.saveFile({
       id: file.filename,
       path: file.path,
       filename: file.originalname,
       mimetype: file.mimetype,
-      description,
+      description: content.description,
+      tags: content.tags,
+      type: content.type,
     });
   }
 

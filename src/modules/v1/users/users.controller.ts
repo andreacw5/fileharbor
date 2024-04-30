@@ -1,10 +1,10 @@
 import { UsersService } from './users.service';
 import {
   BadRequestException,
+  Body,
   Controller,
   Logger,
   Post,
-  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -14,11 +14,14 @@ import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from '../localFiles/localFiles.interceptor';
 import {
   ApiBasicAuth,
+  ApiBody,
   ApiConsumes,
   ApiHeaders,
+  ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { CreateAnAvatarDto } from './dto/create-an-avatar.dto';
 
 const AVATAR_UPLOADS_DIR: string = './uploads/avatars/';
 
@@ -36,16 +39,31 @@ export class UsersController {
 
   /**
    * Uploads a new avatar file and overwrites the old one
-   * @param req
    * @param file
+   * @param {CreateAnAvatarDto} createAnAvatarDto
    */
   @Post('avatar')
+  @ApiOperation({ summary: 'Upload a new avatar file' })
   @ApiHeaders([
     {
       name: 'X-API-KEY',
       description: 'Auth API key',
     },
   ])
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        description: { type: 'string' },
+        type: { type: 'string', default: 'avatar' },
+        tags: { type: 'array' },
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
   @UseInterceptors(
     LocalFilesInterceptor({
       fieldName: 'file',
@@ -66,11 +84,15 @@ export class UsersController {
       },
     }),
   )
-  async addAvatar(@Req() req, @UploadedFile() file: Express.Multer.File) {
+  async addAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() createAnAvatarDto: CreateAnAvatarDto,
+  ) {
     this.logger.log(`Received new avatar file: ${file.originalname}`);
     const uploaded = await this.usersService.addFile(
       file,
-      req.body.description || 'User avatar',
+      createAnAvatarDto.description || 'User avatar',
+      createAnAvatarDto.tags || ['avatar'],
     );
     return {
       ...uploaded,

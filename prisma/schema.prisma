@@ -11,13 +11,17 @@ datasource db {
 }
 
 model LocalFile {
-  id          String  @id @default(uuid())
+  id          String   @id @default(uuid())
   filename    String
   path        String
   mimetype    String
-  views       Int     @default(0)
-  downloads   Int     @default(0)
+  size        Int
+  type        String   @default("local")
+  tags        String[]
+  views       Int      @default(0)
+  downloads   Int      @default(0)
   description String?
+  optimized   Boolean  @default(false)
 
   @@map(name: "localFiles")
 }
