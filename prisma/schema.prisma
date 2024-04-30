@@ -15,6 +15,7 @@ model LocalFile {
   filename    String
   path        String
   mimetype    String
+  size        Int
   type        String   @default("local")
   tags        String[]
   views       Int      @default(0)

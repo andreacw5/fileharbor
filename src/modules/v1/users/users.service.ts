@@ -20,6 +20,7 @@ export class UsersService {
       id: file.filename,
       path: file.path,
       filename: file.originalname,
+      size: file.size,
       mimetype: 'image/webp',
       description,
       type: 'avatar',

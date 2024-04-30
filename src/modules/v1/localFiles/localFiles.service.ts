@@ -20,6 +20,7 @@ class LocalFilesService {
     filename: string;
     description: string;
     mimetype: string;
+    size: number;
     id: string;
     type: string;
     tags: string[];
@@ -69,9 +70,12 @@ class LocalFilesService {
 
   /**
    * Gets all files
+   * @param filters
    */
-  async getAllFiles(): Promise<LocalFile[]> {
-    return this.prisma.localFile.findMany({});
+  async getAllFiles(filters: object): Promise<LocalFile[]> {
+    return this.prisma.localFile.findMany({
+      where: filters,
+    });
   }
 
   /**
@@ -86,6 +90,7 @@ class LocalFilesService {
     return this.saveFile({
       id: file.filename,
       path: file.path,
+      size: file.size,
       filename: file.originalname,
       mimetype: file.mimetype,
       description: content.description,

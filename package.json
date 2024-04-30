@@ -1,6 +1,6 @@
 {
   "name": "fileharbor",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "FileHarbor is a file storage service that allows you to upload, download, and delete files",
   "author": "Andrea Tombolato <andreacw96@gmail.com> (https://github.com/andreacw5)",
   "private": true,
