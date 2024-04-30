@@ -19,9 +19,14 @@ async function bootstrap() {
 
   // Swagger setup
   const options = new DocumentBuilder()
-    .setTitle('Image Uploader API')
-    .setDescription('Image updloader service')
+    .setTitle('FileHarbor')
+    .setDescription('The Image Uploader API documentation')
     .setVersion('1.0')
+    .setLicense(
+      'MIT',
+      'https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md',
+    )
+    .setContact('Andrea Tombolato', 'https://andreatombolato.dev', '')
     .build();
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('/docs', app, document);
