@@ -18,12 +18,19 @@ import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
 import { join } from 'path';
-import { ApiBasicAuth, ApiHeaders, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBasicAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiHeaders,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from './localFiles.interceptor';
 import { CacheInterceptor } from '@nestjs/cache-manager';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { CreateLocalFileDto } from './dto/create-local-file.dto';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -33,12 +40,12 @@ const GENERAL_UPLOADS_DIR: string = './uploads/';
 export default class LocalFilesController {
   constructor(
     private readonly localFilesService: LocalFilesService,
-    private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {}
   private readonly logger = new Logger(LocalFilesController.name);
 
   @Get()
+  @ApiOperation({ summary: 'Get all files' })
   @ApiHeaders([
     {
       name: 'X-API-KEY',
@@ -53,6 +60,7 @@ export default class LocalFilesController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a file by id' })
   @UseInterceptors(CacheInterceptor)
   async getFileById(
     @Param('id') id: string,
@@ -71,12 +79,13 @@ export default class LocalFilesController {
   }
 
   @Get('download/:id')
+  @ApiOperation({ summary: 'Download a file' })
   @UseInterceptors(CacheInterceptor)
   async downloadFile(
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    this.logger.debug(`Received request for file with id: ${id}`);
+    this.logger.log(`Received request for file with id: ${id}`);
     const file = await this.localFilesService.getFileById(id);
     await this.localFilesService.updateDownloads(id);
 
@@ -96,8 +105,24 @@ export default class LocalFilesController {
       description: 'Auth API key',
     },
   ])
+  @ApiOperation({ summary: 'Uploads a new file' })
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        description: { type: 'string' },
+        type: { type: 'string', default: 'local' },
+        tags: { type: 'array' },
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
   @UseInterceptors(
     LocalFilesInterceptor({
       fieldName: 'file',
@@ -120,14 +145,18 @@ export default class LocalFilesController {
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body() { description }: { description: string },
+    @Body() createLocalFileDto: CreateLocalFileDto,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
     this.logger.log(`Received and saved a new file: ${file.originalname}`);
-    const uploaded = await this.localFilesService.addFile(file, description);
+    const uploaded = await this.localFilesService.addFile(file, {
+      description: createLocalFileDto.description,
+      tags: createLocalFileDto.tags,
+      type: createLocalFileDto.type,
+    });
     return {
       ...uploaded,
       fullPath: `${this.configService.get<string>('url')}/v1/files/${uploaded.id}`,
@@ -145,6 +174,7 @@ export default class LocalFilesController {
       description: 'Auth API key',
     },
   ])
+  @ApiOperation({ summary: 'Delete a file by id' })
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
   async deleteFile(@Param('id') id: string) {
