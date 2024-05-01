@@ -13,24 +13,33 @@ import {
   BadRequestException,
   Body,
   Delete,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
 import { join } from 'path';
 import {
+  ApiBadRequestResponse,
   ApiBasicAuth,
   ApiBody,
   ApiConsumes,
   ApiHeaders,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
+  ApiQuery,
+  ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from './localFiles.interceptor';
 import { CacheInterceptor } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { CreateLocalFileDto } from './dto/create-local-file.dto';
+import { LocalFileFilterDto } from './dto/local-file-filter.dto';
+import OwnersService from '../owners/owners.service';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -41,6 +50,7 @@ export default class LocalFilesController {
   constructor(
     private readonly localFilesService: LocalFilesService,
     private readonly configService: ConfigService,
+    private readonly ownerService: OwnersService,
   ) {}
   private readonly logger = new Logger(LocalFilesController.name);
 
@@ -52,11 +62,61 @@ export default class LocalFilesController {
       description: 'Auth API key',
     },
   ])
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    type: String,
+    example: 'local',
+    enum: ['local', 'avatar'],
+    description: 'Type of file',
+  })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    example: 'tag1,tag2',
+    type: [String],
+    description: 'Tags of the file',
+  })
+  @ApiQuery({
+    name: 'description',
+    required: false,
+    example: 'Description',
+    type: String,
+    description: 'Description of the file',
+  })
+  @ApiQuery({
+    name: 'filename',
+    required: false,
+    example: 'file.jpg',
+    type: String,
+    description: 'Filename of the file',
+  })
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
-  async getAllFiles() {
+  async getAllFiles(@Req() request: { query: LocalFileFilterDto }) {
+    const { query } = request;
     this.logger.log(`Received a new request for all files`);
-    return this.localFilesService.getAllFiles();
+    const filters = {};
+    if (query.type) {
+      this.logger.debug(`Filtering for type active: ${query.type}`);
+      filters['type'] = query.type;
+    }
+    if (query.tags) {
+      this.logger.debug(`Filtering for tags: ${query.tags}`);
+      if (!Array.isArray(query.tags)) {
+        query.tags = [query.tags];
+      }
+      filters['tags'] = { hasSome: query.tags };
+    }
+    if (query.description) {
+      this.logger.debug(`Filtering for description: ${query.description}`);
+      filters['description'] = { contains: query.description };
+    }
+    if (query.filename) {
+      this.logger.debug(`Filtering for description: ${query.filename}`);
+      filters['filename'] = { contains: query.filename };
+    }
+    return this.localFilesService.getAllFiles(filters);
   }
 
   @Get(':id')
@@ -113,6 +173,8 @@ export default class LocalFilesController {
     schema: {
       type: 'object',
       properties: {
+        externalId: { type: 'string' },
+        domain: { type: 'string' },
         description: { type: 'string' },
         type: { type: 'string', default: 'local' },
         tags: { type: 'array' },
@@ -122,6 +184,15 @@ export default class LocalFilesController {
         },
       },
     },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'The file has been successfully uploaded.',
+  })
+  @ApiBadRequestResponse({ description: 'No file uploaded' })
+  @ApiPayloadTooLargeResponse({ description: 'File too large' })
+  @ApiUnauthorizedResponse({
+    description: 'Unable to find or create an owner for the file',
   })
   @UseInterceptors(
     LocalFilesInterceptor({
@@ -150,12 +221,38 @@ export default class LocalFilesController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
+    if (!createLocalFileDto.externalId || !createLocalFileDto.domain) {
+      this.logger.error(
+        `No external id or domain provided for file: ${file.originalname}`,
+      );
+      // Remove the uploaded file
+      await this.localFilesService.deleteFileByPath(file.path);
+      throw new BadRequestException('No external id or domain provided');
+    }
 
-    this.logger.log(`Received and saved a new file: ${file.originalname}`);
+    this.logger.log(
+      `Received new avatar file: ${file.originalname} for id ${createLocalFileDto.externalId} and domain ${createLocalFileDto.domain}`,
+    );
+
+    // Retrive or create a file owner
+    const owner = await this.ownerService.getOwnerOrCreate({
+      externalId: createLocalFileDto.externalId,
+      domain: createLocalFileDto.domain,
+    });
+
+    if (!owner) {
+      // Remove the uploaded file
+      await this.localFilesService.deleteFileByPath(file.path);
+      throw new UnauthorizedException(
+        'Unable to find or create an owner for the file',
+      );
+    }
+
     const uploaded = await this.localFilesService.addFile(file, {
       description: createLocalFileDto.description,
       tags: createLocalFileDto.tags,
       type: createLocalFileDto.type,
+      ownerId: owner.id,
     });
     return {
       ...uploaded,

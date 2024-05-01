@@ -19,7 +19,9 @@ class LocalFilesService {
     path: string;
     filename: string;
     description: string;
+    ownerId: string;
     mimetype: string;
+    size: number;
     id: string;
     type: string;
     tags: string[];
@@ -69,9 +71,12 @@ class LocalFilesService {
 
   /**
    * Gets all files
+   * @param filters
    */
-  async getAllFiles(): Promise<LocalFile[]> {
-    return this.prisma.localFile.findMany({});
+  async getAllFiles(filters: object): Promise<LocalFile[]> {
+    return this.prisma.localFile.findMany({
+      where: filters,
+    });
   }
 
   /**
@@ -81,11 +86,18 @@ class LocalFilesService {
    */
   addFile(
     file: Express.Multer.File,
-    content: { description: string; tags: string[]; type: string },
+    content: {
+      description: string;
+      tags: string[];
+      type: string;
+      ownerId: string;
+    },
   ) {
     return this.saveFile({
       id: file.filename,
       path: file.path,
+      size: file.size,
+      ownerId: content.ownerId,
       filename: file.originalname,
       mimetype: file.mimetype,
       description: content.description,
@@ -108,10 +120,18 @@ class LocalFilesService {
    */
   async deleteFileById(id: string) {
     const file = await this.getFileById(id);
-    unlink(file.path, (err) => {
+    await this.deleteFileByPath(file.path);
+    return this.deleteFile(id);
+  }
+
+  /**
+   * Deletes a file by its path
+   * @param {string} path
+   */
+  async deleteFileByPath(path: string) {
+    unlink(path, (err) => {
       if (err) throw err;
     });
-    return this.deleteFile(id);
   }
 }
 

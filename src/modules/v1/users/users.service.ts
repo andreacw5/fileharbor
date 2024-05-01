@@ -10,16 +10,20 @@ export class UsersService {
    * @param file
    * @param description
    * @param tags
+   * @param ownerId
    */
   async addFile(
     file: Express.Multer.File,
     description: string,
     tags: string[],
+    ownerId: string,
   ) {
     return await this.localFilesService.saveFile({
       id: file.filename,
       path: file.path,
       filename: file.originalname,
+      size: file.size,
+      ownerId: ownerId,
       mimetype: 'image/webp',
       description,
       type: 'avatar',
