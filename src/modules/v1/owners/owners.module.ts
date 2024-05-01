@@ -4,9 +4,10 @@ import OwnersService from './owners.service';
 import { PrismaService } from '../../../prisma.service';
 import { HttpModule } from '@nestjs/axios';
 import OwnersController from './owners.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [ConfigModule, HttpModule],
+  imports: [ConfigModule, HttpModule, AuthModule],
   providers: [OwnersService, PrismaService],
   exports: [OwnersService],
   controllers: [OwnersController],

@@ -1,20 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { Owner } from '@prisma/client';
 import { CreateAnOwnerDto } from './dto/create-an-owner.dto';
 import { UpdateAnOwnerDto } from './dto/update-an-owner.dto';
+import generator from 'generate-password-ts';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 class OwnersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private authService: AuthService,
+  ) {}
 
   /**
    * Gets all owners
    * @param filters
    */
-  async getAllOwners(filters: object): Promise<Owner[]> {
+  async getAllOwners(filters: object) {
     return this.prisma.owner.findMany({
       where: filters,
+      select: {
+        id: true,
+        name: true,
+        externalId: true,
+        domain: true,
+      },
     });
   }
 
@@ -23,11 +33,13 @@ class OwnersService {
    * @param {CreateAnOwnerDto} data
    */
   async createAnOwner(data: CreateAnOwnerDto) {
+    const password = await this.authService.generateAPassword();
     return this.prisma.owner.create({
       data: {
         name: data.name || '',
         externalId: data.externalId,
         domain: data.domain,
+        password: password,
       },
     });
   }
@@ -77,6 +89,24 @@ class OwnersService {
    */
   async deleteAnOwner(id: string) {
     return this.prisma.owner.delete({ where: { id } });
+  }
+
+  /**
+   * Gets an owner by its external id and domain or creates a new one
+   * @param {CreateAnOwnerDto} data
+   */
+  async getOwnerOrCreate(data: CreateAnOwnerDto) {
+    if (!data.externalId || !data.domain) {
+      throw new BadRequestException('No external id or domain provided');
+    }
+    const owner = await this.getOwnerByExternalIdAndDomain(
+      data.externalId,
+      data.domain,
+    );
+    if (owner) {
+      return owner;
+    }
+    return this.createAnOwner(data);
   }
 }
 
