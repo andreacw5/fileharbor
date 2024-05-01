@@ -217,6 +217,7 @@ export default class LocalFilesController {
       description: createLocalFileDto.description,
       tags: createLocalFileDto.tags,
       type: createLocalFileDto.type,
+      ownerId: '1',
     });
     return {
       ...uploaded,

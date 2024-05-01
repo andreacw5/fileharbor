@@ -5,6 +5,7 @@ import {
   Controller,
   Logger,
   Post,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -22,6 +23,8 @@ import {
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { CreateAnAvatarDto } from './dto/create-an-avatar.dto';
+import OwnersService from '../owners/owners.service';
+import LocalFilesService from '../localFiles/localFiles.service';
 
 const AVATAR_UPLOADS_DIR: string = './uploads/avatars/';
 
@@ -34,6 +37,8 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly configService: ConfigService,
+    private readonly localFilesService: LocalFilesService,
+    private readonly ownerService: OwnersService,
   ) {}
   private readonly logger = new Logger(UsersController.name);
 
@@ -69,12 +74,6 @@ export class UsersController {
       fieldName: 'file',
       path: AVATAR_UPLOADS_DIR,
       fileFilter: (request, file, callback) => {
-        if (!request.body.externalId || !request.body.domain) {
-          return callback(
-            new BadRequestException('No external id or domain provided'),
-            false,
-          );
-        }
         if (!file.mimetype.includes('image')) {
           return callback(
             new BadRequestException(
@@ -97,10 +96,33 @@ export class UsersController {
     this.logger.log(
       `Received new avatar file: ${file.originalname} for id ${createAnAvatarDto.externalId}`,
     );
+
+    if (!createAnAvatarDto.externalId || !createAnAvatarDto.domain) {
+      // Remove the uploaded file
+      await this.localFilesService.deleteFileByPath(file.path);
+      throw new BadRequestException('No external id or domain provided');
+    }
+
+    // Retrive or create a file owner
+    const owner = await this.ownerService.getOwnerOrCreate({
+      externalId: createAnAvatarDto.externalId,
+      domain: createAnAvatarDto.domain,
+    });
+    this.logger.log(`Owner: ${owner.id}, ${owner.externalId}, ${owner.domain}`);
+
+    if (!owner) {
+      // Remove the uploaded file
+      await this.localFilesService.deleteFileByPath(file.path);
+      throw new UnauthorizedException(
+        'Unable to find or create an owner for the file',
+      );
+    }
+
     const uploaded = await this.usersService.addFile(
       file,
       createAnAvatarDto.description || 'User avatar',
       createAnAvatarDto.tags || ['avatar'],
+      owner.id,
     );
     return {
       ...uploaded,
