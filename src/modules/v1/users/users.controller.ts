@@ -14,12 +14,16 @@ import { Express } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from '../localFiles/localFiles.interceptor';
 import {
+  ApiBadRequestResponse,
   ApiBasicAuth,
   ApiBody,
   ApiConsumes,
   ApiHeaders,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
+  ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { CreateAnAvatarDto } from './dto/create-an-avatar.dto';
@@ -59,6 +63,8 @@ export class UsersController {
     schema: {
       type: 'object',
       properties: {
+        externalId: { type: 'string' },
+        domain: { type: 'string' },
         description: { type: 'string' },
         type: { type: 'string', default: 'avatar' },
         tags: { type: 'array' },
@@ -68,6 +74,15 @@ export class UsersController {
         },
       },
     },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'The file has been successfully uploaded.',
+  })
+  @ApiBadRequestResponse({ description: 'No file uploaded' })
+  @ApiPayloadTooLargeResponse({ description: 'File too large' })
+  @ApiUnauthorizedResponse({
+    description: 'Unable to find or create an owner for the file',
   })
   @UseInterceptors(
     LocalFilesInterceptor({
@@ -93,22 +108,28 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @Body() createAnAvatarDto: CreateAnAvatarDto,
   ) {
-    this.logger.log(
-      `Received new avatar file: ${file.originalname} for id ${createAnAvatarDto.externalId}`,
-    );
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
 
     if (!createAnAvatarDto.externalId || !createAnAvatarDto.domain) {
+      this.logger.error(
+        `No external id or domain provided for file: ${file.originalname}`,
+      );
       // Remove the uploaded file
       await this.localFilesService.deleteFileByPath(file.path);
       throw new BadRequestException('No external id or domain provided');
     }
+
+    this.logger.log(
+      `Received new avatar file: ${file.originalname} for id ${createAnAvatarDto.externalId} and domain ${createAnAvatarDto.domain}`,
+    );
 
     // Retrive or create a file owner
     const owner = await this.ownerService.getOwnerOrCreate({
       externalId: createAnAvatarDto.externalId,
       domain: createAnAvatarDto.domain,
     });
-    this.logger.log(`Owner: ${owner.id}, ${owner.externalId}, ${owner.domain}`);
 
     if (!owner) {
       // Remove the uploaded file

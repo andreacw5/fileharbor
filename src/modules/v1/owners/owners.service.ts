@@ -2,7 +2,6 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { CreateAnOwnerDto } from './dto/create-an-owner.dto';
 import { UpdateAnOwnerDto } from './dto/update-an-owner.dto';
-import generator from 'generate-password-ts';
 import { AuthService } from '../auth/auth.service';
 
 @Injectable()

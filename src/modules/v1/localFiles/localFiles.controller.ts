@@ -14,19 +14,24 @@ import {
   Body,
   Delete,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
 import { join } from 'path';
 import {
+  ApiBadRequestResponse,
   ApiBasicAuth,
   ApiBody,
   ApiConsumes,
   ApiHeaders,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
   ApiQuery,
+  ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import LocalFilesInterceptor from './localFiles.interceptor';
@@ -34,6 +39,7 @@ import { CacheInterceptor } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { CreateLocalFileDto } from './dto/create-local-file.dto';
 import { LocalFileFilterDto } from './dto/local-file-filter.dto';
+import OwnersService from '../owners/owners.service';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -44,6 +50,7 @@ export default class LocalFilesController {
   constructor(
     private readonly localFilesService: LocalFilesService,
     private readonly configService: ConfigService,
+    private readonly ownerService: OwnersService,
   ) {}
   private readonly logger = new Logger(LocalFilesController.name);
 
@@ -166,6 +173,8 @@ export default class LocalFilesController {
     schema: {
       type: 'object',
       properties: {
+        externalId: { type: 'string' },
+        domain: { type: 'string' },
         description: { type: 'string' },
         type: { type: 'string', default: 'local' },
         tags: { type: 'array' },
@@ -176,17 +185,20 @@ export default class LocalFilesController {
       },
     },
   })
+  @ApiResponse({
+    status: 201,
+    description: 'The file has been successfully uploaded.',
+  })
+  @ApiBadRequestResponse({ description: 'No file uploaded' })
+  @ApiPayloadTooLargeResponse({ description: 'File too large' })
+  @ApiUnauthorizedResponse({
+    description: 'Unable to find or create an owner for the file',
+  })
   @UseInterceptors(
     LocalFilesInterceptor({
       fieldName: 'file',
       path: GENERAL_UPLOADS_DIR,
       fileFilter: (request, file, callback) => {
-        if (!request.body.externalId || !request.body.domain) {
-          return callback(
-            new BadRequestException('No external id or domain provided'),
-            false,
-          );
-        }
         if (!file.mimetype.includes('image')) {
           return callback(
             new BadRequestException(
@@ -209,15 +221,38 @@ export default class LocalFilesController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
+    if (!createLocalFileDto.externalId || !createLocalFileDto.domain) {
+      this.logger.error(
+        `No external id or domain provided for file: ${file.originalname}`,
+      );
+      // Remove the uploaded file
+      await this.localFilesService.deleteFileByPath(file.path);
+      throw new BadRequestException('No external id or domain provided');
+    }
 
     this.logger.log(
-      `Received and saved a new file: ${file.originalname} for id ${createLocalFileDto.externalId}`,
+      `Received new avatar file: ${file.originalname} for id ${createLocalFileDto.externalId} and domain ${createLocalFileDto.domain}`,
     );
+
+    // Retrive or create a file owner
+    const owner = await this.ownerService.getOwnerOrCreate({
+      externalId: createLocalFileDto.externalId,
+      domain: createLocalFileDto.domain,
+    });
+
+    if (!owner) {
+      // Remove the uploaded file
+      await this.localFilesService.deleteFileByPath(file.path);
+      throw new UnauthorizedException(
+        'Unable to find or create an owner for the file',
+      );
+    }
+
     const uploaded = await this.localFilesService.addFile(file, {
       description: createLocalFileDto.description,
       tags: createLocalFileDto.tags,
       type: createLocalFileDto.type,
-      ownerId: '1',
+      ownerId: owner.id,
     });
     return {
       ...uploaded,
