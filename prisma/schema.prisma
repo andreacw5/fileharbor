@@ -15,13 +15,29 @@ model LocalFile {
   filename    String
   path        String
   mimetype    String
-  size        Int
+  size        Int?
   type        String   @default("local")
   tags        String[]
   views       Int      @default(0)
   downloads   Int      @default(0)
   description String?
   optimized   Boolean  @default(false)
+  owner       Owner?   @relation(fields: [ownerId], references: [id])
+  ownerId     String
 
   @@map(name: "localFiles")
+}
+
+model Owner {
+  id         String      @id @default(uuid())
+  name       String?
+  externalId String
+  domain     String
+  files      LocalFile[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([externalId, domain])
+
+  @@map(name: "owners")
 }
