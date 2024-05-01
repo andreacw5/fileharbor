@@ -69,6 +69,12 @@ export class UsersController {
       fieldName: 'file',
       path: AVATAR_UPLOADS_DIR,
       fileFilter: (request, file, callback) => {
+        if (!request.body.externalId || !request.body.domain) {
+          return callback(
+            new BadRequestException('No external id or domain provided'),
+            false,
+          );
+        }
         if (!file.mimetype.includes('image')) {
           return callback(
             new BadRequestException(
@@ -88,7 +94,9 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @Body() createAnAvatarDto: CreateAnAvatarDto,
   ) {
-    this.logger.log(`Received new avatar file: ${file.originalname}`);
+    this.logger.log(
+      `Received new avatar file: ${file.originalname} for id ${createAnAvatarDto.externalId}`,
+    );
     const uploaded = await this.usersService.addFile(
       file,
       createAnAvatarDto.description || 'User avatar',

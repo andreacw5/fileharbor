@@ -181,6 +181,12 @@ export default class LocalFilesController {
       fieldName: 'file',
       path: GENERAL_UPLOADS_DIR,
       fileFilter: (request, file, callback) => {
+        if (!request.body.externalId || !request.body.domain) {
+          return callback(
+            new BadRequestException('No external id or domain provided'),
+            false,
+          );
+        }
         if (!file.mimetype.includes('image')) {
           return callback(
             new BadRequestException(
@@ -204,7 +210,9 @@ export default class LocalFilesController {
       throw new BadRequestException('No file uploaded');
     }
 
-    this.logger.log(`Received and saved a new file: ${file.originalname}`);
+    this.logger.log(
+      `Received and saved a new file: ${file.originalname} for id ${createLocalFileDto.externalId}`,
+    );
     const uploaded = await this.localFilesService.addFile(file, {
       description: createLocalFileDto.description,
       tags: createLocalFileDto.tags,
