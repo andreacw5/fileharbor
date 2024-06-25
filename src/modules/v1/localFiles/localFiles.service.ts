@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { LocalFile } from '@prisma/client';
 import { HttpService } from '@nestjs/axios';
 import { unlink } from 'fs';
+import { LocalFileDto } from './dto/local-file.dto';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 class LocalFilesService {
@@ -73,10 +74,22 @@ class LocalFilesService {
    * Gets all files
    * @param filters
    */
-  async getAllFiles(filters: object): Promise<LocalFile[]> {
-    return this.prisma.localFile.findMany({
+  async getAllFiles(filters: object): Promise<LocalFileDto[]> {
+    const files = await this.prisma.localFile.findMany({
       where: filters,
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            domain: true,
+            externalId: true,
+          },
+        },
+      },
     });
+
+    return plainToInstance(LocalFileDto, files);
   }
 
   /**
