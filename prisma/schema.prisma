@@ -24,6 +24,9 @@ model LocalFile {
   optimized   Boolean  @default(false)
   owner       Owner?   @relation(fields: [ownerId], references: [id])
   ownerId     String
+  token       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map(name: "localFiles")
 }

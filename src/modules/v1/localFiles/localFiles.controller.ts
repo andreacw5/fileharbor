@@ -15,6 +15,8 @@ import {
   Delete,
   Req,
   UnauthorizedException,
+  HttpStatus,
+  Query,
 } from '@nestjs/common';
 import LocalFilesService from './localFiles.service';
 import { Response } from 'express';
@@ -27,6 +29,7 @@ import {
   ApiConsumes,
   ApiHeaders,
   ApiOperation,
+  ApiParam,
   ApiPayloadTooLargeResponse,
   ApiQuery,
   ApiResponse,
@@ -40,6 +43,7 @@ import { ConfigService } from '@nestjs/config';
 import { CreateLocalFileDto } from './dto/create-local-file.dto';
 import { LocalFileFilterDto } from './dto/local-file-filter.dto';
 import OwnersService from '../owners/owners.service';
+import { GetLocalFileDto } from './dto/get-file.dto';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -121,13 +125,32 @@ export default class LocalFilesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a file by id' })
+  @ApiParam({
+    name: 'id',
+    description: 'Local file id',
+  })
+  @ApiQuery({
+    name: 'token',
+    required: false,
+    type: String,
+    description: 'Token for private files',
+  })
   @UseInterceptors(CacheInterceptor)
   async getFileById(
     @Param('id') id: string,
+    @Query() query: GetLocalFileDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.logger.debug(`Received request for file with id: ${id}`);
     const file = await this.localFilesService.getFileById(id);
+    // If the file have a token, check if it matches the request token
+    if (file.token !== null && query.token !== file.token) {
+      this.logger.error(
+        `Token mismatch for file with id: ${id} and token: ${query.token}`,
+      );
+      return response.status(HttpStatus.UNAUTHORIZED).send('Token mismatch');
+    }
+
     await this.localFilesService.updateViews(id);
     const stream = createReadStream(join(process.cwd(), file.path));
 
