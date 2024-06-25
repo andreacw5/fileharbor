@@ -35,7 +35,7 @@ class OwnersService {
     const password = await this.authService.generateAPassword();
     return this.prisma.owner.create({
       data: {
-        name: data.name || '',
+        name: data.name || data.domain,
         externalId: data.externalId,
         domain: data.domain,
         password: password,
