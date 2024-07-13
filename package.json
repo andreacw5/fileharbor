@@ -21,6 +21,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@logtail/pino": "^0.4.22",
     "@nestjs/axios": "^3.0.2",
     "@nestjs/cache-manager": "^2.2.2",
     "@nestjs/common": "^10.3.10",
@@ -43,7 +44,10 @@
     "prisma": "^5.16.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "nestjs-pino": "^4.1.0",
+    "pino-http": "^10.2.0",
+    "pino-pretty": "^11.2.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.2",
