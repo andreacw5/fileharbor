@@ -3,7 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import V1Module from '../v1/v1.module';
 import { AuthModule } from '../v1/auth/auth.module';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '../../configs/config.validation';
 import { LoggerModule } from 'nestjs-pino';
@@ -16,17 +16,40 @@ import { LoggerModule } from 'nestjs-pino';
       cache: true,
       validationSchema: configValidationSchema,
     }),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        transport: {
-          target: 'pino-pretty',
-          options: {
-            singleLine: true,
-            levelFirst: true,
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => {
+        const logtailTarget = configService.get('LOGS_TOKEN')
+          ? {
+              target: '@logtail/pino',
+              options: { sourceToken: configService.get('LOGS_TOKEN') },
+            }
+          : null;
+
+        const targets = [
+          {
+            target: 'pino-pretty',
           },
-        },
-        autoLogging: false,
+        ];
+
+        if (logtailTarget) {
+          targets.push(logtailTarget);
+        }
+
+        return {
+          pinoHttp: {
+            transport: {
+              targets,
+              options: {
+                singleLine: true,
+                levelFirst: true,
+              },
+            },
+            autoLogging: false,
+          },
+        };
       },
+      inject: [ConfigService],
     }),
     V1Module,
     AuthModule,

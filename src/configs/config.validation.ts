@@ -6,4 +6,5 @@ export const configValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
   CACHE_TTL: Joi.number().default(60).required(),
   API_KEY: Joi.string().required(),
+  LOGS_TOKEN: Joi.string(),
 });
