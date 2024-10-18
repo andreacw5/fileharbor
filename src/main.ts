@@ -7,11 +7,10 @@ import { ConfigService } from '@nestjs/config';
 import { json } from 'express';
 
 async function bootstrap() {
-  const appOptions = { cors: true };
+  const appOptions = { cors: true, bufferLogs: true };
   const app = await NestFactory.create(AppModule, appOptions);
 
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.setGlobalPrefix('api');
 
   app.use(json({ limit: '5mb' }));
 
