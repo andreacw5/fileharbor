@@ -6,6 +6,7 @@ import { AuthModule } from '../v1/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '../../configs/config.validation';
+import { LoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
@@ -14,6 +15,18 @@ import { configValidationSchema } from '../../configs/config.validation';
       isGlobal: true,
       cache: true,
       validationSchema: configValidationSchema,
+    }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            singleLine: true,
+            levelFirst: true,
+          },
+        },
+        autoLogging: false,
+      },
     }),
     V1Module,
     AuthModule,
