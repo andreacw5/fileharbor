@@ -71,10 +71,6 @@ Contributions are welcome! If you want to contribute to this project, please fol
 | APP_URL      | app url                      |               |
 | CACHE_TTL    | Cache ttl value              | 60            |
 | API_KEY      | auth token for CUD Endpoints |               |
-| LOGS_TOKEN   | logs token                   |               |
-
-## Logging with Betterstack
-This project uses a Pino transporter that sends logs to Betterstack. To enable this feature, set the `LOGS_TOKEN` environment variable to the token provided by Betterstack.
 
 ## Authentication
 Authentication is based on a single static token stored in the `API_KEY` environment variable. Requests for create/edit/delete URLs require the `X-API-KEY` header with the value of `API_KEY`.
