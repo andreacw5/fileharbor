@@ -1,21 +1,24 @@
-FROM node:20.11.1-alpine AS base
+FROM node:23.6.0-alpine3.21 AS base
 
 ENV NODE_ENV build
 
 # Create app directory
 WORKDIR /usr/src/app
 
-# Install app dependencies
-COPY package.json yarn.lock ./
+# Install pnpm
+RUN npm install -g pnpm
 
-RUN yarn install --frozen-lockfile
+# Install app dependencies
+COPY package.json pnpm-lock.yaml ./
+
+RUN pnpm install --frozen-lockfile
 
 # Bundle app source
 COPY . .
 
-RUN yarn run prisma:generate
+RUN pnpm run prisma:generate
 
-RUN yarn build
+RUN pnpm build
 
 FROM base as prod-build
 
@@ -27,12 +30,12 @@ WORKDIR /usr/src/app
 
 COPY prisma prisma
 
-RUN yarn run prisma:generate
+RUN pnpm run prisma:generate
 
 # Install app dependencies
-COPY package.json yarn.lock ./
+COPY package.json pnpm-lock.yaml ./
 
-RUN yarn install --production --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile
 
 COPY --from=base /usr/src/app/dist ./dist
 
