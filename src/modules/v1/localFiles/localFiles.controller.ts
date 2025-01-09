@@ -43,7 +43,6 @@ import { CreateLocalFileDto } from './dto/create-local-file.dto';
 import { LocalFileFilterDto } from './dto/local-file-filter.dto';
 import OwnersService from '../owners/owners.service';
 import { GetLocalFileDto } from './dto/get-file.dto';
-import { CacheKey, CacheTTL } from '@nestjs/cache-manager';
 
 const GENERAL_UPLOADS_DIR: string = './uploads/';
 
@@ -135,8 +134,6 @@ export default class LocalFilesController {
     type: String,
     description: 'Token for private files',
   })
-  @CacheKey('getFileById')
-  @CacheTTL(120)
   async getFileById(
     @Param('id') id: string,
     @Query() query: GetLocalFileDto,
@@ -145,66 +142,42 @@ export default class LocalFilesController {
     const start = Date.now();
     this.logger.log(`Received request for file with id: ${id}`);
 
-    try {
-      const file = await this.localFilesService.getFileById(id);
+    const file = await this.localFilesService.getFileById(id);
 
-      if (!file) {
-        this.logger.error(`File with id: ${id} not found`);
-        response.status(HttpStatus.NOT_FOUND).send('File not found');
-        return;
-      }
-
-      if (file.token !== null && query.token !== file.token) {
-        this.logger.error(
-          `Token mismatch for file with id: ${id} and token: ${query.token}`,
-        );
-        response.status(HttpStatus.UNAUTHORIZED).send('Token mismatch');
-        return;
-      }
-
-      await this.localFilesService.updateViews(id);
-      const filePath = join(process.cwd(), file.path);
-      const fileStream = createReadStream(filePath);
-
-      response.set({
-        'Content-Disposition': `inline; filename="${file.filename}"`,
-        'Content-Type': file.mimetype,
-      });
-
-      fileStream.pipe(response);
-
-      fileStream.on('error', (err) => {
-        this.logger.error(`Error streaming file with id: ${id}`, err);
-        if (!response.headersSent) {
-          response
-            .status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .send('Error streaming file');
-        }
-      });
-
-      response.on('finish', () => {
-        const end = Date.now();
-        this.logger.log(`File with id: ${id} sent. Duration: ${end - start}ms`);
-      });
-    } catch (error) {
-      this.logger.error(`Unexpected error for file with id: ${id}`, error);
-      if (!response.headersSent) {
-        response
-          .status(HttpStatus.INTERNAL_SERVER_ERROR)
-          .send('Unexpected error');
-      }
+    if (!file) {
+      this.logger.error(`File with id: ${id} not found`);
+      response.status(HttpStatus.NOT_FOUND).send('File not found');
+      return;
     }
+
+    if (file.token !== null && query.token !== file.token) {
+      this.logger.error(
+        `Token mismatch for file with id: ${id} and token: ${query.token}`,
+      );
+      response.status(HttpStatus.UNAUTHORIZED).send('Token mismatch');
+      return;
+    }
+
+    await this.localFilesService.updateViews(id);
+    const stream = createReadStream(join(process.cwd(), file.path));
+
+    response.set({
+      'Content-Disposition': `inline; filename="${file.filename}"`,
+      'Content-Type': file.mimetype,
+    });
+
+    const end = Date.now();
+    this.logger.debug(`File with id: ${id} sent. Duration: ${end - start}ms`);
+
+    return new StreamableFile(stream);
   }
 
   @Get('download/:id')
   @ApiOperation({ summary: 'Download a file' })
-  @CacheKey('downloadFile')
-  @CacheTTL(120)
   async downloadFile(
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const start = Date.now();
     this.logger.log(`Received request for file with id: ${id}`);
     const file = await this.localFilesService.getFileById(id);
     await this.localFilesService.updateDownloads(id);
@@ -215,12 +188,6 @@ export default class LocalFilesController {
       'Content-Disposition': `attachment; filename="${file.filename}"`,
       'Content-Type': file.mimetype,
     });
-
-    const end = Date.now();
-    this.logger.log(
-      `File with id: ${id} downloaded. Duration: ${end - start}ms`,
-    );
-
     return new StreamableFile(stream);
   }
 
