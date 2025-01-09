@@ -59,7 +59,6 @@ class OwnersService {
   async getOwnerByExternalIdAndDomain(externalId: string, domain: string) {
     return this.prisma.owner.findUnique({
       where: {
-        // @ts-ignore
         externalId_domain: {
           externalId: externalId,
           domain: domain,

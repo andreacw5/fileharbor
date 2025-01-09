@@ -34,7 +34,7 @@ async function bootstrap() {
   await app.listen(appPort);
 
   Logger.log('Swagger available at: http://localhost:' + appPort + '/docs');
-  Logger.log('Listening at: http://localhost:' + appPort + '/api/v1/status');
+  Logger.log('Listening at: http://localhost:' + appPort + '/v1/status');
 
   // Log all environment variables
   Logger.debug('Configured environment variables:', {

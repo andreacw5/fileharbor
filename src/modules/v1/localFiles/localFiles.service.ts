@@ -1,16 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { HttpService } from '@nestjs/axios';
 import { unlink } from 'fs';
 import { LocalFileDto } from './dto/local-file.dto';
 import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 class LocalFilesService {
-  constructor(
-    private prisma: PrismaService,
-    private readonly httpService: HttpService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   /**
    * Saves a file to the database
