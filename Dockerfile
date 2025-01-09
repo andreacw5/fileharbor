@@ -1,12 +1,14 @@
 FROM node:23.6.0-alpine3.21 AS base
 
-ENV NODE_ENV build
+ENV NODE_ENV=build
 
 # Create app directory
 WORKDIR /usr/src/app
 
 # Install pnpm
 RUN npm install -g pnpm
+
+RUN apk add --no-cache openssl
 
 # Install app dependencies
 COPY package.json pnpm-lock.yaml ./
@@ -20,10 +22,10 @@ RUN pnpm run prisma:generate
 
 RUN pnpm build
 
-FROM base as prod-build
+FROM base AS prod-build
 
 # Set the NODE_ENV to production
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Create app directory
 WORKDIR /usr/src/app
