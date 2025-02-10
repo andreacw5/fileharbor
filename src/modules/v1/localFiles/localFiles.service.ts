@@ -101,6 +101,7 @@ class LocalFilesService {
   addFile(
     file: Express.Multer.File,
     content: {
+      path: string;
       description: string;
       tags: string[];
       type: string;
@@ -109,7 +110,7 @@ class LocalFilesService {
   ) {
     return this.saveFile({
       id: file.filename,
-      path: file.path,
+      path: content.path,
       size: file.size,
       ownerId: content.ownerId,
       filename: file.originalname,
@@ -149,9 +150,30 @@ class LocalFilesService {
   }
 
   /**
+   * Moves a file to a domain folder
+   * @param {string} filePath
+   * @param {string} domain
+   */
+  async moveFileToDomainFolder(filePath: string, domain: string) {
+    // Check if the domain folder exists
+    const domainFolder = join(process.cwd(), `./uploads/${domain}`);
+
+    // Create the domain folder if it doesn't exist
+    await fs.mkdir(domainFolder, { recursive: true });
+
+    // Move the file to the domain folder
+    const newPath = join(domainFolder, filePath.split('/').pop());
+
+    // Rename the file
+    await fs.rename(filePath, newPath);
+
+    this.logger.log(`Moved file to domain folder: ${newPath}`);
+  }
+
+  /**
    * Optimizes all files in the database
    */
-  @Cron(CronExpression.EVERY_4_HOURS)
+  @Cron(CronExpression.EVERY_MINUTE)
   async optimizeFiles() {
     this.logger.log('Starting optimization job');
     const files = await this.prisma.localFile.findMany({
