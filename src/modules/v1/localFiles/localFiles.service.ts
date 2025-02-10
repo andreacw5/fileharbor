@@ -5,7 +5,7 @@ import { LocalFileDto } from './dto/local-file.dto';
 import { plainToInstance } from 'class-transformer';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as sharp from 'sharp';
-import { join } from 'path';
+import { basename, join, resolve, sep } from 'path';
 import { promises as fs } from 'fs';
 
 @Injectable()
@@ -141,12 +141,26 @@ class LocalFilesService {
 
   /**
    * Deletes a file by its path
-   * @param {string} path
+   * @param {string} filePath
    */
-  async deleteFileByPath(path: string) {
-    unlink(path, (err) => {
-      if (err) throw err;
-    });
+  async deleteFileByPath(filePath: string) {
+    const baseDir = join(process.cwd(), 'uploads');
+    const fullPath = resolve(baseDir, filePath.replace(/^uploads\//, ''));
+
+    if (!fullPath.startsWith(baseDir + sep)) {
+      throw new Error('Invalid file path');
+    }
+
+    try {
+      await fs.unlink(fullPath);
+      this.logger.log(`File deleted: ${fullPath}`);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        this.logger.warn(`File not found, nothing to delete: ${fullPath}`);
+      } else {
+        this.logger.error(`Failed to delete file: ${fullPath}`, error);
+      }
+    }
   }
 
   /**
@@ -155,19 +169,31 @@ class LocalFilesService {
    * @param {string} domain
    */
   async moveFileToDomainFolder(filePath: string, domain: string) {
-    // Check if the domain folder exists
-    const domainFolder = join(process.cwd(), `./uploads/${domain}`);
+    const baseDir = join(process.cwd(), 'uploads');
+    const fullPath = resolve(baseDir, filePath.replace(/^uploads\//, ''));
 
-    // Create the domain folder if it doesn't exist
-    await fs.mkdir(domainFolder, { recursive: true });
+    if (!fullPath.startsWith(baseDir + sep)) {
+      throw new Error('Invalid file path');
+    }
 
-    // Move the file to the domain folder
-    const newPath = join(domainFolder, filePath.split('/').pop());
+    const domainFolder = join(baseDir, domain);
+    const newPath = join(domainFolder, basename(fullPath));
 
-    // Rename the file
-    await fs.rename(filePath, newPath);
+    if (!newPath.startsWith(domainFolder + sep)) {
+      throw new Error('Invalid new file path');
+    }
 
-    this.logger.log(`Moved file to domain folder: ${newPath}`);
+    try {
+      await fs.mkdir(domainFolder, { recursive: true }); // Ensure target directory exists
+      await fs.rename(fullPath, newPath); // Move file
+      this.logger.log(`Moved file to domain folder: ${newPath}`);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        this.logger.error(`Source file does not exist: ${fullPath}`);
+      } else {
+        this.logger.error(`Failed to move file: ${fullPath} to ${newPath}`, error);
+      }
+    }
   }
 
   /**
@@ -176,47 +202,46 @@ class LocalFilesService {
   @Cron(CronExpression.EVERY_4_HOURS)
   async optimizeFiles() {
     this.logger.log('Starting optimization job');
+
     const files = await this.prisma.localFile.findMany({
-      where: {
-        optimized: false,
-      },
+      where: { optimized: false },
     });
 
-    for (const file of files) {
+    if (files.length === 0) {
+      this.logger.log('No files to optimize.');
+      return;
+    }
+
+    const tmpDir = join(process.cwd(), 'uploads/tmp');
+    await fs.mkdir(tmpDir, { recursive: true }); // Ensure temp directory exists
+
+    await Promise.all(files.map(async (file) => {
+      const filePath = join(process.cwd(), file.path);
+      const tmpFilePath = join(tmpDir, file.id);
+
       try {
-        // Get the file path and the temporary WebP path
-        const filePath = join(process.cwd(), file.path);
-        const tmpDir = join(process.cwd(), './uploads/tmp');
-        const tmpFilePath = join(tmpDir, file.id);
-
-        // Ensure the temporary directory exists
-        await fs.mkdir(tmpDir, { recursive: true });
-
-        // Convert the file to WebP format
+        // Convert file to WebP format
         await sharp(filePath).webp({ effort: 3 }).toFile(tmpFilePath);
 
-        // Delete the original file
-        await fs.unlink(filePath);
-
-        // Move the optimized file to the original path
+        // Replace original file with optimized version
         await fs.rename(tmpFilePath, filePath);
 
-        // Update the file path and optimized status in the database
+        // Update file metadata in the database
+        const newSize = (await fs.stat(filePath)).size;
         await this.prisma.localFile.update({
           where: { id: file.id },
-          data: {
-            size: (await fs.stat(filePath)).size,
-            mimetype: 'image/webp',
-            optimized: true,
-          },
+          data: { size: newSize, mimetype: 'image/webp', optimized: true },
         });
 
-        this.logger.log(`Optimized file: ${file.filename}`);
+        this.logger.log(`Optimized file: ${file.id} from ${file.size} to ${newSize}`);
       } catch (error) {
-        this.logger.error(`Failed to optimize file: ${file.filename}`, error);
+        this.logger.error(`Failed to optimize file: ${file.id}`, error);
       }
-    }
+    }));
+
+    this.logger.log('Optimization job completed.');
   }
+
 }
 
 export default LocalFilesService;

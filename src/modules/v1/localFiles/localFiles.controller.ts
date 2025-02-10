@@ -275,7 +275,7 @@ export default class LocalFilesController {
     }
 
     this.logger.log(
-      `Received new avatar file: ${file.originalname} for id ${createLocalFileDto.externalId} and domain ${createLocalFileDto.domain}`,
+      `Received new image file: ${file.originalname} for id ${createLocalFileDto.externalId} and domain ${createLocalFileDto.domain}`,
     );
 
     // Retrive or create a file owner

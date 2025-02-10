@@ -123,24 +123,90 @@ importers:
       '@nestjs/testing':
         specifier: ^11.0.9
         version: 11.0.9(@nestjs/common@11.0.9(class-transformer@0.5.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.0.9)(@nestjs/platform-express@11.0.9)
+      '@types/babel__core':
+        specifier: ^7.20.5
+        version: 7.20.5
+      '@types/babel__generator':
+        specifier: ^7.6.8
+        version: 7.6.8
+      '@types/babel__template':
+        specifier: ^7.4.4
+        version: 7.4.4
+      '@types/babel__traverse':
+        specifier: ^7.20.6
+        version: 7.20.6
       '@types/bcrypt':
         specifier: ^10.0.28-alpha
         version: 10.0.28-alpha
+      '@types/cookiejar':
+        specifier: ^2.1.5
+        version: 2.1.5
+      '@types/eslint-scope':
+        specifier: ^3.7.7
+        version: 3.7.7
+      '@types/estree':
+        specifier: ^1.0.6
+        version: 1.0.6
       '@types/express':
         specifier: ^4.17.21
         version: 4.17.21
+      '@types/gensync':
+        specifier: ^1.0.4
+        version: 1.0.4
+      '@types/graceful-fs':
+        specifier: ^4.1.9
+        version: 4.1.9
+      '@types/http-errors':
+        specifier: ^2.0.4
+        version: 2.0.4
+      '@types/istanbul-lib-coverage':
+        specifier: ^2.0.6
+        version: 2.0.6
+      '@types/istanbul-lib-report':
+        specifier: ^3.0.3
+        version: 3.0.3
+      '@types/istanbul-reports':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
+      '@types/luxon':
+        specifier: ^3.4.2
+        version: 3.4.2
+      '@types/methods':
+        specifier: ^1.1.4
+        version: 1.1.4
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.1
+      '@types/send':
+        specifier: ^0.17.4
+        version: 0.17.4
+      '@types/stack-trace':
+        specifier: ^0.0.33
+        version: 0.0.33
+      '@types/stack-utils':
+        specifier: ^2.0.3
+        version: 2.0.3
+      '@types/superagent':
+        specifier: ^8.1.9
+        version: 8.1.9
       '@types/supertest':
         specifier: ^6.0.2
         version: 6.0.2
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
+      '@types/yargs':
+        specifier: ^17.0.33
+        version: 17.0.33
+      '@types/yargs-parser':
+        specifier: ^21.0.3
+        version: 21.0.3
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.19.1
         version: 8.19.1(@typescript-eslint/parser@8.19.1(eslint@9.17.0)(typescript@5.7.3))(eslint@9.17.0)(typescript@5.7.3)
@@ -944,6 +1010,9 @@ packages:
 
   '@types/express@4.17.21':
     resolution: {integrity: sha512-ejlPM315qwLpaQlQDTjPdsUFSc6ZsP4AN6AlWnogPjQ7CVi7PYF3YVz+CY3jE2pwYf7E/7HlDAN0rV2GxTG0HQ==}
+
+  '@types/gensync@1.0.4':
+    resolution: {integrity: sha512-C3YYeRQWp2fmq9OryX+FoDy8nXS6scQ7dPptD8LnFDAUNcKWJjXQKDNJD3HVm+kOUsXhTOkpi69vI4EuAr95bA==}
 
   '@types/graceful-fs@4.1.9':
     resolution: {integrity: sha512-olP3sd1qOEe5dXTSaFvQG+02VdRXcdytWLAZsAq1PecU8uqQAhkrnbli7DagjtXKW/Bl7YJbUsa8MPcuc8LHEQ==}
@@ -4485,6 +4554,8 @@ snapshots:
       '@types/express-serve-static-core': 4.19.6
       '@types/qs': 6.9.17
       '@types/serve-static': 1.15.7
+
+  '@types/gensync@1.0.4': {}
 
   '@types/graceful-fs@4.1.9':
     dependencies:
