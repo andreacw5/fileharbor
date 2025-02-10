@@ -173,7 +173,7 @@ class LocalFilesService {
   /**
    * Optimizes all files in the database
    */
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_4_HOURS)
   async optimizeFiles() {
     this.logger.log('Starting optimization job');
     const files = await this.prisma.localFile.findMany({
