@@ -9,13 +9,22 @@ export class HeaderApiKeyStrategy extends PassportStrategy(
   'api-key',
 ) {
   constructor(private readonly configService: ConfigService) {
-    super({ header: 'X-API-KEY', prefix: '' }, true, async (apiKey, done) => {
-      return this.validate(apiKey, done);
-    });
+    super(
+      { header: 'X-API-KEY', prefix: '' },
+      true,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      async (apiKey: string, done: (error: Error, data: any) => object) => {
+        return this.validate(apiKey, done);
+      },
+    );
   }
 
-  public validate = (apiKey: string, done: (error: Error, data) => object) => {
-    if (this.configService.get<string>('auth.key') === apiKey) {
+  public validate = (
+    apiKey: string,
+    done: (error: Error, data: any) => object,
+  ) => {
+    if (this.configService.get<string>('API_KEY') === apiKey) {
       done(null, true);
     }
     done(new UnauthorizedException(), null);

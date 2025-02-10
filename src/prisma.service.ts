@@ -1,5 +1,4 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-// @ts-error Prisma generate types are not up to date
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
