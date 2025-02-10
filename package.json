@@ -1,6 +1,6 @@
 {
   "name": "fileharbor",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "FileHarbor is a file storage service that allows you to upload, download, and delete files",
   "author": "Andrea Tombolato <andreacw96@gmail.com> (https://github.com/andreacw5)",
   "private": true,
@@ -61,7 +61,7 @@
     "@nestjs/cli": "^10.4.2",
     "@nestjs/schematics": "^10.1.2",
     "@nestjs/testing": "^11.0.9",
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcrypt": "^10.0.28-alpha",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.14",
     "@types/multer": "^1.4.12",
@@ -107,6 +107,7 @@
     ],
     "onlyBuiltDependencies": [
       "@nestjs/core",
+      "bcrypt",
       "nestjs-pino"
     ]
   }
