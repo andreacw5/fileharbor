@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import generator from 'generate-password-ts';
-import * as bcrypt from 'bcrypt';
+import bcrypt from "bcrypt";
 
 @Injectable()
 export class AuthService {
@@ -15,7 +15,7 @@ export class AuthService {
     });
 
     const saltOrRounds = 15;
-    return await bcrypt.hash(password, saltOrRounds);
+    return bcrypt.hashSync(password, saltOrRounds);
   }
 
   /**
@@ -24,6 +24,6 @@ export class AuthService {
    * @param hash
    */
   async comparePassword(password: string, hash: string) {
-    return await bcrypt.compare(password, hash);
+    return bcrypt.compareSync(password, hash);
   }
 }
