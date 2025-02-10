@@ -142,6 +142,7 @@ export default class LocalFilesController {
     const start = Date.now();
     this.logger.log(`Received request for file with id: ${id}`);
 
+    // Optimize database query
     const file = await this.localFilesService.getFileById(id);
 
     if (!file) {
@@ -158,8 +159,14 @@ export default class LocalFilesController {
       return;
     }
 
-    await this.localFilesService.updateViews(id);
-    const stream = createReadStream(join(process.cwd(), file.path));
+    // Update views asynchronously
+    this.localFilesService.updateViews(id).catch((err) => {
+      this.logger.error(`Failed to update views for file with id: ${id}`, err);
+    });
+
+    // Use asynchronous file streaming
+    const filePath = join(process.cwd(), file.path);
+    const stream = createReadStream(filePath);
 
     response.set({
       'Content-Disposition': `inline; filename="${file.filename}"`,
