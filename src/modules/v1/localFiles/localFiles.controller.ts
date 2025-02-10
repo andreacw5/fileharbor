@@ -44,7 +44,7 @@ import { LocalFileFilterDto } from './dto/local-file-filter.dto';
 import OwnersService from '../owners/owners.service';
 import { GetLocalFileDto } from './dto/get-file.dto';
 
-const GENERAL_UPLOADS_DIR: string = './uploads/';
+const GENERAL_UPLOADS_DIR: string = 'uploads/';
 
 @Controller()
 @ApiTags('Files')
@@ -115,6 +115,10 @@ export default class LocalFilesController {
       this.logger.debug(`Filtering for description: ${query.description}`);
       filters['description'] = { contains: query.description };
     }
+    if (query['domain']) {
+      this.logger.debug(`Filtering for domain: ${query['domain']}`);
+      filters['owner'] = { domain: query['domain'] };
+    }
     if (query.filename) {
       this.logger.debug(`Filtering for description: ${query.filename}`);
       filters['filename'] = { contains: query.filename };
@@ -142,6 +146,7 @@ export default class LocalFilesController {
     const start = Date.now();
     this.logger.log(`Received request for file with id: ${id}`);
 
+    // Optimize database query
     const file = await this.localFilesService.getFileById(id);
 
     if (!file) {
@@ -158,8 +163,14 @@ export default class LocalFilesController {
       return;
     }
 
-    await this.localFilesService.updateViews(id);
-    const stream = createReadStream(join(process.cwd(), file.path));
+    // Update views asynchronously
+    this.localFilesService.updateViews(id).catch((err) => {
+      this.logger.error(`Failed to update views for file with id: ${id}`, err);
+    });
+
+    // Use asynchronous file streaming
+    const filePath = join(process.cwd(), file.path);
+    const stream = createReadStream(filePath);
 
     response.set({
       'Content-Disposition': `inline; filename="${file.filename}"`,
@@ -230,8 +241,8 @@ export default class LocalFilesController {
   @UseInterceptors(
     LocalFilesInterceptor({
       fieldName: 'file',
-      path: GENERAL_UPLOADS_DIR,
-      fileFilter: (request, file, callback) => {
+      path: './' + GENERAL_UPLOADS_DIR,
+      fileFilter: (_request, file, callback) => {
         if (!file.mimetype.includes('image')) {
           return callback(
             new BadRequestException(
@@ -243,7 +254,7 @@ export default class LocalFilesController {
         callback(null, true);
       },
       limits: {
-        fileSize: Math.pow(1024, 2), // 1MB
+        fileSize: Math.pow(2048, 2), // 2MB
       },
     }),
   )
@@ -281,7 +292,14 @@ export default class LocalFilesController {
       );
     }
 
+    // Move the file to the domain folder
+    await this.localFilesService.moveFileToDomainFolder(
+      file.path,
+      owner.domain,
+    );
+
     const uploaded = await this.localFilesService.addFile(file, {
+      path: GENERAL_UPLOADS_DIR + owner.domain + '/' + file.filename,
       description: createLocalFileDto.description,
       tags: createLocalFileDto.tags,
       type: createLocalFileDto.type,
