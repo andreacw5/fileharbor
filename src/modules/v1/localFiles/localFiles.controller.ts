@@ -115,6 +115,10 @@ export default class LocalFilesController {
       this.logger.debug(`Filtering for description: ${query.description}`);
       filters['description'] = { contains: query.description };
     }
+    if (query['domain']) {
+      this.logger.debug(`Filtering for domain: ${query['domain']}`);
+      filters['owner'] = { domain: query['domain'] };
+    }
     if (query.filename) {
       this.logger.debug(`Filtering for description: ${query.filename}`);
       filters['filename'] = { contains: query.filename };
