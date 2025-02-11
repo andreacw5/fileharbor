@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import generator from 'generate-password-ts';
-import bcrypt from "bcrypt";
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
