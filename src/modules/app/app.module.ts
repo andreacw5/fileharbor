@@ -7,6 +7,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '../../configs/config.validation';
 import { LoggerModule } from 'nestjs-pino';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
@@ -15,6 +16,13 @@ import { LoggerModule } from 'nestjs-pino';
       isGlobal: true,
       cache: true,
       validationSchema: configValidationSchema,
+    }),
+    CacheModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        ttl: configService.get('CACHE_TTL'),
+      }),
+      inject: [ConfigService],
     }),
     LoggerModule.forRootAsync({
       imports: [ConfigModule],

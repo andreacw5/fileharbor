@@ -16,7 +16,6 @@ model LocalFile {
   path        String
   mimetype    String
   size        Int?
-  type        String   @default("local")
   tags        String[]
   views       Int      @default(0)
   downloads   Int      @default(0)
@@ -31,6 +30,23 @@ model LocalFile {
   @@map(name: "localFiles")
 }
 
+model Avatar {
+  id          String   @id @default(uuid())
+  filename    String
+  path        String
+  mimetype    String
+  size        Int?
+  views       Int      @default(0)
+  description String?
+  optimized   Boolean  @default(false)
+  owner       Owner?   @relation(fields: [ownerId], references: [id])
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map(name: "avatars")
+}
+
 model Owner {
   id         String      @id @default(uuid())
   name       String?
@@ -39,6 +55,7 @@ model Owner {
   domain     String
   password   String      @default(uuid())
   files      LocalFile[]
+  avatars    Avatar[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
