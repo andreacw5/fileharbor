@@ -11,6 +11,7 @@ const routes: Routes = [
   {
     path: '/v1',
     children: [
+      { path: '/files', module: FilesModule },
       { path: '/avatars', module: AvatarsModule },
       { path: '/owners', module: OwnersModule },
       { path: '/stats', module: AnalyticsModule },

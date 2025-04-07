@@ -38,7 +38,7 @@ export class AssetsJob {
     const allAssets = [...files, ...avatars];
 
     if (!allAssets.length) {
-      this.logger.log('✅ No files or avatars to optimize.');
+      this.logger.log('No files or avatars to optimize.');
       return;
     }
 
@@ -73,13 +73,13 @@ export class AssetsJob {
           }
 
           this.logger.log(
-            `✅ Optimized ${type} ${asset.id}: ${result.originalSize} → ${result.optimizedSize} bytes`
+            `Optimized ${type} ${asset.id}: ${result.originalSize} → ${result.optimizedSize} bytes`
           );
         } else {
-          this.logger.warn(`⚠ Skipped optimization for ${asset.id} (unsupported type?)`);
+          this.logger.warn(`Skipped optimization for ${asset.id} (unsupported type?)`);
         }
       } catch (err: any) {
-        this.logger.error(`❌ Failed to optimize ${asset.id}`, err?.message || err);
+        this.logger.error(`Failed to optimize ${asset.id}`, err?.message || err);
       } finally {
         // Cleanup temporary files
         try {
@@ -90,6 +90,6 @@ export class AssetsJob {
       }
     }
 
-    this.logger.log('🏁 Optimization completed for files and avatars.');
+    this.logger.log('Optimization completed for files and avatars.');
   }
 }

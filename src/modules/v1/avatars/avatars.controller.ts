@@ -27,10 +27,9 @@ import { Express, Response, response } from 'express';
 import { AssetsService } from '../assets/assets.service';
 import { CreateAnAvatarDto } from './dto/create-an-avatar.dto';
 import { AvatarDto } from './dto/avatar.dto';
-import LocalFilesInterceptor from '../localFiles/localFiles.interceptor';
 import { join } from 'path';
 import { createReadStream } from 'fs';
-import { GetLocalFileDto } from '../localFiles/dto/get-file.dto';
+import AvatarInterceptor from './avatar.interceptor';
 
 @Controller()
 @ApiTags('Avatars')
@@ -96,7 +95,7 @@ export class AvatarsController {
     return new StreamableFile(stream);
   }
 
-  @Post()
+  @Post('upload')
   @ApiOperation({ summary: 'Upload a new avatar file' })
   @ApiHeaders([
     {
@@ -132,7 +131,7 @@ export class AvatarsController {
     description: 'Unable to find or create an owner for the file',
   })
   @UseInterceptors(
-    LocalFilesInterceptor({
+    AvatarInterceptor({
       fieldName: 'file',
       path: './uploads/avatars',
       fileFilter: (_request, file, callback) => {

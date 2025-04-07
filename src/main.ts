@@ -35,13 +35,6 @@ async function bootstrap() {
 
   Logger.log('Swagger available at: http://localhost:' + appPort + '/docs');
   Logger.log('Listening at: http://localhost:' + appPort + '/v1/status');
-
-  // Log all environment variables
-  Logger.debug('Configured environment variables:', {
-    url: configService.get('url'),
-    port: configService.get('port'),
-    ttl: configService.get('cache.ttl'),
-  });
 }
 bootstrap().then(() => {
   Logger.log('App running now!');

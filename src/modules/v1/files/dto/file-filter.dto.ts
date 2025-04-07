@@ -1,11 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class LocalFileFilterDto {
-  @ApiProperty({
-    description: 'Type of file',
-    enum: ['local', 'avatar'],
-    required: false,
-  })
+export class FilesFilterDto {
   type?: string;
   @ApiProperty({
     description: 'Tags of the file',

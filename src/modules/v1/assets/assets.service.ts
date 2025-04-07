@@ -37,12 +37,12 @@ export class AssetsService {
     try {
       await fs.mkdir(targetDir, { recursive: true });
       await fs.rename(absoluteFilePath, targetPath);
-      this.logger.log(`✅ Moved file to ${isAvatar ? 'avatar' : 'file'} domain folder: ${targetPath}`);
+      this.logger.log(`Moved file to ${isAvatar ? 'avatar' : 'file'} domain folder: ${targetPath}`);
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        this.logger.error(`❌ Source file does not exist: ${absoluteFilePath}`);
+        this.logger.error(`Source file does not exist: ${absoluteFilePath}`);
       } else {
-        this.logger.error(`❌ Failed to move file from ${absoluteFilePath} to ${targetPath}`, error);
+        this.logger.error(`Failed to move file from ${absoluteFilePath} to ${targetPath}`, error);
       }
       throw error;
     }
@@ -100,7 +100,7 @@ export class AssetsService {
         optimizedPath: overwrite ? filePath : outputFilePath,
       };
     } catch (error: any) {
-      this.logger.error(`❌ Failed to optimize file: ${filePath}`, error?.message || error);
+      this.logger.error(`Failed to optimize file: ${filePath}`, error?.message || error);
       return null;
     }
   }

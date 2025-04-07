@@ -1,78 +1,52 @@
 import {
-  Controller,
-  Get,
-  Param,
-  UseInterceptors,
-  ClassSerializerInterceptor,
-  StreamableFile,
-  Res,
-  Logger,
-  UseGuards,
-  Post,
-  UploadedFile,
   BadRequestException,
   Body,
+  Controller,
   Delete,
-  Req,
-  UnauthorizedException,
-  HttpStatus,
+  Get, HttpStatus,
+  Logger,
+  Param,
+  Post,
   Query,
+  Req,
+  Res, StreamableFile, UnauthorizedException,
+  UploadedFile,
+  UseGuards, UseInterceptors,
 } from '@nestjs/common';
-import LocalFilesService from './localFiles.service';
-import { Response } from 'express';
-import { createReadStream } from 'fs';
-import { join } from 'path';
+import { FilesService } from './files.service';
+import { FilesFilterDto } from './dto/file-filter.dto';
 import {
   ApiBadRequestResponse,
   ApiBasicAuth,
   ApiBody,
   ApiConsumes,
   ApiHeaders,
-  ApiOperation,
-  ApiParam,
-  ApiPayloadTooLargeResponse,
-  ApiQuery,
-  ApiResponse,
-  ApiTags,
-  ApiUnauthorizedResponse,
+  ApiOperation, ApiPayloadTooLargeResponse, ApiQuery,
+  ApiResponse, ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import LocalFilesInterceptor from './localFiles.interceptor';
-import { ConfigService } from '@nestjs/config';
-import { CreateLocalFileDto } from './dto/create-local-file.dto';
-import { LocalFileFilterDto } from './dto/local-file-filter.dto';
+import { Response } from 'express';
+import { join } from 'path';
+import { createReadStream } from 'fs';
+import { AssetsService } from '../assets/assets.service';
 import OwnersService from '../owners/owners.service';
+import { ConfigService } from '@nestjs/config';
+import { CreateFileDto } from './dto/create-file.dto';
 import { GetLocalFileDto } from './dto/get-file.dto';
-
-const GENERAL_UPLOADS_DIR: string = 'uploads/';
+import FilesInterceptor from './files.interceptor';
 
 @Controller()
-@ApiTags('Files')
-@UseInterceptors(ClassSerializerInterceptor)
-export default class LocalFilesController {
+export class FilesController {
   constructor(
-    private readonly localFilesService: LocalFilesService,
-    private readonly configService: ConfigService,
+    private readonly filesService: FilesService,
+    private readonly assetsService: AssetsService,
     private readonly ownerService: OwnersService,
+    private readonly configService: ConfigService,
   ) {}
-  private readonly logger = new Logger(LocalFilesController.name);
+  private readonly logger = new Logger(FilesController.name);
 
   @Get()
   @ApiOperation({ summary: 'Get all files' })
-  @ApiHeaders([
-    {
-      name: 'X-API-KEY',
-      description: 'Auth API key',
-    },
-  ])
-  @ApiQuery({
-    name: 'type',
-    required: false,
-    type: String,
-    example: 'local',
-    enum: ['local', 'avatar'],
-    description: 'Type of file',
-  })
   @ApiQuery({
     name: 'tags',
     required: false,
@@ -94,16 +68,18 @@ export default class LocalFilesController {
     type: String,
     description: 'Filename of the file',
   })
+  @ApiHeaders([
+    {
+      name: 'X-API-KEY',
+      description: 'Auth API key',
+    },
+  ])
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
-  async getAllFiles(@Req() request: { query: LocalFileFilterDto }) {
+  async getAllFiles(@Req() request: { query: FilesFilterDto }) {
     const { query } = request;
     this.logger.log(`Received a new request for all files`);
     const filters = {};
-    if (query.type) {
-      this.logger.debug(`Filtering for type active: ${query.type}`);
-      filters['type'] = query.type;
-    }
     if (query.tags) {
       this.logger.debug(`Filtering for tags: ${query.tags}`);
       if (!Array.isArray(query.tags)) {
@@ -123,31 +99,20 @@ export default class LocalFilesController {
       this.logger.debug(`Filtering for description: ${query.filename}`);
       filters['filename'] = { contains: query.filename };
     }
-    return this.localFilesService.getAllFiles(filters);
+    return this.filesService.getAllFiles(filters);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a file by id' })
-  @ApiParam({
-    name: 'id',
-    description: 'Local file id',
-  })
-  @ApiQuery({
-    name: 'token',
-    required: false,
-    type: String,
-    description: 'Token for private files',
-  })
   async getFileById(
     @Param('id') id: string,
     @Query() query: GetLocalFileDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     const start = Date.now();
-    this.logger.log(`Received request for file with id: ${id}`);
+    this.logger.debug(`Received request for file with id: ${id}`);
 
-    // Optimize database query
-    const file = await this.localFilesService.getFileById(id);
+    const file = await this.filesService.getFileById(id);
 
     if (!file) {
       this.logger.error(`File with id: ${id} not found`);
@@ -163,11 +128,6 @@ export default class LocalFilesController {
       return;
     }
 
-    // Update views asynchronously
-    this.localFilesService.updateViews(id).catch((err) => {
-      this.logger.error(`Failed to update views for file with id: ${id}`, err);
-    });
-
     // Use asynchronous file streaming
     const filePath = join(process.cwd(), file.path);
     const stream = createReadStream(filePath);
@@ -178,7 +138,12 @@ export default class LocalFilesController {
     });
 
     const end = Date.now();
-    this.logger.debug(`File with id: ${id} sent. Duration: ${end - start}ms`);
+    this.logger.log(`File with id: ${id} sent. Duration: ${end - start}ms`);
+
+    // Update views asynchronously
+    this.filesService.updateViews(id).catch((err) => {
+      this.logger.error(`Failed to update views for file with id: ${id}`, err);
+    });
 
     return new StreamableFile(stream);
   }
@@ -190,8 +155,8 @@ export default class LocalFilesController {
     @Res({ passthrough: true }) response: Response,
   ) {
     this.logger.log(`Received request for file with id: ${id}`);
-    const file = await this.localFilesService.getFileById(id);
-    await this.localFilesService.updateDownloads(id);
+    const file = await this.filesService.getFileById(id);
+    await this.filesService.updateDownloads(id);
 
     const stream = createReadStream(join(process.cwd(), file.path));
 
@@ -220,7 +185,6 @@ export default class LocalFilesController {
         externalId: { type: 'string' },
         domain: { type: 'string' },
         description: { type: 'string' },
-        type: { type: 'string', default: 'local' },
         tags: { type: 'array' },
         file: {
           type: 'string',
@@ -239,9 +203,9 @@ export default class LocalFilesController {
     description: 'Unable to find or create an owner for the file',
   })
   @UseInterceptors(
-    LocalFilesInterceptor({
+    FilesInterceptor({
       fieldName: 'file',
-      path: './' + GENERAL_UPLOADS_DIR,
+      path: './uploads/files',
       fileFilter: (_request, file, callback) => {
         if (!file.mimetype.includes('image')) {
           return callback(
@@ -260,50 +224,53 @@ export default class LocalFilesController {
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body() createLocalFileDto: CreateLocalFileDto,
+    @Body() createFileDto: CreateFileDto,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    if (!createLocalFileDto.externalId || !createLocalFileDto.domain) {
+
+    if (!createFileDto.externalId || !createFileDto.domain) {
       this.logger.error(
         `No external id or domain provided for file: ${file.originalname}`,
       );
       // Remove the uploaded file
-      await this.localFilesService.deleteFileByPath(file.path);
+      await this.assetsService.deleteFileByPath(file.path, true, createFileDto.domain);
       throw new BadRequestException('No external id or domain provided');
     }
 
     this.logger.log(
-      `Received new image file: ${file.originalname} for id ${createLocalFileDto.externalId} and domain ${createLocalFileDto.domain}`,
+      `Received new file file: ${file.originalname} for id ${createFileDto.externalId} and domain ${createFileDto.domain}`,
     );
 
     // Retrive or create a file owner
     const owner = await this.ownerService.getOwnerOrCreate({
-      externalId: createLocalFileDto.externalId,
-      domain: createLocalFileDto.domain,
+      externalId: createFileDto.externalId,
+      domain: createFileDto.domain,
     });
 
     if (!owner) {
       // Remove the uploaded file
-      await this.localFilesService.deleteFileByPath(file.path);
+      await this.assetsService.deleteFileByPath(file.path, true, createFileDto.domain);
       throw new UnauthorizedException(
         'Unable to find or create an owner for the file',
       );
     }
 
     // Move the file to the domain folder
-    await this.localFilesService.moveFileToDomainFolder(
+    await this.assetsService.moveFileToDomainFolder(
       file.path,
       owner.domain,
+      false
     );
 
-    const uploaded = await this.localFilesService.addFile(file, {
-      path: GENERAL_UPLOADS_DIR + owner.domain + '/' + file.filename,
-      description: createLocalFileDto.description,
-      tags: createLocalFileDto.tags,
-      type: createLocalFileDto.type,
+    const uploaded = await this.filesService.createAFile({
+      path: 'uploads/files/' + owner.domain + '/' + file.filename,
+      description: createFileDto.description,
+      tags: createFileDto.tags,
       ownerId: owner.id,
+      mimetype: file.mimetype,
+      filename: file.filename,
     });
     return {
       ...uploaded,
@@ -311,10 +278,6 @@ export default class LocalFilesController {
     };
   }
 
-  /**
-   * Deletes a file by id
-   * @param {string} id
-   */
   @Delete(':id')
   @ApiHeaders([
     {
@@ -326,7 +289,7 @@ export default class LocalFilesController {
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
   async deleteFile(@Param('id') id: string) {
-    this.logger.log(`Received a request to delete file with id: ${id}`);
-    return this.localFilesService.deleteFileById(id);
+      this.logger.log(`Deleting an file with id ${id}`);
+      return this.filesService.deleteFileById(id)
   }
 }
