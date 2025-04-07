@@ -23,7 +23,7 @@ import { ConfigService } from '@nestjs/config';
 import OwnersService from '../owners/owners.service';
 import { AvatarsService } from './avatars.service';
 import { AuthGuard } from '@nestjs/passport';
-import { Express, Response, response } from 'express';
+import { Express, Response } from 'express';
 import { AssetsService } from '../assets/assets.service';
 import { CreateAnAvatarDto } from './dto/create-an-avatar.dto';
 import { AvatarDto } from './dto/avatar.dto';
@@ -106,21 +106,7 @@ export class AvatarsController {
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        externalId: { type: 'string' },
-        domain: { type: 'string' },
-        description: { type: 'string' },
-        tags: { type: 'array' },
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
-  })
+  @ApiBody({ type: CreateAnAvatarDto })
   @ApiResponse({
     status: 201,
     description: 'The file has been successfully uploaded.',

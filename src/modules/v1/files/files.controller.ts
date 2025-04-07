@@ -178,21 +178,7 @@ export class FilesController {
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        externalId: { type: 'string' },
-        domain: { type: 'string' },
-        description: { type: 'string' },
-        tags: { type: 'array' },
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
-  })
+  @ApiBody({type: CreateFileDto})
   @ApiResponse({
     status: 201,
     description: 'The file has been successfully uploaded.',
