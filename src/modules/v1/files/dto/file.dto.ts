@@ -1,7 +1,7 @@
 import { Exclude } from 'class-transformer';
 import { OwnerDto } from '../../owners/dto/owner.dto';
 
-export class LocalFileDto {
+export class FileDto {
   id: string;
   filename: string;
   path: string;

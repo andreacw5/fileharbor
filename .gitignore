@@ -40,4 +40,5 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-uploads/*
+uploads/files/*
+uploads/avatars/*

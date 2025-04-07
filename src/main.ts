@@ -20,7 +20,7 @@ async function bootstrap() {
   const options = new DocumentBuilder()
     .setTitle('FileHarbor')
     .setDescription('The Image Uploader API documentation')
-    .setVersion('1.0')
+    .setVersion(process.env.npm_package_version)
     .setLicense(
       'MIT',
       'https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md',
@@ -35,13 +35,6 @@ async function bootstrap() {
 
   Logger.log('Swagger available at: http://localhost:' + appPort + '/docs');
   Logger.log('Listening at: http://localhost:' + appPort + '/v1/status');
-
-  // Log all environment variables
-  Logger.debug('Configured environment variables:', {
-    url: configService.get('url'),
-    port: configService.get('port'),
-    ttl: configService.get('cache.ttl'),
-  });
 }
 bootstrap().then(() => {
   Logger.log('App running now!');

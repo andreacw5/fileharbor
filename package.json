@@ -1,6 +1,6 @@
 {
   "name": "fileharbor",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "FileHarbor is a file storage service that allows you to upload, download, and delete files",
   "author": "Andrea Tombolato <andreacw96@gmail.com> (https://github.com/andreacw5)",
   "private": true,
@@ -39,6 +39,8 @@
     "bcrypt": "^5.1.1",
     "cache-manager": "^6.4.0",
     "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "date-fns": "^4.1.0",
     "express": "^4.21.2",
     "file-type-mime": "^0.4.6",
     "generate-password-ts": "^1.6.5",
