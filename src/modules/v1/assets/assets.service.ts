@@ -70,14 +70,6 @@ export class AssetsService {
 
       const originalSize = statSync(filePath).size;
 
-      const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
-      const ext = extname(filePath).toLowerCase();
-
-      if (!supportedExtensions.includes(ext)) {
-        this.logger.warn(`Skipping optimization: unsupported file type "${ext}"`);
-        return null;
-      }
-
       // Optimize the file
       await sharp(filePath)
         .webp({ effort: 4, quality: 80 })
@@ -90,7 +82,7 @@ export class AssetsService {
       }
 
       this.logger.log(
-        `✅ Optimized file: ${filePath} (${originalSize} → ${optimizedSize} bytes, saved ${originalSize - optimizedSize} bytes)`,
+        `Optimized file: ${filePath} (${originalSize} → ${optimizedSize} bytes, saved ${originalSize - optimizedSize} bytes)`,
       );
 
       return {
