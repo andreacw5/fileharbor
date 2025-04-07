@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AssetsService } from './assets.service';
 import { AssetsJob } from './assets.job';
 import { ScheduleModule } from '@nestjs/schedule';

@@ -20,7 +20,7 @@ async function bootstrap() {
   const options = new DocumentBuilder()
     .setTitle('FileHarbor')
     .setDescription('The Image Uploader API documentation')
-    .setVersion('1.0')
+    .setVersion(process.env.npm_package_version)
     .setLicense(
       'MIT',
       'https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md',
