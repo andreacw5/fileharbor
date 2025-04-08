@@ -13,6 +13,11 @@ export class FilesFilterDto {
   })
   description?: string;
   @ApiProperty({
+    description: 'Domain of the file',
+    required: false,
+  })
+  domain?: string;
+  @ApiProperty({
     description: 'Filename of the file',
     required: false,
   })

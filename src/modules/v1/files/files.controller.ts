@@ -3,15 +3,19 @@ import {
   Body,
   Controller,
   Delete,
-  Get, HttpStatus,
+  Get,
+  HttpStatus,
   Logger,
   Param,
   Post,
   Query,
   Req,
-  Res, StreamableFile, UnauthorizedException,
+  Res,
+  StreamableFile,
+  UnauthorizedException,
   UploadedFile,
-  UseGuards, UseInterceptors,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { FilesService } from './files.service';
 import { FilesFilterDto } from './dto/file-filter.dto';
@@ -21,8 +25,11 @@ import {
   ApiBody,
   ApiConsumes,
   ApiHeaders,
-  ApiOperation, ApiPayloadTooLargeResponse, ApiQuery,
-  ApiResponse, ApiUnauthorizedResponse,
+  ApiOperation,
+  ApiPayloadTooLargeResponse,
+  ApiQuery,
+  ApiResponse,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
@@ -47,27 +54,7 @@ export class FilesController {
 
   @Get()
   @ApiOperation({ summary: 'Get all files' })
-  @ApiQuery({
-    name: 'tags',
-    required: false,
-    example: 'tag1,tag2',
-    type: [String],
-    description: 'Tags of the file',
-  })
-  @ApiQuery({
-    name: 'description',
-    required: false,
-    example: 'Description',
-    type: String,
-    description: 'Description of the file',
-  })
-  @ApiQuery({
-    name: 'filename',
-    required: false,
-    example: 'file.jpg',
-    type: String,
-    description: 'Filename of the file',
-  })
+  @ApiQuery({ type: FilesFilterDto })
   @ApiHeaders([
     {
       name: 'X-API-KEY',
@@ -178,7 +165,7 @@ export class FilesController {
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
   @ApiConsumes('multipart/form-data')
-  @ApiBody({type: CreateFileDto})
+  @ApiBody({ type: CreateFileDto })
   @ApiResponse({
     status: 201,
     description: 'The file has been successfully uploaded.',
@@ -221,7 +208,11 @@ export class FilesController {
         `No external id or domain provided for file: ${file.originalname}`,
       );
       // Remove the uploaded file
-      await this.assetsService.deleteFileByPath(file.path, true, createFileDto.domain);
+      await this.assetsService.deleteFileByPath(
+        file.path,
+        true,
+        createFileDto.domain,
+      );
       throw new BadRequestException('No external id or domain provided');
     }
 
@@ -237,7 +228,11 @@ export class FilesController {
 
     if (!owner) {
       // Remove the uploaded file
-      await this.assetsService.deleteFileByPath(file.path, true, createFileDto.domain);
+      await this.assetsService.deleteFileByPath(
+        file.path,
+        true,
+        createFileDto.domain,
+      );
       throw new UnauthorizedException(
         'Unable to find or create an owner for the file',
       );
@@ -247,7 +242,7 @@ export class FilesController {
     await this.assetsService.moveFileToDomainFolder(
       file.path,
       owner.domain,
-      false
+      false,
     );
 
     const uploaded = await this.filesService.createAFile({
@@ -275,7 +270,7 @@ export class FilesController {
   @ApiBasicAuth('api-key')
   @UseGuards(AuthGuard('api-key'))
   async deleteFile(@Param('id') id: string) {
-      this.logger.log(`Deleting an file with id ${id}`);
-      return this.filesService.deleteFileById(id)
+    this.logger.log(`Deleting an file with id ${id}`);
+    return this.filesService.deleteFileById(id);
   }
 }

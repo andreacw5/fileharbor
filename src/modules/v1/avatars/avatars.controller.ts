@@ -3,9 +3,16 @@ import {
   Body,
   ClassSerializerInterceptor,
   Controller,
-  Delete, Get, HttpStatus,
+  Delete,
+  Get,
+  HttpStatus,
   Logger,
-  Param, Post, Res, StreamableFile, UnauthorizedException, UploadedFile,
+  Param,
+  Post,
+  Res,
+  StreamableFile,
+  UnauthorizedException,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -15,9 +22,11 @@ import {
   ApiBody,
   ApiConsumes,
   ApiHeaders,
-  ApiOperation, ApiPayloadTooLargeResponse,
+  ApiOperation,
+  ApiPayloadTooLargeResponse,
   ApiResponse,
-  ApiTags, ApiUnauthorizedResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import OwnersService from '../owners/owners.service';
@@ -149,7 +158,11 @@ export class AvatarsController {
         `No external id or domain provided for file: ${file.originalname}`,
       );
       // Remove the uploaded file
-      await this.assetsService.deleteFileByPath(file.path, true, createAnAvatarDto.domain);
+      await this.assetsService.deleteFileByPath(
+        file.path,
+        true,
+        createAnAvatarDto.domain,
+      );
       throw new BadRequestException('No external id or domain provided');
     }
 
@@ -165,7 +178,11 @@ export class AvatarsController {
 
     if (!owner) {
       // Remove the uploaded file
-      await this.assetsService.deleteFileByPath(file.path, true, createAnAvatarDto.domain);
+      await this.assetsService.deleteFileByPath(
+        file.path,
+        true,
+        createAnAvatarDto.domain,
+      );
       throw new UnauthorizedException(
         'Unable to find or create an owner for the file',
       );
@@ -175,7 +192,7 @@ export class AvatarsController {
     await this.assetsService.moveFileToDomainFolder(
       file.path,
       owner.domain,
-      true
+      true,
     );
 
     const uploaded: AvatarDto = await this.avatarService.createAnAvatar({
@@ -207,5 +224,4 @@ export class AvatarsController {
     this.logger.log(`Received a request to delete file with id: ${id}`);
     return this.avatarService.deleteAvatarById(id);
   }
-
 }

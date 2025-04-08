@@ -1,13 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { AvatarDto } from './dto/avatar.dto';
 
 @Injectable()
 export class AvatarsService {
-  constructor(
-    private prisma: PrismaService,
-  ) {}
-  private readonly logger = new Logger(AvatarsService.name);
+  constructor(private prisma: PrismaService) {}
 
   /**
    * Gets all avatars
@@ -68,11 +65,10 @@ export class AvatarsService {
   async createAnAvatar(data: AvatarDto) {
     return this.prisma.avatar.create({
       data: {
-        ...data
-      }
+        ...data,
+      },
     });
   }
-
 
   /**
    * Deletes an avatar by its id

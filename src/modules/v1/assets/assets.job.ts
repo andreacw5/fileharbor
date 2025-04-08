@@ -49,7 +49,11 @@ export class AssetsJob {
 
       try {
         // Optimize the file
-        const result = await this.assetService.optimizeFile(filePath, tmpFilePath, true); // overwrite the original file
+        const result = await this.assetService.optimizeFile(
+          filePath,
+          tmpFilePath,
+          true,
+        ); // overwrite the original file
 
         if (result) {
           if (isAvatar) {
@@ -75,17 +79,23 @@ export class AssetsJob {
           }
 
           this.logger.log(
-            `Optimized ${type} ${asset.id}: ${result.originalSize} → ${result.optimizedSize} bytes`
+            `Optimized ${type} ${asset.id}: ${result.originalSize} → ${result.optimizedSize} bytes`,
           );
         } else {
-          this.logger.warn(`Skipped optimization for ${asset.id} (unsupported type?)`);
+          this.logger.warn(
+            `Skipped optimization for ${asset.id} (unsupported type?)`,
+          );
         }
       } catch (err: any) {
-        this.logger.error(`Failed to optimize ${asset.id}`, err?.message || err);
+        this.logger.error(
+          `Failed to optimize ${asset.id}`,
+          err?.message || err,
+        );
       } finally {
         // Cleanup temporary files
         try {
           await fs.unlink(tmpFilePath);
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (_) {
           // silently ignore
         }
