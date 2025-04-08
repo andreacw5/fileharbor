@@ -5,9 +5,7 @@ import { FileDto } from './dto/file.dto';
 
 @Injectable()
 export class FilesService {
-  constructor(
-    private prisma: PrismaService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
   private readonly logger = new Logger(FilesService.name);
 
   /**
@@ -15,7 +13,7 @@ export class FilesService {
    * @param id
    */
   async getFileById(id: string): Promise<FileDto> {
-    const file = await  this.prisma.localFile.findUnique({ where: { id: id } });
+    const file = await this.prisma.localFile.findUnique({ where: { id: id } });
 
     if (!file) {
       this.logger.error(`File with id ${id} not found`);
@@ -101,5 +99,4 @@ export class FilesService {
   async deleteFileById(id: string) {
     return this.prisma.localFile.delete({ where: { id } });
   }
-
 }

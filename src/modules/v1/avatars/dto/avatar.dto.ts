@@ -24,7 +24,10 @@ export class AvatarDto {
   @IsOptional()
   size: number;
 
-  @ApiPropertyOptional({ description: 'Number of views for the avatar', default: 0 })
+  @ApiPropertyOptional({
+    description: 'Number of views for the avatar',
+    default: 0,
+  })
   @IsNumber()
   @IsOptional()
   views?: number;
@@ -33,7 +36,10 @@ export class AvatarDto {
   @IsString()
   description: string;
 
-  @ApiPropertyOptional({ description: 'Indicates if the avatar is optimized', default: false })
+  @ApiPropertyOptional({
+    description: 'Indicates if the avatar is optimized',
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   optimized?: boolean;

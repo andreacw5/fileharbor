@@ -26,7 +26,7 @@ const routes: Routes = [
     AvatarsModule,
     OwnersModule,
     AnalyticsModule,
-    AssetsModule
+    AssetsModule,
   ],
 })
 export default class V1Module {}

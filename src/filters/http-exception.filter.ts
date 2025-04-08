@@ -3,7 +3,9 @@ import {
   Catch,
   ArgumentsHost,
   HttpException,
-  Logger, NotFoundException, HttpStatus,
+  Logger,
+  NotFoundException,
+  HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
 
@@ -18,8 +20,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // Check if it's a 404 (Not Found) and the request looks like a bot scan
     if (exception instanceof NotFoundException) {
-      const botPatterns = [/favicon.ico/i, /wp-includes/i, /xmlrpc.php/i,/wp-/i, /cms/i, /test/i, /wordpress/i];
-      if (botPatterns.some(pattern => pattern.test(request.url))) {
+      const botPatterns = [
+        /favicon.ico/i,
+        /wp-includes/i,
+        /xmlrpc.php/i,
+        /wp-/i,
+        /cms/i,
+        /test/i,
+        /wordpress/i,
+        /.git/i,
+      ];
+      if (botPatterns.some((pattern) => pattern.test(request.url))) {
         // Silently return 404
         return response.status(HttpStatus.NOT_FOUND).json({
           code: HttpStatus.NOT_FOUND,
@@ -29,7 +40,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     // Handle other exceptions normally
-    this.logger.error(exception.message + ' exception raised on: ' + request.url);
+    this.logger.error(
+      exception.message + ' exception raised on: ' + request.url,
+    );
     response.status(exception.getStatus()).json({
       statusCode: exception.getStatus(),
       message: exception.message,

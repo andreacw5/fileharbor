@@ -7,8 +7,6 @@ import { PrismaService } from '../../../prisma.service';
 @Module({
   providers: [AssetsService, AssetsJob, PrismaService],
   exports: [AssetsService],
-  imports: [
-    ScheduleModule.forRoot()
-  ],
+  imports: [ScheduleModule.forRoot()],
 })
 export class AssetsModule {}
