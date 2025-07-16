@@ -1,4 +1,4 @@
-FROM node:23.6.0-alpine3.21 AS base
+FROM node:23.11.0-alpine3.21 AS base
 
 ENV NODE_ENV=build
 
@@ -8,7 +8,7 @@ WORKDIR /usr/src/app
 # Install pnpm
 RUN npm install -g pnpm
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl curl
 
 # Install app dependencies
 COPY package.json pnpm-lock.yaml ./
