@@ -53,11 +53,7 @@ export class AnalyticsService {
     };
   }
 
-
-  private computeStats(
-    items: any[],
-    type: 'avatar' | 'file'
-  ) {
+  private computeStats(items: any[], type: 'avatar' | 'file') {
     const isFile = type === 'file';
     const total = items.length;
     const totalViews = items.reduce((sum, i) => sum + (i.views || 0), 0);
@@ -65,15 +61,18 @@ export class AnalyticsService {
       ? items.reduce((sum, i) => sum + (i.downloads || 0), 0)
       : undefined;
     const totalSize = items.reduce((sum, i) => sum + (i.size || 0), 0);
-    const optimizedCount = items.filter(i => i.optimized).length;
+    const optimizedCount = items.filter((i) => i.optimized).length;
     const avgViews = total > 0 ? totalViews / total : 0;
     const percentOptimized = total > 0 ? (optimizedCount / total) * 100 : 0;
 
-    const trend = items.reduce((acc, i) => {
-      const day = i.createdAt.toISOString().slice(0, 10);
-      acc[day] = (acc[day] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const trend = items.reduce(
+      (acc, i) => {
+        const day = i.createdAt.toISOString().slice(0, 10);
+        acc[day] = (acc[day] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return {
       totals: {

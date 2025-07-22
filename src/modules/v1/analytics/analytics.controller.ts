@@ -6,9 +6,7 @@ import { DomainStatisticsDto } from './dto/domain-statistics.dto';
 @ApiTags('Analytics')
 @Controller()
 export class AnalyticsController {
-  constructor(
-    private readonly analyticsService: AnalyticsService,
-  ) {}
+  constructor(private readonly analyticsService: AnalyticsService) {}
   private readonly logger = new Logger(AnalyticsController.name);
 
   @Get(':domain')
@@ -16,14 +14,19 @@ export class AnalyticsController {
     name: 'days',
     description: 'Number of days to retrieve analytics for',
     example: 30,
-    required: false
+    required: false,
   })
   @ApiOkResponse({
     description: 'Domain statistics for the specified period',
-    type: DomainStatisticsDto
+    type: DomainStatisticsDto,
   })
-  async getDomainStats(@Param('domain') domain: string, @Query('days') days = 30) {
-    this.logger.log(`Fetching domain statistics for domain: ${domain}, days: ${days}`);
+  async getDomainStats(
+    @Param('domain') domain: string,
+    @Query('days') days = 30,
+  ) {
+    this.logger.log(
+      `Fetching domain statistics for domain: ${domain}, days: ${days}`,
+    );
     return await this.analyticsService.getDomainStatistics(domain, days);
   }
 }
