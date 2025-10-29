@@ -1,0 +1,108 @@
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PrismaService } from '@/prisma/prisma.service';
+
+@Injectable()
+export class ClientService {
+  constructor(private prisma: PrismaService) {}
+
+  /**
+   * Validate client by API key
+   */
+  async validateClient(apiKey: string) {
+    const client = await this.prisma.client.findUnique({
+      where: { apiKey },
+    });
+
+    if (!client || !client.active) {
+      throw new UnauthorizedException('Invalid or inactive client');
+    }
+
+    return client;
+  }
+
+  /**
+   * Get client by ID
+   */
+  async getClientById(clientId: string) {
+    return this.prisma.client.findUnique({
+      where: { id: clientId },
+    });
+  }
+
+  /**
+   * Get or create user for client
+   */
+  async getOrCreateUser(
+    clientId: string,
+    externalUserId: string,
+    email?: string,
+    username?: string,
+  ) {
+    return this.prisma.user.upsert({
+      where: {
+        clientId_externalUserId: {
+          clientId,
+          externalUserId,
+        },
+      },
+      update: {
+        email: email || undefined,
+        username: username || undefined,
+      },
+      create: {
+        clientId,
+        externalUserId,
+        email,
+        username,
+      },
+    });
+  }
+
+  /**
+   * Get user by external ID
+   */
+  async getUserByExternalId(clientId: string, externalUserId: string) {
+    return this.prisma.user.findUnique({
+      where: {
+        clientId_externalUserId: {
+          clientId,
+          externalUserId,
+        },
+      },
+    });
+  }
+
+  /**
+   * Create a new client and ensure a default admin user exists if no users are present
+   */
+  async createClient(data: { name: string; apiKey: string; domain?: string; active?: boolean }) {
+    // Create the client
+    const client = await this.prisma.client.create({
+      data: {
+        name: data.name,
+        apiKey: data.apiKey,
+        domain: data.domain,
+        active: data.active ?? true,
+      },
+    });
+
+    // Check if users exist for this client
+    const userCount = await this.prisma.user.count({
+      where: { clientId: client.id },
+    });
+
+    // If no users, create a default admin user
+    if (userCount === 0) {
+      await this.prisma.user.create({
+        data: {
+          clientId: client.id,
+          externalUserId: 'system',
+          username: 'System Admin',
+          email: 'system@auto.local',
+        },
+      });
+    }
+
+    return client;
+  }
+}
