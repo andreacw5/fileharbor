@@ -10,55 +10,179 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model LocalFile {
-  id          String   @id @default(uuid())
-  filename    String
-  path        String
-  mimetype    String
-  size        Int?
-  tags        String[]
-  views       Int      @default(0)
-  downloads   Int      @default(0)
-  description String?
-  optimized   Boolean  @default(false)
-  owner       Owner?   @relation(fields: [ownerId], references: [id])
-  ownerId     String
-  token       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// Multi-tenant Client
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  apiKey    String   @unique
+  domain    String?  @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@map(name: "localFiles")
+  // Relations
+  users   User[]
+  images  Image[]
+  avatars Avatar[]
+  albums  Album[]
+
+  @@map("clients")
 }
 
+// User within a client
+model User {
+  id             String   @id @default(uuid())
+  clientId       String
+  externalUserId String // ID from client's application
+  email          String?
+  username       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  images  Image[]
+  avatars Avatar[]
+  albums  Album[]
+
+  @@unique([clientId, externalUserId])
+  @@index([clientId])
+  @@index([externalUserId])
+  @@map("users")
+}
+
+// Image entity
+model Image {
+  id            String    @id @default(uuid())
+  clientId      String
+  userId        String
+  originalName  String
+  storagePath   String // e.g., /storage/{clientId}/{imageId}/original.webp
+  thumbnailPath String? // e.g., /storage/{clientId}/{imageId}/thumb.webp
+  format        String // webp, jpeg, png
+  width         Int
+  height        Int
+  size          Int // bytes
+  mimeType      String
+  isOptimized   Boolean   @default(false)
+  optimizedAt   DateTime?
+  isPrivate     Boolean   @default(false)
+  tags          String[] // Array of textual tags
+  views         Int       @default(0)
+  downloads     Int       @default(0)
+  description   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  albumImages AlbumImage[]
+  shareLinks  ImageShareLink[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([isOptimized])
+  @@index([isPrivate])
+  @@map("images")
+}
+
+// Avatar entity - one active per user per client
 model Avatar {
+  id            String    @id @default(uuid())
+  clientId      String
+  userId        String
+  storagePath   String // e.g., /storage/{clientId}/avatars/{userId}/avatar.webp
+  thumbnailPath String?
+  format        String
+  width         Int
+  height        Int
+  size          Int
+  mimeType      String
+  isOptimized   Boolean   @default(false)
+  optimizedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId]) // Only one active avatar per user
+  @@index([clientId])
+  @@index([userId])
+  @@map("avatars")
+}
+
+// Album entity
+model Album {
   id          String   @id @default(uuid())
-  filename    String
-  path        String
-  mimetype    String
-  size        Int?
-  views       Int      @default(0)
+  clientId    String
+  userId      String
+  name        String
   description String?
-  optimized   Boolean  @default(false)
-  owner       Owner?   @relation(fields: [ownerId], references: [id])
-  ownerId     String
+  isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@map(name: "avatars")
+  // Relations
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  albumImages AlbumImage[]
+  albumTokens AlbumToken[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([isPublic])
+  @@map("albums")
 }
 
-model Owner {
-  id         String      @id @default(uuid())
-  name       String?
-  email      String?
-  externalId String
-  domain     String
-  password   String      @default(uuid())
-  files      LocalFile[]
-  avatars    Avatar[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+// Many-to-many relationship between Album and Image
+model AlbumImage {
+  id        String   @id @default(uuid())
+  albumId   String
+  imageId   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 
-  @@unique([externalId, domain])
-  @@map(name: "owners")
+  // Relations
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([albumId, imageId])
+  @@index([albumId])
+  @@index([imageId])
+  @@map("album_images")
+}
+
+// Token for private album access
+model AlbumToken {
+  id        String    @id @default(uuid())
+  albumId   String
+  token     String    @unique
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@index([albumId])
+  @@index([token])
+  @@map("album_tokens")
+}
+
+// Token for private image sharing
+model ImageShareLink {
+  id        String    @id @default(uuid())
+  imageId   String
+  readToken String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  // Relations
+  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@index([imageId])
+  @@index([readToken])
+  @@map("image_share_links")
 }

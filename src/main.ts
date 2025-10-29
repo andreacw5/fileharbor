@@ -1,41 +1,43 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './modules/app/app.module';
-import { HttpExceptionFilter } from './filters/http-exception.filter';
-import { Logger } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
-import { json } from 'express';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app/app.module';
 
 async function bootstrap() {
-  const appOptions = { cors: true, bufferLogs: true };
-  const app = await NestFactory.create(AppModule, appOptions);
+  const app = await NestFactory.create(AppModule);
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // Global prefix
+  app.setGlobalPrefix(process.env.API_PREFIX || 'v2');
 
-  app.use(json({ limit: '5mb' }));
+  // Global validation pipe
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
-  const configService = app.get(ConfigService);
+  // Enable CORS
+  app.enableCors();
 
-  // Swagger setup
-  const options = new DocumentBuilder()
-    .setTitle('FileHarbor')
-    .setDescription('The Image Uploader API documentation')
-    .setVersion(process.env.npm_package_version)
-    .setLicense(
-      'MIT',
-      'https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md',
-    )
-    .setContact('Andrea Tombolato', 'https://andreatombolato.dev', '')
+  // Swagger documentation
+  const config = new DocumentBuilder()
+    .setTitle('FileHarbor 2.0')
+    .setDescription('Multi-tenant image management system API')
+    .setVersion('2.0.0')
+    .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'X-Client-Id', in: 'header' }, 'client-id')
     .build();
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup('/docs', app, document);
 
-  const appPort = configService.get<number>('APP_PORT', 3000);
-  await app.listen(appPort);
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
 
-  Logger.log('Swagger available at: http://localhost:' + appPort + '/docs');
-  Logger.log('Listening at: http://localhost:' + appPort + '/v1/status');
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+
+  console.log(`🚀 FileHarbor 2.0.0 is running on: http://localhost:${port}`);
+  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
 }
-bootstrap().then(() => {
-  Logger.log('App running now!');
-});
+
+bootstrap();
