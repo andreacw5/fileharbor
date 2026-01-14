@@ -226,15 +226,6 @@ export class ImageService {
       }
     }
 
-    // Check if thumbnail is requested implicitly (no dimensions and default format)
-    if (!thumb && !width && !height && format === 'webp') {
-      const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
-      if (await this.storage.fileExists(thumbPath)) {
-        const buffer = await this.storage.readFile(thumbPath);
-        return { buffer, mimeType: 'image/webp' };
-      }
-    }
-
     // Load original
     const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
     const originalBuffer = await this.storage.readFile(originalPath);
