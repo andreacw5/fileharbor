@@ -173,107 +173,82 @@ export class ImageController {
     @Res({ passthrough: true }) res: Response,
     @Req() req?: import('express').Request,
   ) {
-    this.logger.debug(`Received request for file with id: ${imageId}`);
-
-    let image;
     const clientId = req['clientId'];
     const userId = req['userId'];
+    const requestType = query.info ? 'metadata' : query.download ? 'download' : query.thumb ? 'thumb' : 'view';
 
+    // Single comprehensive log for request start
     this.logger.debug(
-      `[GetImage] Starting - ImageId: ${imageId}, Client: ${clientId || 'public'}, User: ${userId || 'anonymous'}, Token: ${query.token ? 'yes' : 'no'}`
+      `[GetImage] ${requestType} | ${imageId} | client:${clientId || 'public'} | user:${userId || 'anon'} | token:${!!query.token}`
     );
 
     try {
-      // If token is provided, try to access via share link first
+      // Handle image access with optimized logic
+      let image;
       if (query.token) {
-        this.logger.debug(`[GetImage] Token provided, validating...`);
         try {
+          // Try share link first
           image = await this.imageService.getImageByShareToken(query.token);
-          imageId = image.id; // Override imageId with the one from share link
-          this.logger.debug(`[GetImage] Token validated - ImageId: ${imageId}`);
-        } catch (error) {
-          this.logger.debug(`[GetImage] Token validation failed, trying normal access - Error: ${error.message}`);
-          // If token validation fails, fall back to normal access with token as auth
+          imageId = image.id;
+        } catch {
+          // Fallback to normal access with token validation
           image = await this.imageService.getImageById(imageId);
           await this.imageService.validateImageAccess(image, imageId, clientId, userId, query.token);
         }
       } else {
-        this.logger.debug(`[GetImage] No token, fetching image normally...`);
-        // Normal access without token
         image = await this.imageService.getImageById(imageId);
-        this.logger.debug(`[GetImage] Image fetched - ImageId: ${imageId}`);
         await this.imageService.validateImageAccess(image, imageId, clientId, userId);
-        this.logger.debug(`[GetImage] Access validated`);
       }
 
-      // Parse query parameters (now properly transformed by DTO)
-      const isInfoRequest = query.info === true;
-      const isDownload = query.download === true;
-      const isThumb = query.thumb === true;
-
-      this.logger.debug(
-        `[GetImage] Request type - Info: ${isInfoRequest}, Download: ${isDownload}, Thumb: ${isThumb}`
-      );
-
-      // If info=true, return JSON metadata
-      if (isInfoRequest) {
-        this.logger.debug(`[GetImage] Returning metadata - ImageId: ${imageId}`);
+      // Handle metadata request early return
+      if (query.info) {
         const metadata = await this.imageService.getImageMetadata(image);
-        this.logger.log(`[GetImage] Metadata - ImageId: ${imageId}, Client: ${image.clientId}`);
+        this.logger.log(`[GetImage] metadata | ${imageId} | ${image.clientId}`);
         return metadata;
       }
 
-      // Handle counters
-      if (isDownload) {
-        this.logger.debug(`[GetImage] Incrementing downloads...`);
-        await this.imageService.incrementDownloads(imageId, image.clientId);
-        this.logger.debug(`[GetImage] Download count incremented - ImageId: ${imageId}`);
-      } else {
-        this.logger.debug(`[GetImage] Incrementing views...`);
-        await this.imageService.incrementViews(imageId);
-        this.logger.debug(`[GetImage] View count incremented - ImageId: ${imageId}`);
-      }
+      // Update counters (fire and forget for performance) - create promises without await
+      const counterPromise = query.download
+        ? this.imageService.incrementDownloads(imageId, image.clientId)
+        : this.imageService.incrementViews(imageId);
 
       // Get image file
-      this.logger.debug(
-        `[GetImage] Getting file - ImageId: ${imageId}, Width: ${query.width}, Height: ${query.height}, Format: ${query.format}, Quality: ${query.quality}, Thumb: ${isThumb}`
-      );
-      const { buffer, mimeType } = await this.imageService.getImageFile(
+      const filePromise = this.imageService.getImageFile(
         imageId,
-        isThumb ? undefined : query.width,
-        isThumb ? undefined : query.height,
+        query.thumb ? undefined : query.width,
+        query.thumb ? undefined : query.height,
         query.format || 'webp',
         query.quality || 85,
-        isThumb,
+        query.thumb,
       );
 
-      this.logger.debug(`[GetImage] File retrieved - Size: ${buffer.length} bytes, MimeType: ${mimeType}`);
+      // Wait for both file and counter update
+      const [{ buffer, mimeType }] = await Promise.all([filePromise, counterPromise]);
 
       // Set response headers
-      res.set({
+      const headers: Record<string, string> = {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
-        'ETag': `"${imageId}${isThumb ? '-thumb' : ''}"`,
-      });
+        'ETag': `"${imageId}${query.thumb ? '-thumb' : ''}"`,
+      };
 
-      if (isDownload) {
-        res.set('Content-Disposition', `attachment; filename="${image.originalName}"`);
+      if (query.download) {
+        headers['Content-Disposition'] = `attachment; filename="${image.originalName}"`;
       }
 
+      res.set(headers);
+
       this.logger.log(
-        `[GetImage] Serving file - ImageId: ${imageId}, MimeType: ${mimeType}, Size: ${buffer.length} bytes, Client: ${clientId || 'public'}, User: ${userId || 'anonymous'}, Download: ${isDownload}, Thumb: ${isThumb}`
+        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`
       );
 
-      // Convert buffer to stream and return StreamableFile
-      const stream = Readable.from(buffer);
-      return new StreamableFile(stream, {
+      return new StreamableFile(Readable.from(buffer), {
         type: mimeType,
         length: buffer.length,
       });
+
     } catch (error) {
-      this.logger.error(
-        `[GetImage] Failed - ImageId: ${imageId}, Error: ${error.message}`, error.stack
-      );
+      this.logger.error(`[GetImage] FAILED | ${imageId} | ${error.message}`);
       throw error;
     }
   }
