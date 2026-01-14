@@ -28,12 +28,11 @@ export class AvatarService {
   /**
    * Upload or update avatar for user
    * Se non esiste lo user associato a clientId+externalUserId, lo crea automaticamente.
-   * Se non viene fornito externalUserId, ne genera uno automaticamente.
    */
   async uploadAvatar(
     clientId: string,
     file: Express.Multer.File,
-    externalUserId?: string,
+    externalUserId: string,
   ) {
     // Validate file
     if (!file.mimetype.startsWith('image/')) {
@@ -52,16 +51,12 @@ export class AvatarService {
     }
     const domain = client.domain || clientId;
 
-    // Trova o crea lo user associato
-    let extUserId = externalUserId;
-    if (!extUserId) {
-      extUserId = 'auto-' + uuidv4();
-    }
+    // Trova o crea lo user associato a questo externalUserId
     let user = await this.prisma.user.findUnique({
       where: {
         clientId_externalUserId: {
           clientId,
-          externalUserId: extUserId,
+          externalUserId,
         },
       },
     });
@@ -69,8 +64,8 @@ export class AvatarService {
       user = await this.prisma.user.create({
         data: {
           clientId,
-          externalUserId: extUserId,
-          username: 'AutoUser',
+          externalUserId,
+          username: 'User',
         },
       });
     }
@@ -150,54 +145,30 @@ export class AvatarService {
       },
     });
 
-    return this.formatAvatarResponse(avatar);
+    return this.formatAvatarResponse(avatar, externalUserId);
   }
 
-  /**
-   * Get user avatar
-   */
-  async getUserAvatar(clientId: string, userId: string) {
-    const avatar = await this.prisma.avatar.findUnique({
-      where: {
-        clientId_userId: {
-          clientId,
-          userId,
-        },
-      },
-    });
-
-    if (!avatar) {
-      throw new NotFoundException('Avatar not found');
-    }
-
-    return avatar;
-  }
 
   /**
-   * Get avatar file
+   * Get avatar file by external user ID (used by public endpoint)
    */
   async getAvatarFile(
-    userId: string,
+    externalUserId: string,
     thumbnail: boolean = false,
   ): Promise<{ buffer: Buffer; mimeType: string }> {
-    // Find avatar by userId (could be internal userId or externalUserId)
-    // Try first as internal userId
-    let avatar = await this.prisma.avatar.findFirst({
-      where: { userId },
+    // Find user by externalUserId across all clients
+    // (public endpoint doesn't have clientId context)
+    const user = await this.prisma.user.findFirst({
+      where: { externalUserId },
     });
 
-    // If not found, try as externalUserId
-    if (!avatar) {
-      const user = await this.prisma.user.findFirst({
-        where: { externalUserId: userId },
-      });
-
-      if (user) {
-        avatar = await this.prisma.avatar.findFirst({
-          where: { userId: user.id },
-        });
-      }
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
+
+    const avatar = await this.prisma.avatar.findFirst({
+      where: { userId: user.id },
+    });
 
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -212,11 +183,36 @@ export class AvatarService {
   }
 
   /**
-   * Delete user avatar
+   * Delete user avatar by external user ID
    */
-  async deleteAvatar(clientId: string, userId: string): Promise<DeleteAvatarResponseDto> {
+  async deleteAvatar(clientId: string, externalUserId: string): Promise<DeleteAvatarResponseDto> {
+    // Find the user by clientId and externalUserId
+    const user = await this.prisma.user.findUnique({
+      where: {
+        clientId_externalUserId: {
+          clientId,
+          externalUserId,
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     // Verify avatar exists
-    await this.getUserAvatar(clientId, userId);
+    const avatar = await this.prisma.avatar.findUnique({
+      where: {
+        clientId_userId: {
+          clientId,
+          userId: user.id,
+        },
+      },
+    });
+
+    if (!avatar) {
+      throw new NotFoundException('Avatar not found');
+    }
 
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
@@ -225,7 +221,7 @@ export class AvatarService {
     const domain = client?.domain || clientId;
 
     // Delete files
-    const avatarPath = this.storage.getAvatarPath(domain, userId);
+    const avatarPath = this.storage.getAvatarPath(domain, user.id);
     await this.storage.deleteDirectory(avatarPath);
 
     // Delete from database
@@ -233,7 +229,7 @@ export class AvatarService {
       where: {
         clientId_userId: {
           clientId,
-          userId,
+          userId: user.id,
         },
       },
     });
@@ -267,26 +263,20 @@ export class AvatarService {
   }
 
   /**
-   * Get avatar by userId (searches both internal and external userId)
+   * Get avatar by external user ID (for info endpoint)
    */
-  async getAvatarByUserId(userId: string) {
-    // Try first as internal userId
-    let avatar = await this.prisma.avatar.findFirst({
-      where: { userId },
+  async getAvatarByExternalUserId(externalUserId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { externalUserId },
     });
 
-    // If not found, try as externalUserId
-    if (!avatar) {
-      const user = await this.prisma.user.findFirst({
-        where: { externalUserId: userId },
-      });
-
-      if (user) {
-        avatar = await this.prisma.avatar.findFirst({
-          where: { userId: user.id },
-        });
-      }
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
+
+    const avatar = await this.prisma.avatar.findFirst({
+      where: { userId: user.id },
+    });
 
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -298,22 +288,22 @@ export class AvatarService {
   /**
    * Get avatar metadata for info endpoint
    */
-  getAvatarMetadata(avatar: any): AvatarResponseDto {
-    return this.formatAvatarResponse(avatar);
+  getAvatarMetadata(avatar: any, externalUserId: string): AvatarResponseDto {
+    return this.formatAvatarResponse(avatar, externalUserId);
   }
 
   /**
    * Format avatar response using class-transformer
    */
-  private formatAvatarResponse(avatar: any): AvatarResponseDto {
+  private formatAvatarResponse(avatar: any, externalUserId: string): AvatarResponseDto {
     const apiPrefix = this.config.get('API_PREFIX') || 'v2';
 
     return plainToInstance(
       AvatarResponseDto,
       {
         ...avatar,
-        url: `/${apiPrefix}/avatars/${avatar.userId}`,
-        thumbnailUrl: avatar.thumbnailPath ? `/${apiPrefix}/avatars/${avatar.userId}?thumb=true` : undefined,
+        url: `/${apiPrefix}/avatars/${externalUserId}`,
+        thumbnailUrl: avatar.thumbnailPath ? `/${apiPrefix}/avatars/${externalUserId}?thumb=true` : undefined,
       },
       { excludeExtraneousValues: true },
     );

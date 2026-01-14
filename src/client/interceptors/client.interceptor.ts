@@ -49,7 +49,7 @@ export class ClientInterceptor implements NestInterceptor {
 
     // Get API key from header
     const apiKey = request.headers['x-api-key'];
-    const userIdHeader = request.headers['x-user-id'];
+    const externalUserIdHeader = request.headers['x-user-id'];
 
     if (!apiKey) {
       throw new UnauthorizedException('API key required (X-API-Key header)');
@@ -62,27 +62,18 @@ export class ClientInterceptor implements NestInterceptor {
     request.clientId = client.id;
     request.client = client;
 
-    // Handle user if provided
-    let userId = userIdHeader;
-    if (!userId) {
-      userId = request.query?.userId || request.body?.userId;
+    // Handle external user ID if provided
+    // This is the user ID from the client's system, not Fileharbor's internal user ID
+    let externalUserId = externalUserIdHeader;
+    if (!externalUserId) {
+      externalUserId = request.query?.externalUserId || request.body?.externalUserId;
     }
     // Treat empty string as missing
-    if (typeof userId === 'string' && userId.trim() === '') {
-      userId = undefined;
+    if (typeof externalUserId === 'string' && externalUserId.trim() === '') {
+      externalUserId = undefined;
     }
-    if (userId) {
-      const user = await this.clientService.getOrCreateUser(
-        client.id,
-        userId,
-      );
-      request.userId = user.id;
-      request.user = user;
-    } else {
-      // Explicitly unset userId if not found
-      request.userId = undefined;
-      request.user = undefined;
-    }
+    // Attach external user ID to request (services will handle user lookup/creation)
+    request.externalUserId = externalUserId;
 
     return next.handle();
   }
