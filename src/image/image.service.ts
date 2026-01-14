@@ -58,28 +58,39 @@ export class ImageService {
     }
     const domain = client.domain || clientId;
 
-    // Trova o crea lo user associato
-    // If no externalUserId provided, generate an auto ID
-    let extUserId = externalUserId;
-    if (!extUserId) {
-      extUserId = 'auto-' + uuidv4();
-    }
-    let user = await this.prisma.user.findUnique({
-      where: {
-        clientId_externalUserId: {
-          clientId,
-          externalUserId: extUserId,
-        },
-      },
-    });
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          clientId,
-          externalUserId: extUserId,
-          username: 'AutoUser',
+    // Get or create user
+    let user;
+    if (externalUserId) {
+      // If externalUserId is provided, get or create that user
+      user = await this.prisma.user.findUnique({
+        where: {
+          clientId_externalUserId: {
+            clientId,
+            externalUserId,
+          },
         },
       });
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: {
+            clientId,
+            externalUserId,
+          },
+        });
+      }
+    } else {
+      // If no externalUserId, use the system user
+      user = await this.prisma.user.findUnique({
+        where: {
+          clientId_externalUserId: {
+            clientId,
+            externalUserId: 'system',
+          },
+        },
+      });
+      if (!user) {
+        throw new BadRequestException('System user not found for client');
+      }
     }
     const userId = user.id;
 

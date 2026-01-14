@@ -95,14 +95,23 @@ export class ClientService {
       where: { clientId: client.id },
     });
 
-    // If no users, create a default admin user
+    // If no users, create default users
     if (userCount === 0) {
+      // Create administrator user
+      await this.prisma.user.create({
+        data: {
+          clientId: client.id,
+          externalUserId: 'administrator',
+          username: 'administrator',
+        },
+      });
+
+      // Create system user for images without explicit userId
       await this.prisma.user.create({
         data: {
           clientId: client.id,
           externalUserId: 'system',
-          username: 'System Admin',
-          email: 'system@auto.local',
+          username: 'system',
         },
       });
     }

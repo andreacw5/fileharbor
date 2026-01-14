@@ -38,16 +38,19 @@ export class ClientInitService implements OnModuleInit {
         this.logger.log(`Created default client: ${defaultClient.name} (ID: ${defaultClient.id})`);
         this.logger.log(`API Key: ${defaultClient.apiKey}`);
 
-        // Get the admin user that was auto-created by ClientService
-        const adminUser = await this.prisma.user.findFirst({
+        // Get the default users that were auto-created by ClientService
+        const defaultUsers = await this.prisma.user.findMany({
           where: { clientId: defaultClient.id },
         });
 
-        if (adminUser) {
-          this.logger.log(`Created admin user: ${adminUser.username} (ID: ${adminUser.id})`);
+        if (defaultUsers.length > 0) {
+          this.logger.log(`Created ${defaultUsers.length} default users:`);
+          for (const user of defaultUsers) {
+            this.logger.log(`  - ${user.username} (externalUserId: ${user.externalUserId}, ID: ${user.id})`);
+          }
         }
 
-        this.logger.log('Default client and admin user initialization completed.');
+        this.logger.log('Default client initialization completed.');
       } else {
         this.logger.log(`Found ${clientCount} existing client(s). Skipping initialization.`);
 
