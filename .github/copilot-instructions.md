@@ -300,7 +300,7 @@ const processed = await sharp(buffer)
 ## Scheduled Jobs
 
 ### Optimization Job
-- Runs hourly (configurable via OPTIMIZATION_JOB_CRON)
+- Runs hourly
 - Converts images to WebP
 - Removes EXIF metadata
 - Compresses images

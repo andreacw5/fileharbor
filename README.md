@@ -2,11 +2,8 @@
   <a href="https://github.com/andreacw5/fileharbor" target="blank"><img src="app_logo.png" width="500" alt="File Harbor App Logo" /></a>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
 <p align="center">
-Multi-tenant image management system built with NestJS and Prisma.
+Multi-tenant image management system built with NestJS 10, Prisma ORM, and PostgreSQL.
 </p>
 <p align="center">
     <a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@andreacw5/fileharbor" alt="NPM Version" /></a>
@@ -27,108 +24,80 @@ Multi-tenant image management system built with NestJS and Prisma.
 
 ## Tech Stack
 
-- **Framework**: NestJS 10
+- **Framework**: NestJS 10 (Node.js/TypeScript)
 - **Database**: PostgreSQL with Prisma ORM
-- **Image Processing**: Sharp
-- **Authentication**: JWT, API Keys
+- **Image Processing**: Sharp library
+- **Authentication**: JWT tokens, API Keys
+- **Package Manager**: pnpm (enforced via preinstall script)
+- **Testing**: Jest
+- **API Documentation**: Swagger/OpenAPI
 - **Caching**: HTTP ETag & Cache-Control headers
 - **Storage**: Local file system (extensible to S3/Cloud)
 
 ## Installation
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (pnpm only)
+pnpm install
 
 # Setup database
 cp .env.example .env
 # Edit .env with your database credentials
 
 # Generate Prisma client
-npm run prisma:generate
+pnpm run prisma:generate
 
 # Run migrations
-npm run prisma:migrate
+pnpm run prisma:migrate
 
-# Seed database with demo data
-npm run prisma:seed
+# Seed database with demo data (optional)
+pnpm run prisma:seed
 ```
 
 ## Running the App
 
 ```bash
-# Development mode
-npm run start:dev
+# Development mode with hot reload
+pnpm run start:dev
 
-# Production mode
-npm run build
-npm run start:prod
+# Production build
+pnpm run build
+pnpm run start:prod
 ```
 
 The API will be available at `http://localhost:3000`
 
 ## API Documentation
 
-Once the server is running, visit:
-- Swagger UI: `http://localhost:3000/api/docs`
+Complete API documentation with interactive testing interface:
+- **Swagger UI**: `http://localhost:3000/docs`
+
+All endpoints, request/response schemas, and examples are available in the Swagger documentation.
 
 ## Architecture
 
 ### Multi-Tenant Flow
 
-1. Client sends request with `X-Client-Id` header or `X-API-Key` header
+1. Client sends request with `X-API-Key` header (validates and retrieves client - REQUIRED)
 2. `ClientInterceptor` validates and attaches client info to request
 3. All queries are scoped to `clientId`
-4. User isolation via `X-User-Id` header
+4. User isolation via `X-User-Id` header for user-specific operations
+
+**Security Note**: Only API Key authentication is supported.
 
 ### Storage Structure
 
 ```
 storage/
-├── {clientId}/
-│   ├── {imageId}/
-│   │   ├── original.webp
-│   │   └── thumb.webp
+├── {domain}/
+│   ├── images/
+│   │   └── {imageId}/
+│   │       ├── original.webp
+│   │       └── thumb.webp
 │   └── avatars/
 │       └── {userId}/
 │           ├── avatar.webp
 │           └── thumb.webp
-```
-
-## API Endpoints
-
-### Images
-
-```
-POST   /v1/images/upload          - Upload image
-GET    /v1/images/:id              - Get image (with optional resize params)
-GET    /v1/images/:id/thumb        - Get thumbnail
-GET    /v1/images/:id/info         - Get image metadata
-GET    /v1/images/user/list        - Get user's images
-DELETE /v1/images/:id              - Delete image
-```
-
-### Avatars
-
-```
-POST   /v1/avatars/upload          - Upload/update avatar
-GET    /v1/avatars/:userId         - Get avatar
-GET    /v1/avatars/:userId/thumb   - Get avatar thumbnail
-GET    /v1/avatars/:userId/info    - Get avatar metadata
-DELETE /v1/avatars                 - Delete avatar
-```
-
-### Albums
-
-```
-POST   /v1/albums                  - Create album
-GET    /v1/albums                  - Get user albums
-GET    /v1/albums/:id              - Get album with images
-PUT    /v1/albums/:id              - Update album
-DELETE /v1/albums/:id              - Delete album
-POST   /v1/albums/:id/images       - Add images to album
-DELETE /v1/albums/:id/images/:imgId - Remove image from album
-POST   /v1/albums/:id/token        - Generate access token
 ```
 
 ## Request Headers
@@ -136,66 +105,10 @@ POST   /v1/albums/:id/token        - Generate access token
 ### Required Headers
 
 ```
-X-API-Key: demo-api-key-12345
-# OR
-X-Client-Id: {clientId}
-
-X-User-Id: {externalUserId}  # Required for user-specific operations
+X-API-Key: {your-api-key}           # Required for authentication
+X-User-Id: {externalUserId}         # Required for user-specific operations
 ```
 
-## Example Usage
-
-### Upload an Image
-
-```bash
-curl -X POST http://localhost:3000/v1/images/upload \
-  -H "X-API-Key: demo-api-key-12345" \
-  -H "X-User-Id: user-001" \
-  -F "file=@image.jpg"
-```
-
-### Get Image with Custom Size
-
-```bash
-curl http://localhost:3000/v1/images/{imageId}?width=400&format=jpeg
-```
-
-### Upload Avatar
-
-```bash
-curl -X POST http://localhost:3000/v1/avatars/upload \
-  -H "X-API-Key: demo-api-key-12345" \
-  -H "X-User-Id: user-001" \
-  -F "file=@avatar.jpg"
-```
-
-### Create Private Album
-
-```bash
-curl -X POST http://localhost:3000/v1/albums \
-  -H "X-API-Key: demo-api-key-12345" \
-  -H "X-User-Id: user-001" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My Private Album",
-    "description": "Personal photos",
-    "isPublic": false
-  }'
-```
-
-### Generate Album Access Token
-
-```bash
-curl -X POST http://localhost:3000/v1/albums/{albumId}/token?expiresInDays=7 \
-  -H "X-API-Key: demo-api-key-12345" \
-  -H "X-User-Id: user-001"
-```
-
-### Access Private Album with Token
-
-```bash
-curl http://localhost:3000/v1/albums/{albumId}?token={generatedToken}
-```
 
 ## Optimization Jobs
 
@@ -213,28 +126,31 @@ Key environment variables in `.env`:
 
 ```env
 # Server
-PORT=3000
-API_PREFIX=v1
+APP_PORT=3000
+APP_URL=http://localhost:3000
+API_PREFIX=v2
 
 # Database
 DATABASE_URL="postgresql://user:password@localhost:5432/fileharbor?schema=public"
-
-# JWT
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=7d
 
 # Storage
 STORAGE_PATH=./storage
 MAX_FILE_SIZE=10485760  # 10MB
 
 # Image Processing
-THUMBNAIL_SIZE=800
-WEBP_QUALITY=85
-COMPRESSION_QUALITY=90
+WEBP_QUALITY=90
+JPEG_QUALITY=85
+THUMBNAIL_SIZE=300
 
 # Rate Limiting
 THROTTLE_TTL=60         # seconds
 THROTTLE_LIMIT=10       # requests per TTL
+
+# Caching
+CACHE_TTL=60           # seconds
+
+# Logging (optional)
+LOGS_TOKEN=your-betterstack-token
 ```
 
 ## Database Schema
@@ -271,38 +187,86 @@ THROTTLE_LIMIT=10       # requests per TTL
 
 ```bash
 # Watch mode
-npm run start:dev
+pnpm run start:dev
 
 # Run tests
-npm run test
+pnpm run test
+pnpm run test:watch
+pnpm run test:cov
+
+# E2E tests
+pnpm run test:e2e
+
+# Linting and formatting
+pnpm run lint
+pnpm run format
 
 # Prisma Studio (DB GUI)
-npm run prisma:studio
+pnpm run prisma:studio
 
 # Generate migration
-npx prisma migrate dev --name migration_name
+pnpm run prisma:migrate
 ```
 
 ## Production Deployment
 
 1. Set `NODE_ENV=production`
-2. Use strong `JWT_SECRET`
-3. Configure PostgreSQL connection
-4. Set up file storage (local or cloud)
-5. Configure reverse proxy (Nginx)
-6. Enable SSL/TLS
-7. Set up monitoring and logging
+2. Configure PostgreSQL connection
+3. Set up file storage (local or cloud)
+4. Configure reverse proxy (Nginx)
+5. Enable SSL/TLS
+6. Set up monitoring and logging
+7. Configure `API_PREFIX` if different from default (v2)
 
 ## Roadmap
 
-- [ ] S3/Cloud storage support
-- [ ] WebSocket for real-time updates
-- [ ] Image metadata search
-- [ ] Batch operations
-- [ ] CDN integration
-- [ ] Advanced image filters
-- [ ] Video support
-- [ ] Multi-region storage
+### 🚀 Core Features (Next Release)
+- [ ] **Cloud Storage Integration**: S3/Google Cloud/Azure Blob support as alternative to local storage
+- [ ] **Advanced Image Transformations**: Watermarks, filters, blur, grayscale, sepia effects
+- [ ] **Batch Upload API**: Multiple image upload in single request with progress tracking
+- [ ] **Image Collections**: Extended album functionality with sorting, filtering, and bulk operations
+
+### 📊 Analytics & Monitoring
+- [ ] **Enhanced Analytics Dashboard**: Real-time usage metrics, popular images, client statistics
+- [ ] **Performance Metrics**: API response times, optimization job statistics, storage usage trends
+- [ ] **Client Usage Reports**: Bandwidth consumption, storage quotas, API call analytics
+- [ ] **Health Check Endpoints**: Detailed system status including database, storage, and job queues
+
+### 🔐 Security & Authentication
+- [ ] **API Rate Limiting per Client**: Individual throttling limits based on client subscription
+- [ ] **Audit Logging**: Complete action history for compliance and security monitoring
+
+### 🎨 Advanced Image Processing
+- [ ] **AI-Powered Features**: Auto-tagging, content moderation, duplicate detection
+- [ ] **Dynamic Watermarking**: Configurable watermarks per client with position/opacity controls
+- [ ] **Format-Specific Optimizations**: AVIF support, progressive JPEG, animated WebP
+- [ ] **Face Detection & Cropping**: Smart avatar cropping and face-based image optimization
+
+### 🔗 Integrations & API
+- [ ] **WebSocket Support**: Real-time notifications for upload progress, optimization status
+- [ ] **Webhook System**: Client notifications for image events (upload, optimization, deletion)
+- [ ] **CDN Integration**: CloudFlare, AWS CloudFront integration for global distribution
+- [ ] **GraphQL API**: Alternative to REST for complex data queries and relations
+
+### 📱 User Experience
+- [ ] **Image Comparison Tool**: Before/after optimization views with metrics
+- [ ] **Drag & Drop Upload Interface**: Enhanced web interface for bulk operations
+- [ ] **Image Search & Filtering**: Advanced search by tags, date ranges, formats, sizes
+- [ ] **Bulk Operations Dashboard**: Mass deletion, optimization, and metadata editing
+
+### 🏗️ Infrastructure & Performance
+- [ ] **Caching Layer**: Redis caching for frequently accessed images and metadata
+
+### 🌐 Enterprise Features
+- [ ] **SSO Integration**: SAML/OAuth2 integration for enterprise client authentication
+- [ ] **Compliance Features**: GDPR data export/deletion, audit trails, data encryption
+- [ ] **White-Label Solution**: Custom branding and domain configuration per client
+
+### 🔄 Automation & Intelligence
+- [ ] **Smart Cleanup**: Auto-deletion of unused images based on configurable policies
+- [ ] **Predictive Optimization**: Machine learning for optimal compression settings
+- [ ] **Auto-Scaling Jobs**: Dynamic job scheduling based on upload patterns
+- [ ] **Content Insights**: Usage analytics and recommendations for image management
 
 ## License
 
