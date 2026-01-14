@@ -19,7 +19,12 @@ async function bootstrap() {
   );
 
   // Enable CORS
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'X-Client-Id', 'X-API-Key', 'X-User-Id'],
+    credentials: true,
+  });
 
   // Swagger documentation
   const config = new DocumentBuilder()
