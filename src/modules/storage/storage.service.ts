@@ -127,21 +127,56 @@ export class StorageService {
   }
 
   /**
-   * Create thumbnail
+   * Create thumbnail with flexible sizing and format options
    */
   async createThumbnail(
     inputBuffer: Buffer,
     maxSize: number = 800,
-    quality: number = 85
+    quality: number = 85,
+    options: {
+      width?: number;
+      height?: number;
+      format?: 'webp' | 'jpeg' | 'png';
+      maintainAspectRatio?: boolean;
+    } = {}
   ): Promise<Buffer> {
     try {
-      return await sharp(inputBuffer)
-        .resize(maxSize, maxSize, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .webp({ quality })
-        .toBuffer();
+      const {
+        width = maxSize,
+        height = maxSize,
+        format = 'webp',
+        maintainAspectRatio = true
+      } = options;
+
+      let pipeline = sharp(inputBuffer);
+
+      // Apply resizing with more flexible options
+      pipeline = pipeline.resize(width, height, {
+        fit: maintainAspectRatio ? 'inside' : 'fill',
+        withoutEnlargement: true,
+        background: format === 'jpeg' ? { r: 255, g: 255, b: 255, alpha: 1 } : { r: 0, g: 0, b: 0, alpha: 0 }
+      });
+
+      // Apply format-specific compression
+      switch (format) {
+        case 'jpeg':
+          return await pipeline.jpeg({
+            quality,
+            progressive: true,
+            mozjpeg: true // Better compression
+          }).toBuffer();
+        case 'png':
+          return await pipeline.png({
+            quality,
+            progressive: true,
+            compressionLevel: 9
+          }).toBuffer();
+        default:
+          return await pipeline.webp({
+            quality,
+            effort: 6 // Better compression
+          }).toBuffer();
+      }
     } catch (error) {
       throw new InternalServerErrorException('Failed to create thumbnail');
     }

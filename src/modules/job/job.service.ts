@@ -10,7 +10,9 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 @Injectable()
 export class JobService {
   private readonly logger = new Logger(JobService.name);
-  private readonly compressionQuality: number;
+  private readonly originalQuality: number;
+  private readonly thumbnailSize: number;
+  private readonly thumbnailQuality: number;
 
   constructor(
     private imageService: ImageService,
@@ -20,9 +22,11 @@ export class JobService {
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
-    this.compressionQuality = parseInt(
-      this.config.get('COMPRESSION_QUALITY') || '90',
-    );
+    // Original should be high quality to preserve image fidelity
+    this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
+    // Thumbnail can use lower quality to reduce file size
+    this.thumbnailQuality = parseInt(this.config.get('THUMBNAIL_QUALITY') || '70');
+    this.thumbnailSize = parseInt(this.config.get('THUMBNAIL_SIZE') || '800');
   }
 
   /**
@@ -101,7 +105,7 @@ export class JobService {
     // Optimize (remove EXIF, compress)
     const optimizedBuffer = await this.storage.optimizeImage(
       buffer,
-      this.compressionQuality,
+      this.originalQuality,
     );
 
     // Save back
@@ -111,8 +115,8 @@ export class JobService {
     const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
     const thumbBuffer = await this.storage.createThumbnail(
       optimizedBuffer,
-      parseInt(this.config.get('THUMBNAIL_SIZE') || '800'),
-      parseInt(this.config.get('WEBP_QUALITY') || '85'),
+      this.thumbnailSize,
+      this.thumbnailQuality
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
   }
@@ -134,7 +138,7 @@ export class JobService {
     // Optimize (remove EXIF, compress)
     const optimizedBuffer = await this.storage.optimizeImage(
       buffer,
-      this.compressionQuality,
+      this.originalQuality,
     );
 
     // Save back
@@ -144,8 +148,8 @@ export class JobService {
     const thumbPath = this.storage.getAvatarFilePath(domain, avatar.userId, 'thumb');
     const thumbBuffer = await this.storage.createThumbnail(
       optimizedBuffer,
-      parseInt(this.config.get('THUMBNAIL_SIZE') || '800'),
-      parseInt(this.config.get('WEBP_QUALITY') || '85'),
+      this.thumbnailSize,
+      this.thumbnailQuality
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
   }

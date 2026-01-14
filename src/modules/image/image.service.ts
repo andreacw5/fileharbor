@@ -21,7 +21,8 @@ import {
 @Injectable()
 export class ImageService {
   private readonly logger = new Logger(ImageService.name);
-  private readonly webpQuality: number;
+  private readonly originalQuality: number;
+  private readonly thumbnailQuality: number;
   private readonly thumbnailSize: number;
 
   constructor(
@@ -29,7 +30,10 @@ export class ImageService {
     private storage: StorageService,
     private config: ConfigService,
   ) {
-    this.webpQuality = parseInt(this.config.get('WEBP_QUALITY') || '85');
+    // Original should be high quality to preserve image fidelity
+    this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
+    // Thumbnail can use lower quality to reduce file size
+    this.thumbnailQuality = parseInt(this.config.get('THUMBNAIL_QUALITY') || '70');
     this.thumbnailSize = parseInt(this.config.get('THUMBNAIL_SIZE') || '800');
   }
 
@@ -116,11 +120,11 @@ export class ImageService {
         `[uploadImage] Metadata extracted - ID: ${imageId}, Dimensions: ${metadata.width}x${metadata.height}`
       );
 
-      // Convert to WebP
-      this.logger.debug(`[uploadImage] Converting to WebP - ID: ${imageId}, Quality: ${this.webpQuality}`);
+      // Convert to WebP for original (high quality)
+      this.logger.debug(`[uploadImage] Converting to WebP - ID: ${imageId}, Quality: ${this.originalQuality}`);
       const webpBuffer = await this.storage.convertToWebP(
         file.buffer,
-        this.webpQuality,
+        this.originalQuality,
       );
 
       // Save original
@@ -128,12 +132,12 @@ export class ImageService {
       const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
       await this.storage.saveFile(originalPath, webpBuffer);
 
-      // Create thumbnail
-      this.logger.debug(`[uploadImage] Creating thumbnail - ID: ${imageId}, Size: ${this.thumbnailSize}`);
+      // Create thumbnail (lower quality for smaller size)
+      this.logger.debug(`[uploadImage] Creating thumbnail - ID: ${imageId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`);
       const thumbBuffer = await this.storage.createThumbnail(
         webpBuffer,
         this.thumbnailSize,
-        this.webpQuality,
+        this.thumbnailQuality,
       );
       const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
       await this.storage.saveFile(thumbnailPath, thumbBuffer);

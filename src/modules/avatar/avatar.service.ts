@@ -14,7 +14,8 @@ import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
 @Injectable()
 export class AvatarService {
   private readonly logger = new Logger(AvatarService.name);
-  private readonly webpQuality: number;
+  private readonly originalQuality: number;
+  private readonly thumbnailQuality: number;
   private readonly thumbnailSize: number;
 
   constructor(
@@ -22,7 +23,10 @@ export class AvatarService {
     private storage: StorageService,
     private config: ConfigService,
   ) {
-    this.webpQuality = parseInt(this.config.get('WEBP_QUALITY') || '85');
+    // Original should be high quality to preserve avatar fidelity
+    this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
+    // Thumbnail can use lower quality to reduce file size
+    this.thumbnailQuality = parseInt(this.config.get('THUMBNAIL_QUALITY') || '70');
     this.thumbnailSize = parseInt(this.config.get('THUMBNAIL_SIZE') || '800');
   }
 
@@ -109,11 +113,11 @@ export class AvatarService {
         `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`
       );
 
-      // Convert to WebP
-      this.logger.debug(`[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.webpQuality}`);
+      // Convert to WebP for original (high quality)
+      this.logger.debug(`[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.originalQuality}`);
       const webpBuffer = await this.storage.convertToWebP(
         file.buffer,
-        this.webpQuality,
+        this.originalQuality,
       );
 
       // Save original avatar (renamed to original.webp for consistency)
@@ -121,12 +125,12 @@ export class AvatarService {
       const originalPath = this.storage.getAvatarFilePath(domain, userId, 'original');
       await this.storage.saveFile(originalPath, webpBuffer);
 
-      // Create and save thumbnail
-      this.logger.debug(`[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}`);
+      // Create and save thumbnail (lower quality for smaller size)
+      this.logger.debug(`[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`);
       const thumbBuffer = await this.storage.createThumbnail(
         webpBuffer,
         this.thumbnailSize,
-        this.webpQuality,
+        this.thumbnailQuality,
       );
       const thumbnailPath = this.storage.getAvatarFilePath(domain, userId, 'thumb');
       await this.storage.saveFile(thumbnailPath, thumbBuffer);
