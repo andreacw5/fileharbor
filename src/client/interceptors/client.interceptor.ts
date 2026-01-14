@@ -31,52 +31,32 @@ export class ClientInterceptor implements NestInterceptor {
 
     if (isPublic) {
       // For public endpoints, client authentication is optional
-      // Try to get client info if provided, but don't require it
+      // Only accept API key for authentication
       const apiKey = request.headers['x-api-key'];
-      const clientIdHeader = request.headers['x-client-id'];
 
-      if (apiKey || clientIdHeader) {
-        let client;
-        if (apiKey) {
-          try {
-            client = await this.clientService.validateClient(apiKey);
-          } catch (e) {
-            // Invalid API key on public endpoint, continue without client
-          }
-        } else if (clientIdHeader) {
-          client = await this.clientService.getClientById(clientIdHeader);
-        }
-
-        if (client) {
+      if (apiKey) {
+        try {
+          const client = await this.clientService.validateClient(apiKey);
           request.clientId = client.id;
           request.client = client;
+        } catch (e) {
+          // Invalid API key on public endpoint, continue without client
         }
       }
 
       return next.handle();
     }
 
-    // Get client ID from header or API key
+    // Get API key from header
     const apiKey = request.headers['x-api-key'];
-    const clientIdHeader = request.headers['x-client-id'];
     const userIdHeader = request.headers['x-user-id'];
 
-    if (!apiKey && !clientIdHeader) {
-      throw new UnauthorizedException('Client authentication required');
+    if (!apiKey) {
+      throw new UnauthorizedException('API key required (X-API-Key header)');
     }
 
-    let client;
-
-    if (apiKey) {
-      // Validate by API key
-      client = await this.clientService.validateClient(apiKey);
-    } else if (clientIdHeader) {
-      // Direct client ID (for development/testing)
-      client = await this.clientService.getClientById(clientIdHeader);
-      if (!client) {
-        throw new UnauthorizedException('Invalid client ID');
-      }
-    }
+    // Validate client by API key
+    const client = await this.clientService.validateClient(apiKey);
 
     // Attach client info to request
     request.clientId = client.id;

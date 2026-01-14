@@ -9,12 +9,6 @@ export class AvatarResponseDto {
   @Expose()
   id: string;
 
-  @ApiProperty({
-    description: 'Client identifier',
-    example: 'demo.fileharbor.local',
-  })
-  @Expose()
-  clientId: string;
 
   @ApiProperty({
     description: 'User identifier who owns the avatar',

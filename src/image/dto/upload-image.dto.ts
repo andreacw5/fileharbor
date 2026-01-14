@@ -2,9 +2,6 @@ import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UploadImageDto {
-  @IsOptional()
-  @IsString()
-  userId?: string;
 
   @IsOptional()
   @IsString()

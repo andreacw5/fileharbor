@@ -7,11 +7,6 @@ export class AlbumResponseDto {
   })
   id: string;
 
-  @ApiProperty({
-    description: 'Client identifier',
-    example: 'demo.fileharbor.local',
-  })
-  clientId: string;
 
   @ApiProperty({
     description: 'User identifier who owns the album',

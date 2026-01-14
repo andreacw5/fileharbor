@@ -26,11 +26,12 @@ FileHarbor 2.0 is a multi-tenant image management system built with NestJS 10, P
 ## Architecture & Patterns
 
 ### Multi-Tenant Structure
-All data is scoped by `clientId`. Every request must include either:
-- `X-API-Key` header (validates and retrieves client)
-- `X-Client-Id` header (direct client identification)
+All data is scoped by `clientId`. Every request must include:
+- `X-API-Key` header (validates and retrieves client - REQUIRED)
 
 User operations require `X-User-Id` header containing the external user ID from the client's system.
+
+**Security Note**: The `X-Client-Id` header is no longer accepted for authentication. Only API Key authentication is supported.
 
 ### Module Organization
 - **Client Module:** Multi-tenant client management, interceptors, decorators
@@ -44,10 +45,11 @@ User operations require `X-User-Id` header containing the external user ID from 
 ### Storage Structure
 ```
 storage/
-├── {clientId}/
-│   ├── {imageId}/
-│   │   ├── original.webp
-│   │   └── thumb.webp
+├── {domain}/
+│   ├── images/
+│   │   └── {imageId}/
+│   │       ├── original.webp
+│   │       └── thumb.webp
 │   └── avatars/
 │       └── {userId}/
 │           ├── avatar.webp

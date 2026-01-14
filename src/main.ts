@@ -22,7 +22,7 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-Client-Id', 'X-API-Key', 'X-User-Id'],
+    allowedHeaders: ['Content-Type', 'X-API-Key', 'X-User-Id'],
     credentials: true,
   });
 
@@ -31,8 +31,7 @@ async function bootstrap() {
     .setTitle('FileHarbor 2.0')
     .setDescription('Multi-tenant image management system API')
     .setVersion('2.0.0')
-    .addBearerAuth()
-    .addApiKey({ type: 'apiKey', name: 'X-Client-Id', in: 'header' }, 'client-id')
+    .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

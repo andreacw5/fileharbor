@@ -34,7 +34,7 @@ import {
 } from './dto';
 
 @ApiTags('Albums')
-@ApiSecurity('client-id')
+@ApiSecurity('api-key')
 @Controller('albums')
 @UseInterceptors(ClientInterceptor)
 export class AlbumController {

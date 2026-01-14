@@ -32,7 +32,7 @@ import {
 } from './dto';
 
 @ApiTags('Avatars')
-@ApiSecurity('client-id')
+@ApiSecurity('api-key')
 @Controller('avatars')
 @UseInterceptors(ClientInterceptor)
 export class AvatarController {

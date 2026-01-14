@@ -41,7 +41,7 @@ import {
 } from './dto';
 
 @ApiTags('Images')
-@ApiSecurity('client-id')
+@ApiSecurity('api-key')
 @Controller('images')
 @UseInterceptors(ClientInterceptor)
 export class ImageController {
@@ -60,11 +60,10 @@ export class ImageController {
       required: ['file'],
       properties: {
         file: { type: 'string', format: 'binary', description: 'Image file' },
-        albumId: { type: 'string', description: 'Album UUID', example: 'album-uuid' },
-        tags: { type: 'array', items: { type: 'string' }, example: ['nature', 'landscape'] },
-        description: { type: 'string', example: 'Beautiful sunset' },
+        albumId: { type: 'string', description: 'Album UUID' },
+        tags: { type: 'array', items: { type: 'string' } },
+        description: { type: 'string' },
         isPrivate: { type: 'boolean', default: false },
-        clientId: { type: 'string', description: 'Fallback client ID' },
       },
     },
   })
@@ -77,21 +76,13 @@ export class ImageController {
     @UserId() userId: string | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadImageDto,
-    @Req() req: import('express').Request,
   ): Promise<ImageResponseDto> {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
-
-    // If clientId is missing, try to get it from query/body, else fallback to 'system'
-    let resolvedClientId = clientId;
-    if (!resolvedClientId) {
-      resolvedClientId = (req.query.clientId as string) || (req.body && req.body.clientId) || 'system';
-    }
-
     return this.imageService.uploadImage(
-      resolvedClientId,
+      clientId,
       userId,
       file,
       dto.albumId,

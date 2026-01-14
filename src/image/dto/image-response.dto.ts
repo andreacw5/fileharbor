@@ -9,12 +9,6 @@ export class ImageResponseDto {
   @Expose()
   id: string;
 
-  @ApiProperty({
-    description: 'Client identifier',
-    example: 'demo.fileharbor.local',
-  })
-  @Expose()
-  clientId: string;
 
   @ApiProperty({
     description: 'User identifier who uploaded the image',
