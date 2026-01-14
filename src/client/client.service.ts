@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class ClientService {
@@ -75,12 +76,15 @@ export class ClientService {
   /**
    * Create a new client and ensure a default admin user exists if no users are present
    */
-  async createClient(data: { name: string; apiKey: string; domain?: string; active?: boolean }) {
+  async createClient(data: { name: string; domain?: string; active?: boolean }) {
+    // Generate secure API key
+    const apiKey = this.generateApiKey();
+
     // Create the client
     const client = await this.prisma.client.create({
       data: {
         name: data.name,
-        apiKey: data.apiKey,
+        apiKey,
         domain: data.domain,
         active: data.active ?? true,
       },
@@ -104,5 +108,17 @@ export class ClientService {
     }
 
     return client;
+  }
+
+  /**
+   * Generate a secure random API key
+   * Format: fh_[48 random hex chars]_[timestamp]
+   * Total length: ~60+ characters
+   */
+  private generateApiKey(): string {
+    // Generate 24 bytes (48 hex characters) of random data
+    const randomPart = randomBytes(24).toString('hex');
+    const timestamp = Date.now().toString(36); // Compact timestamp representation
+    return `fh_${randomPart}_${timestamp}`;
   }
 }
