@@ -76,7 +76,7 @@ export class ImageController {
     @ClientId() clientId: string,
     @UserId() userId: string | undefined,
     @UploadedFile() file: Express.Multer.File,
-    @Query() dto: UploadImageDto,
+    @Body() dto: UploadImageDto,
     @Req() req: import('express').Request,
   ): Promise<ImageResponseDto> {
     if (!file) {
