@@ -99,20 +99,20 @@ export class AvatarService {
       this.webpQuality,
     );
 
-    // Save avatar
-    const storagePath = path.join(avatarPath, 'avatar.webp');
-    await this.storage.saveFile(storagePath, webpBuffer);
+    // Save original avatar (renamed to original.webp for consistency)
+    const originalPath = this.storage.getAvatarFilePath(domain, userId, 'original');
+    await this.storage.saveFile(originalPath, webpBuffer);
 
-    // Create thumbnail
+    // Create and save thumbnail
     const thumbBuffer = await this.storage.createThumbnail(
       webpBuffer,
       this.thumbnailSize,
       this.webpQuality,
     );
-    const thumbnailPath = path.join(avatarPath, 'thumb.webp');
+    const thumbnailPath = this.storage.getAvatarFilePath(domain, userId, 'thumb');
     await this.storage.saveFile(thumbnailPath, thumbBuffer);
 
-    // Save/Update in database
+    // Save/Update in database (storagePath is the base path without extension)
     const avatar = await this.prisma.avatar.upsert({
       where: {
         clientId_userId: {
@@ -121,8 +121,7 @@ export class AvatarService {
         },
       },
       update: {
-        storagePath,
-        thumbnailPath,
+        storagePath: avatarPath,
         format: 'webp',
         width: metadata.width,
         height: metadata.height,
@@ -134,8 +133,7 @@ export class AvatarService {
         id: avatarId,
         clientId,
         userId,
-        storagePath,
-        thumbnailPath,
+        storagePath: avatarPath,
         format: 'webp',
         width: metadata.width,
         height: metadata.height,
@@ -174,9 +172,15 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    const filePath = thumbnail && avatar.thumbnailPath
-      ? avatar.thumbnailPath
-      : avatar.storagePath;
+    // Get client to retrieve domain
+    const client = await this.prisma.client.findUnique({
+      where: { id: avatar.clientId },
+    });
+    const domain = client?.domain || avatar.clientId;
+
+    // Get the appropriate variant path
+    const variant = thumbnail ? 'thumb' : 'original';
+    const filePath = this.storage.getAvatarFilePath(domain, user.id, variant as 'original' | 'thumb');
 
     const buffer = await this.storage.readFile(filePath);
     return { buffer, mimeType: avatar.mimeType };
@@ -303,7 +307,7 @@ export class AvatarService {
       {
         ...avatar,
         url: `/${apiPrefix}/avatars/${externalUserId}`,
-        thumbnailUrl: avatar.thumbnailPath ? `/${apiPrefix}/avatars/${externalUserId}?thumb=true` : undefined,
+        thumbnailUrl: `/${apiPrefix}/avatars/${externalUserId}?thumb=true`,
       },
       { excludeExtraneousValues: true },
     );

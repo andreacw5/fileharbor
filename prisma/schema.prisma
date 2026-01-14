@@ -52,26 +52,25 @@ model User {
 
 // Image entity
 model Image {
-  id            String    @id @default(uuid())
-  clientId      String
-  userId        String
-  originalName  String
-  storagePath   String // e.g., /storage/{clientId}/{imageId}/original.webp
-  thumbnailPath String? // e.g., /storage/{clientId}/{imageId}/thumb.webp
-  format        String // webp, jpeg, png
-  width         Int
-  height        Int
-  size          Int // bytes
-  mimeType      String
-  isOptimized   Boolean   @default(false)
-  optimizedAt   DateTime?
-  isPrivate     Boolean   @default(false)
-  tags          String[] // Array of textual tags
-  views         Int       @default(0)
-  downloads     Int       @default(0)
-  description   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String    @id @default(uuid())
+  clientId     String
+  userId       String
+  originalName String
+  storagePath  String // e.g., storage/domain/images/{imageId}
+  format       String // webp, jpeg, png
+  width        Int
+  height       Int
+  size         Int // bytes
+  mimeType     String
+  isOptimized  Boolean   @default(false)
+  optimizedAt  DateTime?
+  isPrivate    Boolean   @default(false)
+  tags         String[] // Array of textual tags
+  views        Int       @default(0)
+  downloads    Int       @default(0)
+  description  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   // Relations
   client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -88,20 +87,19 @@ model Image {
 
 // Avatar entity - one active per user per client
 model Avatar {
-  id            String    @id @default(uuid())
-  clientId      String
-  userId        String
-  storagePath   String // e.g., /storage/{clientId}/avatars/{userId}/avatar.webp
-  thumbnailPath String?
-  format        String
-  width         Int
-  height        Int
-  size          Int
-  mimeType      String
-  isOptimized   Boolean   @default(false)
-  optimizedAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  clientId    String
+  userId      String
+  storagePath String // e.g., storage/domain/avatars/{userId}
+  format      String
+  width       Int
+  height      Int
+  size        Int
+  mimeType    String
+  isOptimized Boolean   @default(false)
+  optimizedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)

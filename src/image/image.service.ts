@@ -107,7 +107,7 @@ export class ImageService {
     );
 
     // Save original
-    const originalPath = path.join(imagePath, 'original.webp');
+    const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
     await this.storage.saveFile(originalPath, webpBuffer);
 
     // Create thumbnail
@@ -116,18 +116,17 @@ export class ImageService {
       this.thumbnailSize,
       this.webpQuality,
     );
-    const thumbnailPath = path.join(imagePath, 'thumb.webp');
+    const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
     await this.storage.saveFile(thumbnailPath, thumbBuffer);
 
-    // Save to database
+    // Save to database (storagePath is the base path without extension)
     const image = await this.prisma.image.create({
       data: {
         id: imageId,
         clientId,
         userId,
         originalName: file.originalname,
-        storagePath: originalPath,
-        thumbnailPath,
+        storagePath: imagePath,
         format: 'webp',
         width: metadata.width,
         height: metadata.height,
@@ -179,27 +178,33 @@ export class ImageService {
   ): Promise<{ buffer: Buffer; mimeType: string }> {
     const image = await this.getImageById(imageId);
 
+    // Get client to retrieve domain
+    const client = await this.prisma.client.findUnique({
+      where: { id: image.clientId },
+    });
+    const domain = client?.domain || image.clientId;
+
     // If thumbnail explicitly requested
-    if (thumb && image.thumbnailPath && (await this.storage.fileExists(image.thumbnailPath))) {
-      const buffer = await this.storage.readFile(image.thumbnailPath);
-      return { buffer, mimeType: 'image/webp' };
+    if (thumb) {
+      const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      if (await this.storage.fileExists(thumbPath)) {
+        const buffer = await this.storage.readFile(thumbPath);
+        return { buffer, mimeType: 'image/webp' };
+      }
     }
 
     // Check if thumbnail is requested implicitly (no dimensions and default format)
-    if (
-      !thumb &&
-      !width &&
-      !height &&
-      format === 'webp' &&
-      image.thumbnailPath &&
-      (await this.storage.fileExists(image.thumbnailPath))
-    ) {
-      const buffer = await this.storage.readFile(image.thumbnailPath);
-      return { buffer, mimeType: 'image/webp' };
+    if (!thumb && !width && !height && format === 'webp') {
+      const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      if (await this.storage.fileExists(thumbPath)) {
+        const buffer = await this.storage.readFile(thumbPath);
+        return { buffer, mimeType: 'image/webp' };
+      }
     }
 
     // Load original
-    const originalBuffer = await this.storage.readFile(image.storagePath);
+    const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+    const originalBuffer = await this.storage.readFile(originalPath);
 
     // If no resize needed and format matches
     if (!width && !height && format === 'webp') {
@@ -643,7 +648,7 @@ export class ImageService {
       {
         ...image,
         url: `/${apiPrefix}/images/${image.id}`,
-        thumbnailUrl: image.thumbnailPath ? `/${apiPrefix}/images/${image.id}?thumb=true` : undefined,
+        thumbnailUrl: `/${apiPrefix}/images/${image.id}?thumb=true`,
       },
       { excludeExtraneousValues: true },
     );

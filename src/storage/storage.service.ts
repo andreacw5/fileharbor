@@ -38,10 +38,32 @@ export class StorageService {
   }
 
   /**
+   * Get full file path for image variant
+   */
+  getImageFilePath(
+    domain: string,
+    imageId: string,
+    variant: 'original' | 'thumb' = 'original'
+  ): string {
+    return `${this.getImagePath(domain, imageId)}/${variant}.webp`;
+  }
+
+  /**
    * Get storage path for avatar
    */
   getAvatarPath(domain: string, userId: string): string {
     return path.join(this.getClientPath(domain), 'avatars', userId);
+  }
+
+  /**
+   * Get full file path for avatar variant
+   */
+  getAvatarFilePath(
+    domain: string,
+    userId: string,
+    variant: 'original' | 'thumb' = 'original'
+  ): string {
+    return `${this.getAvatarPath(domain, userId)}/${variant}.webp`;
   }
 
   /**
@@ -65,20 +87,6 @@ export class StorageService {
       return await fs.readFile(filePath);
     } catch (error) {
       throw new InternalServerErrorException('Failed to read file');
-    }
-  }
-
-  /**
-   * Delete file from storage
-   */
-  async deleteFile(filePath: string): Promise<void> {
-    try {
-      await fs.unlink(filePath);
-    } catch (error) {
-      // Ignore if file doesn't exist
-      if (error.code !== 'ENOENT') {
-        throw new InternalServerErrorException('Failed to delete file');
-      }
     }
   }
 
@@ -162,19 +170,58 @@ export class StorageService {
   }
 
   /**
-   * Remove EXIF data and optimize
+   * Remove EXIF data and optimize image
+   * Removes sensitive metadata while preserving color profiles and orientation
+   * Uses advanced WebP compression with optimal settings
    */
   async optimizeImage(buffer: Buffer, quality: number = 90): Promise<Buffer> {
     try {
-      return await sharp(buffer)
-        .rotate() // Auto-rotate based on EXIF
-        .withMetadata({
-          exif: {},  // Remove EXIF data
+      const metadata = await sharp(buffer).metadata();
+
+      // Prepare the image pipeline
+      let pipeline = sharp(buffer, {
+        limitInputPixels: 268402689, // ~16384x16384 max resolution for safety
+      });
+
+      // Auto-rotate based on EXIF orientation
+      pipeline = pipeline.rotate();
+
+      // Strip all metadata except color profile
+      // This removes EXIF, GPS, and other sensitive data while keeping color accuracy
+      const metadataOptions: any = {
+        exif: {}, // Remove all EXIF data including GPS
+      };
+
+      // Preserve orientation if available
+      if (metadata.orientation) {
+        metadataOptions.orientation = metadata.orientation;
+      }
+
+      // Preserve color space if available
+      if (metadata.space) {
+        metadataOptions.space = metadata.space;
+      }
+
+      pipeline = pipeline.withMetadata(metadataOptions);
+
+      // Apply advanced WebP compression
+      return await pipeline
+        .webp({
+          quality,
+          effort: 6, // Higher effort = better compression (0-6, default 4)
+          lossless: false,
+          nearLossless: false,
+          smartSubsample: true, // Better chroma subsampling
+          alphaQuality: 100, // Keep alpha channel quality high
+          mixed: true, // Allow mixed lossy/lossless encoding for better results
         })
-        .webp({ quality })
         .toBuffer();
     } catch (error) {
-      throw new InternalServerErrorException('Failed to optimize image');
+      // Provide more detailed error information
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new InternalServerErrorException(
+        `Failed to optimize image: ${errorMessage}. The image may be corrupted or in an unsupported format.`
+      );
     }
   }
 

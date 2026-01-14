@@ -5,6 +5,7 @@ import { ImageService } from '@/image/image.service';
 import { AvatarService } from '@/avatar/avatar.service';
 import { AlbumService } from '@/album/album.service';
 import { StorageService } from '@/storage/storage.service';
+import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class JobService {
@@ -16,6 +17,7 @@ export class JobService {
     private avatarService: AvatarService,
     private albumService: AlbumService,
     private storage: StorageService,
+    private prisma: PrismaService,
     private config: ConfigService,
   ) {
     this.compressionQuality = parseInt(
@@ -83,8 +85,18 @@ export class JobService {
    * Optimize single image
    */
   private async optimizeImage(image: any) {
+    // Get client to retrieve domain
+    const client = await this.prisma.client.findUnique({
+      where: { id: image.clientId },
+    });
+    const domain = client?.domain || image.clientId;
+
+    // Get the image ID from storagePath: storage/domain/images/{imageId}
+    const imageId = image.storagePath.split('/').pop();
+
     // Read original file
-    const buffer = await this.storage.readFile(image.storagePath);
+    const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+    const buffer = await this.storage.readFile(originalPath);
 
     // Optimize (remove EXIF, compress)
     const optimizedBuffer = await this.storage.optimizeImage(
@@ -93,25 +105,31 @@ export class JobService {
     );
 
     // Save back
-    await this.storage.saveFile(image.storagePath, optimizedBuffer);
+    await this.storage.saveFile(originalPath, optimizedBuffer);
 
     // Re-create thumbnail with optimization
-    if (image.thumbnailPath) {
-      const thumbBuffer = await this.storage.createThumbnail(
-        optimizedBuffer,
-        parseInt(this.config.get('THUMBNAIL_SIZE') || '800'),
-        parseInt(this.config.get('WEBP_QUALITY') || '85'),
-      );
-      await this.storage.saveFile(image.thumbnailPath, thumbBuffer);
-    }
+    const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+    const thumbBuffer = await this.storage.createThumbnail(
+      optimizedBuffer,
+      parseInt(this.config.get('THUMBNAIL_SIZE') || '800'),
+      parseInt(this.config.get('WEBP_QUALITY') || '85'),
+    );
+    await this.storage.saveFile(thumbPath, thumbBuffer);
   }
 
   /**
    * Optimize single avatar
    */
   private async optimizeAvatar(avatar: any) {
+    // Get client to retrieve domain
+    const client = await this.prisma.client.findUnique({
+      where: { id: avatar.clientId },
+    });
+    const domain = client?.domain || avatar.clientId;
+
     // Read original file
-    const buffer = await this.storage.readFile(avatar.storagePath);
+    const originalPath = this.storage.getAvatarFilePath(domain, avatar.userId, 'original');
+    const buffer = await this.storage.readFile(originalPath);
 
     // Optimize (remove EXIF, compress)
     const optimizedBuffer = await this.storage.optimizeImage(
@@ -120,17 +138,16 @@ export class JobService {
     );
 
     // Save back
-    await this.storage.saveFile(avatar.storagePath, optimizedBuffer);
+    await this.storage.saveFile(originalPath, optimizedBuffer);
 
     // Re-create thumbnail with optimization
-    if (avatar.thumbnailPath) {
-      const thumbBuffer = await this.storage.createThumbnail(
-        optimizedBuffer,
-        parseInt(this.config.get('THUMBNAIL_SIZE') || '800'),
-        parseInt(this.config.get('WEBP_QUALITY') || '85'),
-      );
-      await this.storage.saveFile(avatar.thumbnailPath, thumbBuffer);
-    }
+    const thumbPath = this.storage.getAvatarFilePath(domain, avatar.userId, 'thumb');
+    const thumbBuffer = await this.storage.createThumbnail(
+      optimizedBuffer,
+      parseInt(this.config.get('THUMBNAIL_SIZE') || '800'),
+      parseInt(this.config.get('WEBP_QUALITY') || '85'),
+    );
+    await this.storage.saveFile(thumbPath, thumbBuffer);
   }
 
   /**
