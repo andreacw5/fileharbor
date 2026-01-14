@@ -9,6 +9,7 @@ import {
   Query,
   UseInterceptors,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -38,6 +39,8 @@ import {
 @Controller('albums')
 @UseInterceptors(ClientInterceptor)
 export class AlbumController {
+  private readonly logger = new Logger(AlbumController.name);
+
   constructor(private albumService: AlbumService) {}
 
   @Post()
@@ -49,9 +52,22 @@ export class AlbumController {
     @Body() dto: CreateAlbumDto,
   ): Promise<AlbumResponseDto> {
     if (!userId) {
+      this.logger.warn(`[createAlbum] Missing User ID - Client: ${clientId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
-    return this.albumService.createAlbum(clientId, userId, dto);
+
+    this.logger.debug(
+      `[createAlbum] Starting - Client: ${clientId}, User: ${userId}, Name: ${dto.name}, Public: ${dto.isPublic}`
+    );
+
+    try {
+      const result = await this.albumService.createAlbum(clientId, userId, dto);
+      this.logger.log(`[createAlbum] Success - Album ID: ${result.id}, Client: ${clientId}, User: ${userId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[createAlbum] Failed - Client: ${clientId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Get()
@@ -61,7 +77,11 @@ export class AlbumController {
     @ClientId() clientId: string,
     @Query() query: ListAlbumsDto,
   ): Promise<ListAlbumsResponseDto> {
-    return this.albumService.listAlbums({
+    this.logger.debug(
+      `[listAlbums] Client: ${clientId}, User: ${query.userId || 'all'}, Public: ${query.public}, Page: ${query.page || 1}`
+    );
+
+    const result = await this.albumService.listAlbums({
       clientId,
       userId: query.userId,
       public: query.public,
@@ -69,6 +89,12 @@ export class AlbumController {
       page: query.page,
       perPage: query.perPage,
     });
+
+    this.logger.log(
+      `[listAlbums] Success - Client: ${clientId}, Total: ${result.pagination.total}, Returned: ${result.data.length}`
+    );
+
+    return result;
   }
 
   @Public()
@@ -76,7 +102,16 @@ export class AlbumController {
   @ApiOperation({ summary: 'Access album via shared token (public)' })
   @ApiResponse({ status: 200, type: AlbumResponseDto })
   async getAlbumByToken(@Param('token') token: string): Promise<AlbumResponseDto> {
-    return this.albumService.getAlbumBySharedToken(token);
+    this.logger.debug(`[getAlbumByToken] Starting - Token: ${token}`);
+
+    try {
+      const result = await this.albumService.getAlbumBySharedToken(token);
+      this.logger.log(`[getAlbumByToken] Success - Album ID: ${result.id}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[getAlbumByToken] Failed - Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Get(':albumId')
@@ -87,7 +122,16 @@ export class AlbumController {
     @UserId() userId: string,
     @Param('albumId') albumId: string,
   ): Promise<AlbumResponseDto> {
-    return this.albumService.getAlbumWithImages(albumId, clientId, userId);
+    this.logger.debug(`[getAlbum] Starting - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`);
+
+    try {
+      const result = await this.albumService.getAlbumWithImages(albumId, clientId, userId);
+      this.logger.log(`[getAlbum] Success - Album ID: ${albumId}, Images: ${result.imageCount}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[getAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Patch(':albumId')
@@ -100,9 +144,20 @@ export class AlbumController {
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
     if (!userId) {
+      this.logger.warn(`[updateAlbum] Missing User ID - Client: ${clientId}, Album: ${albumId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
-    return this.albumService.updateAlbum(albumId, clientId, userId, dto);
+
+    this.logger.debug(`[updateAlbum] Starting - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`);
+
+    try {
+      const result = await this.albumService.updateAlbum(albumId, clientId, userId, dto);
+      this.logger.log(`[updateAlbum] Success - Album ID: ${albumId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[updateAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Delete(':albumId')
@@ -114,10 +169,20 @@ export class AlbumController {
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
     if (!userId) {
+      this.logger.warn(`[deleteAlbum] Missing User ID - Client: ${clientId}, Album: ${albumId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
 
-    return this.albumService.deleteAlbum(albumId, clientId, userId);
+    this.logger.debug(`[deleteAlbum] Starting - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`);
+
+    try {
+      const result = await this.albumService.deleteAlbum(albumId, clientId, userId);
+      this.logger.log(`[deleteAlbum] Success - Album ID: ${albumId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[deleteAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Post(':albumId/images')
@@ -130,9 +195,26 @@ export class AlbumController {
     @Body() dto: ManageAlbumImagesDto,
   ): Promise<AlbumImagesResponseDto> {
     if (!userId) {
+      this.logger.warn(`[addImagesToAlbum] Missing User ID - Client: ${clientId}, Album: ${albumId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
-    return this.albumService.addImagesToAlbum(albumId, clientId, userId, dto.imageIds);
+
+    this.logger.debug(
+      `[addImagesToAlbum] Starting - Album ID: ${albumId}, Client: ${clientId}, Images: ${dto.imageIds.length}`
+    );
+
+    try {
+      await this.albumService.addImagesToAlbum(albumId, clientId, userId, dto.imageIds);
+      this.logger.log(`[addImagesToAlbum] Success - Album ID: ${albumId}, Added: ${dto.imageIds.length}`);
+      return {
+        success: true,
+        message: `Added ${dto.imageIds.length} image(s) to album`,
+        added: dto.imageIds.length,
+      };
+    } catch (error) {
+      this.logger.error(`[addImagesToAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Delete(':albumId/images')
@@ -145,9 +227,26 @@ export class AlbumController {
     @Body() dto: ManageAlbumImagesDto,
   ): Promise<AlbumImagesResponseDto> {
     if (!userId) {
+      this.logger.warn(`[removeImagesFromAlbum] Missing User ID - Client: ${clientId}, Album: ${albumId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
-    return this.albumService.removeImagesFromAlbum(albumId, clientId, userId, dto.imageIds);
+
+    this.logger.debug(
+      `[removeImagesFromAlbum] Starting - Album ID: ${albumId}, Client: ${clientId}, Images: ${dto.imageIds.length}`
+    );
+
+    try {
+      await this.albumService.removeImagesFromAlbum(albumId, clientId, userId, dto.imageIds);
+      this.logger.log(`[removeImagesFromAlbum] Success - Album ID: ${albumId}, Removed: ${dto.imageIds.length}`);
+      return {
+        success: true,
+        message: `Removed ${dto.imageIds.length} image(s) from album`,
+        removed: dto.imageIds.length,
+      };
+    } catch (error) {
+      this.logger.error(`[removeImagesFromAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Post(':albumId/token')
@@ -160,9 +259,27 @@ export class AlbumController {
     @Body() dto?: CreateAlbumTokenDto,
   ): Promise<AlbumTokenResponseDto> {
     if (!userId) {
+      this.logger.warn(`[generateAlbumToken] Missing User ID - Client: ${clientId}, Album: ${albumId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
-    return this.albumService.generateAlbumToken(albumId, clientId, userId, dto?.expiresInDays);
+
+    this.logger.debug(
+      `[generateAlbumToken] Starting - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`
+    );
+
+    try {
+      const result = await this.albumService.generateAlbumToken(
+        albumId,
+        clientId,
+        userId,
+        dto?.expiresInDays
+      );
+      this.logger.log(`[generateAlbumToken] Success - Album ID: ${albumId}, Token: ${result.token}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[generateAlbumToken] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   @Delete(':albumId/token')
@@ -174,10 +291,20 @@ export class AlbumController {
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
     if (!userId) {
+      this.logger.warn(`[revokeAlbumToken] Missing User ID - Client: ${clientId}, Album: ${albumId}`);
       throw new BadRequestException('User ID is required (X-User-Id header)');
     }
 
-    return this.albumService.revokeAlbumToken(albumId, clientId, userId);
+    this.logger.debug(`[revokeAlbumToken] Starting - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`);
+
+    try {
+      const result = await this.albumService.revokeAlbumToken(albumId, clientId, userId);
+      this.logger.log(`[revokeAlbumToken] Success - Album ID: ${albumId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[revokeAlbumToken] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 }
 

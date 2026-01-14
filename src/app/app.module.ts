@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { StatusController } from './status.controller';
 import {ConfigModule} from "@nestjs/config";
 import {ThrottlerModule} from "@nestjs/throttler";
@@ -10,6 +10,7 @@ import {ImageModule} from "@/image/image.module";
 import {AvatarModule} from "@/avatar/avatar.module";
 import {AlbumModule} from "@/album/album.module";
 import {JobModule} from "@/job/job.module";
+import { LoggingMiddleware } from '@/common/middleware/logging.middleware';
 
 @Module({
     controllers: [StatusController],
@@ -39,5 +40,12 @@ import {JobModule} from "@/job/job.module";
         JobModule,
     ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+    configure(consumer: MiddlewareConsumer) {
+        // Apply logging middleware to all routes
+        consumer
+            .apply(LoggingMiddleware)
+            .forRoutes('*');
+    }
+}
 

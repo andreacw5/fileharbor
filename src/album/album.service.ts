@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -9,6 +10,8 @@ import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 
 @Injectable()
 export class AlbumService {
+  private readonly logger = new Logger(AlbumService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -19,17 +22,27 @@ export class AlbumService {
     userId: string,
     dto: CreateAlbumDto,
   ) {
-    const album = await this.prisma.album.create({
-      data: {
-        clientId,
-        userId,
-        name: dto.name,
-        description: dto.description,
-        isPublic: dto.isPublic || false,
-      },
-    });
+    this.logger.debug(
+      `[createAlbum] Start - Client: ${clientId}, User: ${userId}, Name: ${dto.name}, Public: ${dto.isPublic}`
+    );
 
-    return this.formatAlbumResponse(album);
+    try {
+      const album = await this.prisma.album.create({
+        data: {
+          clientId,
+          userId,
+          name: dto.name,
+          description: dto.description,
+          isPublic: dto.isPublic || false,
+        },
+      });
+
+      this.logger.log(`[createAlbum] Success - Album ID: ${album.id}, Client: ${clientId}`);
+      return this.formatAlbumResponse(album);
+    } catch (error) {
+      this.logger.error(`[createAlbum] Failed - Client: ${clientId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -188,39 +201,65 @@ export class AlbumService {
     userId: string,
     dto: UpdateAlbumDto,
   ) {
+    this.logger.debug(
+      `[updateAlbum] Start - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[updateAlbum] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only update your own albums');
     }
 
-    const updated = await this.prisma.album.update({
-      where: { id: albumId },
-      data: {
-        name: dto.name,
-        description: dto.description,
-        isPublic: dto.isPublic,
-      },
-    });
+    try {
+      const updated = await this.prisma.album.update({
+        where: { id: albumId },
+        data: {
+          name: dto.name,
+          description: dto.description,
+          isPublic: dto.isPublic,
+        },
+      });
 
-    return this.formatAlbumResponse(updated);
+      this.logger.log(`[updateAlbum] Success - Album ID: ${albumId}`);
+      return this.formatAlbumResponse(updated);
+    } catch (error) {
+      this.logger.error(`[updateAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
    * Delete album
    */
   async deleteAlbum(albumId: string, clientId: string, userId: string) {
+    this.logger.debug(
+      `[deleteAlbum] Start - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[deleteAlbum] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only delete your own albums');
     }
 
-    await this.prisma.album.delete({
-      where: { id: albumId },
-    });
+    try {
+      await this.prisma.album.delete({
+        where: { id: albumId },
+      });
 
-    return { success: true, message: 'Album deleted successfully' };
+      this.logger.log(`[deleteAlbum] Success - Album ID: ${albumId}`);
+      return { success: true, message: 'Album deleted successfully' };
+    } catch (error) {
+      this.logger.error(`[deleteAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -232,9 +271,16 @@ export class AlbumService {
     userId: string,
     imageIds: string[],
   ) {
+    this.logger.debug(
+      `[addImagesToAlbum] Start - Album ID: ${albumId}, Client: ${clientId}, Images: ${imageIds.length}`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[addImagesToAlbum] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only modify your own albums');
     }
 
@@ -248,40 +294,59 @@ export class AlbumService {
     });
 
     if (images.length !== imageIds.length) {
+      this.logger.warn(
+        `[addImagesToAlbum] Some images not found - Album ID: ${albumId}, Requested: ${imageIds.length}, Found: ${images.length}`
+      );
       throw new NotFoundException('Some images not found or unauthorized');
     }
 
-    // Get max order
-    const maxOrder = await this.prisma.albumImage.findFirst({
-      where: { albumId },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
+    try {
+      // Get max order
+      const maxOrder = await this.prisma.albumImage.findFirst({
+        where: { albumId },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
 
-    let currentOrder = (maxOrder?.order || 0) + 1;
+      let currentOrder = (maxOrder?.order || 0) + 1;
 
-    // Add images
-    const albumImages = await Promise.all(
-      imageIds.map((imageId) =>
-        this.prisma.albumImage.upsert({
-          where: {
-            albumId_imageId: {
+      // Add images
+      const albumImages = await Promise.all(
+        imageIds.map((imageId) =>
+          this.prisma.albumImage.upsert({
+            where: {
+              albumId_imageId: {
+                albumId,
+                imageId,
+              },
+            },
+            update: {},
+            create: {
               albumId,
               imageId,
+              order: currentOrder++,
             },
-          },
-          update: {},
-          create: {
-            albumId,
-            imageId,
-            order: currentOrder++,
-          },
-        }),
-      ),
-    );
+          }),
+        ),
+      );
 
-    return { success: true, added: albumImages.length };
+      this.logger.log(
+        `[addImagesToAlbum] Success - Album ID: ${albumId}, Added: ${albumImages.length}`
+      );
+
+      return {
+        albumId,
+        imageCount: album.albumImages.length + albumImages.length,
+        images: albumImages.map((ai) => ({ imageId: ai.imageId, order: ai.order })),
+      };
+    } catch (error) {
+      this.logger.error(
+        `[addImagesToAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
+
 
   /**
    * Remove image from album
@@ -292,22 +357,37 @@ export class AlbumService {
     clientId: string,
     userId: string,
   ) {
+    this.logger.debug(
+      `[removeImageFromAlbum] Start - Album ID: ${albumId}, Image ID: ${imageId}, Client: ${clientId}`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[removeImageFromAlbum] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only modify your own albums');
     }
 
-    await this.prisma.albumImage.delete({
-      where: {
-        albumId_imageId: {
-          albumId,
-          imageId,
+    try {
+      await this.prisma.albumImage.delete({
+        where: {
+          albumId_imageId: {
+            albumId,
+            imageId,
+          },
         },
-      },
-    });
+      });
 
-    return { success: true, message: 'Image removed from album' };
+      this.logger.log(`[removeImageFromAlbum] Success - Album ID: ${albumId}, Image ID: ${imageId}`);
+      return { success: true, message: 'Image removed from album' };
+    } catch (error) {
+      this.logger.error(
+        `[removeImageFromAlbum] Failed - Album ID: ${albumId}, Image ID: ${imageId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   /**
@@ -319,31 +399,49 @@ export class AlbumService {
     userId: string,
     expiresInDays?: number,
   ) {
+    this.logger.debug(
+      `[generateAlbumToken] Start - Album ID: ${albumId}, Client: ${clientId}, Expires: ${expiresInDays} days`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[generateAlbumToken] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only generate tokens for your own albums');
     }
 
-    const token = uuidv4();
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
-      : null;
+    try {
+      const token = uuidv4();
+      const expiresAt = expiresInDays
+        ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+        : null;
 
-    await this.prisma.albumToken.create({
-      data: {
-        albumId,
+      await this.prisma.albumToken.create({
+        data: {
+          albumId,
+          token,
+          expiresAt,
+        },
+      });
+
+      this.logger.log(
+        `[generateAlbumToken] Success - Album ID: ${albumId}, Token: ${token}, Expires: ${expiresAt?.toISOString() || 'never'}`
+      );
+
+      return {
         token,
+        albumId,
         expiresAt,
-      },
-    });
-
-    return {
-      token,
-      albumId,
-      expiresAt,
-      url: `/v2/albums/shared/${token}`,
-    };
+        url: `/v2/albums/shared/${token}`,
+      };
+    } catch (error) {
+      this.logger.error(
+        `[generateAlbumToken] Failed - Album ID: ${albumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   /**
@@ -428,19 +526,36 @@ export class AlbumService {
     clientId: string,
     userId: string,
   ) {
+    this.logger.debug(
+      `[revokeAlbumToken] Start - Album ID: ${albumId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[revokeAlbumToken] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only revoke tokens for your own albums');
     }
 
-    const result = await this.prisma.albumToken.deleteMany({
-      where: {
-        albumId,
-      },
-    });
+    try {
+      const result = await this.prisma.albumToken.deleteMany({
+        where: {
+          albumId,
+        },
+      });
 
-    return { success: true, message: 'Album tokens revoked', count: result.count };
+      this.logger.log(
+        `[revokeAlbumToken] Success - Album ID: ${albumId}, Revoked: ${result.count} tokens`
+      );
+      return { success: true, message: 'Album tokens revoked', count: result.count };
+    } catch (error) {
+      this.logger.error(
+        `[revokeAlbumToken] Failed - Album ID: ${albumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   /**
@@ -452,22 +567,39 @@ export class AlbumService {
     userId: string,
     imageIds: string[],
   ) {
+    this.logger.debug(
+      `[removeImagesFromAlbum] Start - Album ID: ${albumId}, Client: ${clientId}, Images: ${imageIds.length}`
+    );
+
     const album = await this.getAlbumById(albumId, clientId);
 
     if (album.userId !== userId) {
+      this.logger.warn(
+        `[removeImagesFromAlbum] Access denied - Album ID: ${albumId}, Owner: ${album.userId}, User: ${userId}`
+      );
       throw new ForbiddenException('You can only modify your own albums');
     }
 
-    const result = await this.prisma.albumImage.deleteMany({
-      where: {
-        albumId,
-        imageId: {
-          in: imageIds,
+    try {
+      const result = await this.prisma.albumImage.deleteMany({
+        where: {
+          albumId,
+          imageId: {
+            in: imageIds,
+          },
         },
-      },
-    });
+      });
 
-    return { success: true, message: 'Images removed from album', removed: result.count };
+      this.logger.log(
+        `[removeImagesFromAlbum] Success - Album ID: ${albumId}, Removed: ${result.count}`
+      );
+      return { success: true, message: 'Images removed from album', removed: result.count };
+    } catch (error) {
+      this.logger.error(
+        `[removeImagesFromAlbum] Failed - Album ID: ${albumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   /**

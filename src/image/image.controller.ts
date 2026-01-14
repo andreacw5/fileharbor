@@ -12,6 +12,7 @@ import {
   Res,
   BadRequestException,
   Req,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -45,6 +46,8 @@ import {
 @Controller('images')
 @UseInterceptors(ClientInterceptor)
 export class ImageController {
+  private readonly logger = new Logger(ImageController.name);
+
   constructor(private imageService: ImageService) {}
 
 
@@ -78,18 +81,36 @@ export class ImageController {
     @Body() dto: UploadImageDto,
   ): Promise<ImageResponseDto> {
     if (!file) {
+      this.logger.warn(`[Upload] No file provided by client ${clientId}`);
       throw new BadRequestException('No file uploaded');
     }
 
-    return this.imageService.uploadImage(
-      clientId,
-      userId,
-      file,
-      dto.albumId,
-      dto.tags,
-      dto.description,
-      dto.isPrivate,
+    this.logger.debug(
+      `[Upload] Starting - Client: ${clientId}, User: ${userId || 'anonymous'}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`
     );
+
+    try {
+      const result = await this.imageService.uploadImage(
+        clientId,
+        userId,
+        file,
+        dto.albumId,
+        dto.tags,
+        dto.description,
+        dto.isPrivate,
+      );
+
+      this.logger.log(
+        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, User: ${userId || 'anonymous'}, Size: ${file.size} bytes`
+      );
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[Upload] Failed - Client: ${clientId}, File: ${file.originalname}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   @Get()
@@ -114,7 +135,17 @@ export class ImageController {
       perPage: query.perPage,
     };
 
-    return this.imageService.listImages(filters);
+    this.logger.debug(
+      `[ListImages] Client: ${clientId}, User: ${query.userId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`
+    );
+
+    const result = await this.imageService.listImages(filters);
+
+    this.logger.log(
+      `[ListImages] Success - Client: ${clientId}, Total: ${result.pagination.total}, Returned: ${result.data.length}`
+    );
+
+    return result;
   }
 
   @Public()
@@ -150,63 +181,111 @@ export class ImageController {
     const clientId = req['clientId'];
     const userId = req['userId'];
 
-    // If token is provided, try to access via share link first
-    if (query.token) {
-      try {
-        image = await this.imageService.getImageByShareToken(query.token);
-        imageId = image.id; // Override imageId with the one from share link
-      } catch (error) {
-        // If token validation fails, fall back to normal access with token as auth
-        image = await this.imageService.getImageById(imageId);
-        await this.imageService.validateImageAccess(image, imageId, clientId, userId, query.token);
-      }
-    } else {
-      // Normal access without token
-      image = await this.imageService.getImageById(imageId);
-      await this.imageService.validateImageAccess(image, imageId, clientId, userId);
-    }
-
-    // Parse query parameters (now properly transformed by DTO)
-    const isInfoRequest = query.info === true;
-    const isDownload = query.download === true;
-    const isThumb = query.thumb === true;
-
-    // If info=true, return JSON metadata
-    if (isInfoRequest) {
-      const metadata = await this.imageService.getImageMetadata(image);
-      return res.json(metadata);
-    }
-
-    // Handle counters
-    if (isDownload) {
-      await this.imageService.incrementDownloads(imageId, image.clientId);
-    } else {
-      await this.imageService.incrementViews(imageId);
-    }
-
-    // Get image file
-    const { buffer, mimeType } = await this.imageService.getImageFile(
-      imageId,
-      isThumb ? undefined : query.width,
-      isThumb ? undefined : query.height,
-      query.format || 'webp',
-      query.quality || 85,
-      isThumb,
+    this.logger.debug(
+      `[GetImage] Starting - ImageId: ${imageId}, Client: ${clientId || 'public'}, User: ${userId || 'anonymous'}, Token: ${query.token ? 'yes' : 'no'}`
     );
 
-    // Set response headers
-    const headers: Record<string, string> = {
-      'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=31536000, immutable',
-      'ETag': `"${imageId}${isThumb ? '-thumb' : ''}"`,
-    };
+    try {
+      // If token is provided, try to access via share link first
+      if (query.token) {
+        this.logger.debug(`[GetImage] Token provided, validating...`);
+        try {
+          image = await this.imageService.getImageByShareToken(query.token);
+          imageId = image.id; // Override imageId with the one from share link
+          this.logger.debug(`[GetImage] Token validated - ImageId: ${imageId}`);
+        } catch (error) {
+          this.logger.debug(`[GetImage] Token validation failed, trying normal access - Error: ${error.message}`);
+          // If token validation fails, fall back to normal access with token as auth
+          image = await this.imageService.getImageById(imageId);
+          await this.imageService.validateImageAccess(image, imageId, clientId, userId, query.token);
+        }
+      } else {
+        this.logger.debug(`[GetImage] No token, fetching image normally...`);
+        // Normal access without token
+        image = await this.imageService.getImageById(imageId);
+        this.logger.debug(`[GetImage] Image fetched - ImageId: ${imageId}`);
+        await this.imageService.validateImageAccess(image, imageId, clientId, userId);
+        this.logger.debug(`[GetImage] Access validated`);
+      }
 
-    if (isDownload) {
-      headers['Content-Disposition'] = `attachment; filename="${image.originalName}"`;
+      // Parse query parameters (now properly transformed by DTO)
+      const isInfoRequest = query.info === true;
+      const isDownload = query.download === true;
+      const isThumb = query.thumb === true;
+
+      this.logger.debug(
+        `[GetImage] Request type - Info: ${isInfoRequest}, Download: ${isDownload}, Thumb: ${isThumb}`
+      );
+
+      // If info=true, return JSON metadata
+      if (isInfoRequest) {
+        this.logger.debug(`[GetImage] Returning metadata - ImageId: ${imageId}`);
+        const metadata = await this.imageService.getImageMetadata(image);
+        this.logger.log(`[GetImage] Metadata - ImageId: ${imageId}, Client: ${image.clientId}`);
+        return res.json(metadata);
+      }
+
+      // Handle counters
+      if (isDownload) {
+        this.logger.debug(`[GetImage] Incrementing downloads...`);
+        await this.imageService.incrementDownloads(imageId, image.clientId);
+        this.logger.debug(`[GetImage] Download count incremented - ImageId: ${imageId}`);
+      } else {
+        this.logger.debug(`[GetImage] Incrementing views...`);
+        await this.imageService.incrementViews(imageId);
+        this.logger.debug(`[GetImage] View count incremented - ImageId: ${imageId}`);
+      }
+
+      // Get image file
+      this.logger.debug(
+        `[GetImage] Getting file - ImageId: ${imageId}, Width: ${query.width}, Height: ${query.height}, Format: ${query.format}, Quality: ${query.quality}, Thumb: ${isThumb}`
+      );
+      const { buffer, mimeType } = await this.imageService.getImageFile(
+        imageId,
+        isThumb ? undefined : query.width,
+        isThumb ? undefined : query.height,
+        query.format || 'webp',
+        query.quality || 85,
+        isThumb,
+      );
+
+      this.logger.debug(`[GetImage] File retrieved - Size: ${buffer.length} bytes, MimeType: ${mimeType}`);
+
+      // Set response headers
+      const headers: Record<string, string> = {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'ETag': `"${imageId}${isThumb ? '-thumb' : ''}"`,
+      };
+
+      if (isDownload) {
+        headers['Content-Disposition'] = `attachment; filename="${image.originalName}"`;
+      }
+
+
+      this.logger.debug(`[GetImage] Sending response - ImageId: ${imageId}, MimeType: ${mimeType}, BufferSize: ${buffer.length}`);
+
+      const sendStartTime = Date.now();
+      res.set(headers);
+
+      // Log before sending
+      this.logger.log(
+        `[GetImage] Sending binary - ImageId: ${imageId}, MimeType: ${mimeType}, Size: ${buffer.length} bytes, Client: ${clientId || 'public'}, User: ${userId || 'anonymous'}, Download: ${isDownload}, Thumb: ${isThumb}`
+      );
+
+      res.send(buffer);
+
+      // Log after sending (this happens synchronously before response is actually flushed)
+      const sendDuration = Date.now() - sendStartTime;
+      this.logger.log(
+        `[GetImage] Binary sent - ImageId: ${imageId}, Size: ${buffer.length} bytes, Duration: ${sendDuration}ms`
+      );
+    } catch (error) {
+      this.logger.error(
+        `[GetImage] Failed - ImageId: ${imageId}, Error: ${error.message}`, error.stack
+      );
+      throw error;
     }
-
-    res.set(headers);
-    res.send(buffer);
   }
 
   @Patch(':imageId')
@@ -225,15 +304,32 @@ export class ImageController {
     @Param('imageId') imageId: string,
     @Body() dto: UpdateImageMetadataDto,
   ): Promise<ImageResponseDto> {
+    this.logger.debug(
+      `[UpdateImage] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const validUserId = this.imageService.validateUserId(userId);
 
-    return this.imageService.updateImageMetadata(
-      imageId,
-      clientId,
-      validUserId,
-      dto.tags,
-      dto.description,
-    );
+    try {
+      const result = await this.imageService.updateImageMetadata(
+        imageId,
+        clientId,
+        validUserId,
+        dto.tags,
+        dto.description,
+      );
+
+      this.logger.log(
+        `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+      );
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[UpdateImage] Failed - ImageId: ${imageId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
 
@@ -253,10 +349,27 @@ export class ImageController {
     @Param('imageId') imageId: string,
     @Body() dto: CreateShareLinkDto,
   ): Promise<ShareLinkResponseDto> {
+    this.logger.debug(
+      `[CreateShareLink] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const validUserId = this.imageService.validateUserId(userId);
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
 
-    return this.imageService.createShareLink(imageId, clientId, validUserId, expiresAt);
+    try {
+      const result = await this.imageService.createShareLink(imageId, clientId, validUserId, expiresAt);
+
+      this.logger.log(
+        `[CreateShareLink] Success - ImageId: ${imageId}, Expires: ${expiresAt ? expiresAt.toISOString() : 'never'}`
+      );
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[CreateShareLink] Failed - ImageId: ${imageId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   @Delete('share/:shareId')
@@ -271,9 +384,24 @@ export class ImageController {
     @UserId() userId: string,
     @Param('shareId') shareId: string,
   ): Promise<DeleteResponseDto> {
+    this.logger.debug(
+      `[DeleteShareLink] Starting - ShareId: ${shareId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const validUserId = this.imageService.validateUserId(userId);
 
-    return this.imageService.deleteShareLink(shareId, clientId, validUserId);
+    try {
+      const result = await this.imageService.deleteShareLink(shareId, clientId, validUserId);
+
+      this.logger.log(`[DeleteShareLink] Success - ShareId: ${shareId}`);
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[DeleteShareLink] Failed - ShareId: ${shareId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
 
@@ -289,8 +417,23 @@ export class ImageController {
     @UserId() userId: string,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
+    this.logger.debug(
+      `[DeleteImage] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const validUserId = this.imageService.validateUserId(userId);
 
-    return this.imageService.deleteImage(imageId, clientId, validUserId);
+    try {
+      const result = await this.imageService.deleteImage(imageId, clientId, validUserId);
+
+      this.logger.log(`[DeleteImage] Success - ImageId: ${imageId}`);
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[DeleteImage] Failed - ImageId: ${imageId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 }

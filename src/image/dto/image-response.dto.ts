@@ -14,8 +14,21 @@ export class ImageResponseDto {
     description: 'User identifier who uploaded the image',
     example: 'user-123',
   })
-  @Expose()
   userId: string;
+
+  @ApiProperty({
+    description: 'User identifier who uploaded the image',
+    example: 'user-123',
+  })
+  @Expose()
+  user: object;
+
+  @ApiProperty({
+    description: 'User identifier who uploaded the image',
+    example: 'user-123',
+  })
+  @Expose()
+  client: object;
 
   @ApiProperty({
     description: 'Original filename',

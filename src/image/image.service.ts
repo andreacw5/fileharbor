@@ -3,12 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { StorageService } from '@/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
-import * as path from 'path';
 import { plainToInstance } from 'class-transformer';
 import {
   ImageResponseDto,
@@ -20,6 +20,7 @@ import {
 
 @Injectable()
 export class ImageService {
+  private readonly logger = new Logger(ImageService.name);
   private readonly webpQuality: number;
   private readonly thumbnailSize: number;
 
@@ -44,107 +45,139 @@ export class ImageService {
     description?: string,
     isPrivate?: boolean,
   ) {
-    // Validate file
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('Only image files are allowed');
-    }
+    const imageId = uuidv4();
+    this.logger.debug(
+      `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, User: ${externalUserId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`
+    );
 
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-    if (!client) {
-      throw new BadRequestException('Client not found');
-    }
-    const domain = client.domain || clientId;
+    try {
+      // Validate file
+      if (!file.mimetype.startsWith('image/')) {
+        this.logger.warn(
+          `[uploadImage] Invalid MIME type - ID: ${imageId}, Client: ${clientId}, Type: ${file.mimetype}`
+        );
+        throw new BadRequestException('Only image files are allowed');
+      }
 
-    // Get or create user
-    let user;
-    if (externalUserId) {
-      // If externalUserId is provided, get or create that user
-      user = await this.prisma.user.findUnique({
-        where: {
-          clientId_externalUserId: {
-            clientId,
-            externalUserId,
-          },
-        },
+      // Get client to retrieve domain
+      const client = await this.prisma.client.findUnique({
+        where: { id: clientId },
       });
-      if (!user) {
-        user = await this.prisma.user.create({
-          data: {
-            clientId,
-            externalUserId,
+      if (!client) {
+        this.logger.error(`[uploadImage] Client not found - ID: ${imageId}, Client: ${clientId}`);
+        throw new BadRequestException('Client not found');
+      }
+      const domain = client.domain || clientId;
+
+      // Get or create user
+      let user;
+      if (externalUserId) {
+        // If externalUserId is provided, get or create that user
+        user = await this.prisma.user.findUnique({
+          where: {
+            clientId_externalUserId: {
+              clientId,
+              externalUserId,
+            },
           },
         });
-      }
-    } else {
-      // If no externalUserId, use the system user
-      user = await this.prisma.user.findUnique({
-        where: {
-          clientId_externalUserId: {
-            clientId,
-            externalUserId: 'system',
+        if (!user) {
+          this.logger.debug(`[uploadImage] Creating new user - ID: ${imageId}, External: ${externalUserId}`);
+          user = await this.prisma.user.create({
+            data: {
+              clientId,
+              externalUserId,
+            },
+          });
+        }
+      } else {
+        // If no externalUserId, use the system user
+        user = await this.prisma.user.findUnique({
+          where: {
+            clientId_externalUserId: {
+              clientId,
+              externalUserId: 'system',
+            },
           },
+        });
+        if (!user) {
+          this.logger.error(`[uploadImage] System user not found - ID: ${imageId}, Client: ${clientId}`);
+          throw new BadRequestException('System user not found for client');
+        }
+      }
+      const userId = user.id;
+
+      const imagePath = this.storage.getImagePath(domain, imageId);
+
+      // Get metadata
+      this.logger.debug(`[uploadImage] Extracting metadata - ID: ${imageId}`);
+      const metadata = await this.storage.getImageMetadata(file.buffer);
+      this.logger.debug(
+        `[uploadImage] Metadata extracted - ID: ${imageId}, Dimensions: ${metadata.width}x${metadata.height}`
+      );
+
+      // Convert to WebP
+      this.logger.debug(`[uploadImage] Converting to WebP - ID: ${imageId}, Quality: ${this.webpQuality}`);
+      const webpBuffer = await this.storage.convertToWebP(
+        file.buffer,
+        this.webpQuality,
+      );
+
+      // Save original
+      this.logger.debug(`[uploadImage] Saving original - ID: ${imageId}, Size: ${webpBuffer.length} bytes`);
+      const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+      await this.storage.saveFile(originalPath, webpBuffer);
+
+      // Create thumbnail
+      this.logger.debug(`[uploadImage] Creating thumbnail - ID: ${imageId}, Size: ${this.thumbnailSize}`);
+      const thumbBuffer = await this.storage.createThumbnail(
+        webpBuffer,
+        this.thumbnailSize,
+        this.webpQuality,
+      );
+      const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      await this.storage.saveFile(thumbnailPath, thumbBuffer);
+      this.logger.debug(`[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`);
+
+      // Save to database (storagePath is the base path without extension)
+      this.logger.debug(
+        `[uploadImage] Saving to database - ID: ${imageId}, Tags: ${tags?.length || 0}, Private: ${isPrivate}`
+      );
+      const image = await this.prisma.image.create({
+        data: {
+          id: imageId,
+          clientId,
+          userId,
+          originalName: file.originalname,
+          storagePath: imagePath,
+          format: 'webp',
+          width: metadata.width,
+          height: metadata.height,
+          size: webpBuffer.length,
+          mimeType: 'image/webp',
+          isOptimized: false,
+          isPrivate: isPrivate || false,
+          tags: tags || [],
+          description: description || null,
         },
       });
-      if (!user) {
-        throw new BadRequestException('System user not found for client');
+
+      // Add to album if specified
+      if (albumId) {
+        this.logger.debug(`[uploadImage] Adding to album - ID: ${imageId}, Album: ${albumId}`);
+        await this.addImageToAlbum(imageId, albumId, clientId);
       }
+
+      this.logger.log(
+        `[uploadImage] Success - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Size: ${webpBuffer.length}`
+      );
+      return this.formatImageResponse(image);
+    } catch (error) {
+      this.logger.error(
+        `[uploadImage] Failed - ID: ${imageId}, Client: ${clientId}, Error: ${error.message}`
+      );
+      throw error;
     }
-    const userId = user.id;
-
-    const imageId = uuidv4();
-    const imagePath = this.storage.getImagePath(domain, imageId);
-
-    // Get metadata
-    const metadata = await this.storage.getImageMetadata(file.buffer);
-
-    // Convert to WebP
-    const webpBuffer = await this.storage.convertToWebP(
-      file.buffer,
-      this.webpQuality,
-    );
-
-    // Save original
-    const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
-    await this.storage.saveFile(originalPath, webpBuffer);
-
-    // Create thumbnail
-    const thumbBuffer = await this.storage.createThumbnail(
-      webpBuffer,
-      this.thumbnailSize,
-      this.webpQuality,
-    );
-    const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
-    await this.storage.saveFile(thumbnailPath, thumbBuffer);
-
-    // Save to database (storagePath is the base path without extension)
-    const image = await this.prisma.image.create({
-      data: {
-        id: imageId,
-        clientId,
-        userId,
-        originalName: file.originalname,
-        storagePath: imagePath,
-        format: 'webp',
-        width: metadata.width,
-        height: metadata.height,
-        size: webpBuffer.length,
-        mimeType: 'image/webp',
-        isOptimized: false,
-        isPrivate: isPrivate || false,
-        tags: tags || [],
-        description: description || null,
-      },
-    });
-
-    // Add to album if specified
-    if (albumId) {
-      await this.addImageToAlbum(imageId, albumId, clientId);
-    }
-
-    return this.formatImageResponse(image);
   }
 
   /**
@@ -270,6 +303,22 @@ export class ImageService {
         },
         skip,
         take: perPage,
+        include: {
+          user: {
+            select: {
+              id: true,
+              externalUserId: true,
+              username: true,
+            }
+          },
+          client: {
+            select: {
+              id: true,
+              name: true,
+              domain: true,
+            }
+          },
+        }
       }),
       this.prisma.image.count({ where }),
     ]);
@@ -297,6 +346,10 @@ export class ImageService {
    * Delete image
    */
   async deleteImage(imageId: string, clientId: string, userId: string): Promise<DeleteResponseDto> {
+    this.logger.debug(
+      `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
@@ -306,25 +359,40 @@ export class ImageService {
     });
 
     if (!image) {
+      this.logger.warn(
+        `[deleteImage] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+      );
       throw new NotFoundException('Image not found');
     }
 
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-    const domain = client?.domain || clientId;
+    try {
+      // Get client to retrieve domain
+      const client = await this.prisma.client.findUnique({
+        where: { id: clientId },
+      });
+      const domain = client?.domain || clientId;
 
-    // Delete files
-    const imagePath = this.storage.getImagePath(domain, imageId);
-    await this.storage.deleteDirectory(imagePath);
+      // Delete files
+      const imagePath = this.storage.getImagePath(domain, imageId);
+      this.logger.debug(`[deleteImage] Deleting files - ID: ${imageId}, Path: ${imagePath}`);
+      await this.storage.deleteDirectory(imagePath);
 
-    // Delete from database
-    await this.prisma.image.delete({
-      where: { id: imageId },
-    });
+      // Delete from database
+      this.logger.debug(`[deleteImage] Deleting from database - ID: ${imageId}`);
+      await this.prisma.image.delete({
+        where: { id: imageId },
+      });
 
-    return this.formatDeleteResponse('Image deleted successfully');
+      this.logger.log(
+        `[deleteImage] Success - ID: ${imageId}, Client: ${clientId}, Size: ${image.size} bytes`
+      );
+      return this.formatDeleteResponse('Image deleted successfully');
+    } catch (error) {
+      this.logger.error(
+        `[deleteImage] Failed - ID: ${imageId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   /**
@@ -392,6 +460,10 @@ export class ImageService {
     tags?: string[],
     description?: string,
   ) {
+    this.logger.debug(
+      `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Tags: ${tags?.length || 0}`
+    );
+
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
@@ -401,6 +473,9 @@ export class ImageService {
     });
 
     if (!image) {
+      this.logger.warn(
+        `[updateImageMetadata] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+      );
       throw new NotFoundException('Image not found');
     }
 
@@ -412,6 +487,7 @@ export class ImageService {
       },
     });
 
+    this.logger.log(`[updateImageMetadata] Success - ID: ${imageId}, Client: ${clientId}`);
     return this.formatImageResponse(updatedImage);
   }
 
@@ -450,6 +526,10 @@ export class ImageService {
     userId: string,
     expiresAt?: Date,
   ): Promise<ShareLinkResponseDto> {
+    this.logger.debug(
+      `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Expires: ${expiresAt?.toISOString() || 'never'}`
+    );
+
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
@@ -459,6 +539,9 @@ export class ImageService {
     });
 
     if (!image) {
+      this.logger.warn(
+        `[createShareLink] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+      );
       throw new NotFoundException('Image not found');
     }
 
@@ -472,6 +555,9 @@ export class ImageService {
       },
     });
 
+    this.logger.log(
+      `[createShareLink] Success - ID: ${imageId}, Token: ${readToken}, Expires: ${expiresAt?.toISOString() || 'never'}`
+    );
     return this.formatShareLinkResponse(shareLink);
   }
 
@@ -507,16 +593,26 @@ export class ImageService {
     clientId: string,
     userId: string,
   ): Promise<DeleteResponseDto> {
+    this.logger.debug(
+      `[deleteShareLink] Start - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}`
+    );
+
     const shareLink = await this.prisma.imageShareLink.findUnique({
       where: { id: shareLinkId },
       include: { image: true },
     });
 
     if (!shareLink) {
+      this.logger.warn(
+        `[deleteShareLink] Share link not found - LinkID: ${shareLinkId}, Client: ${clientId}`
+      );
       throw new NotFoundException('Share link not found');
     }
 
     if (shareLink.image.clientId !== clientId || shareLink.image.userId !== userId) {
+      this.logger.warn(
+        `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}, ImageClient: ${shareLink.image.clientId}`
+      );
       throw new NotFoundException('Share link not found');
     }
 
@@ -524,6 +620,7 @@ export class ImageService {
       where: { id: shareLinkId },
     });
 
+    this.logger.log(`[deleteShareLink] Success - LinkID: ${shareLinkId}, ImageID: ${shareLink.imageId}`);
     return this.formatDeleteResponse('Share link deleted successfully');
   }
 

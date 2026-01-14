@@ -2,17 +2,18 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { StorageService } from '@/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
-import * as path from 'path';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
 
 @Injectable()
 export class AvatarService {
+  private readonly logger = new Logger(AvatarService.name);
   private readonly webpQuality: number;
   private readonly thumbnailSize: number;
 
@@ -34,116 +35,145 @@ export class AvatarService {
     file: Express.Multer.File,
     externalUserId: string,
   ) {
-    // Validate file
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('Only image files are allowed');
-    }
-    if (!externalUserId) {
-      throw new BadRequestException('externalUserId is required');
-    }
+    this.logger.debug(
+      `[uploadAvatar] Start - Client: ${clientId}, User: ${externalUserId}, File: ${file.originalname} (${file.size} bytes)`
+    );
 
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-    if (!client) {
-      throw new BadRequestException('Client not found');
-    }
-    const domain = client.domain || clientId;
+    try {
+      // Validate file
+      if (!file.mimetype.startsWith('image/')) {
+        this.logger.warn(
+          `[uploadAvatar] Invalid MIME type - Client: ${clientId}, User: ${externalUserId}, Type: ${file.mimetype}`
+        );
+        throw new BadRequestException('Only image files are allowed');
+      }
+      if (!externalUserId) {
+        throw new BadRequestException('externalUserId is required');
+      }
 
-    // Trova o crea lo user associato a questo externalUserId
-    let user = await this.prisma.user.findUnique({
-      where: {
-        clientId_externalUserId: {
-          clientId,
-          externalUserId,
-        },
-      },
-    });
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          clientId,
-          externalUserId,
-          username: 'User',
+      // Get client to retrieve domain
+      const client = await this.prisma.client.findUnique({
+        where: { id: clientId },
+      });
+      if (!client) {
+        this.logger.error(`[uploadAvatar] Client not found - Client: ${clientId}`);
+        throw new BadRequestException('Client not found');
+      }
+      const domain = client.domain || clientId;
+
+      // Trova o crea lo user associato a questo externalUserId
+      let user = await this.prisma.user.findUnique({
+        where: {
+          clientId_externalUserId: {
+            clientId,
+            externalUserId,
+          },
         },
       });
-    }
-    const userId = user.id;
+      if (!user) {
+        this.logger.debug(`[uploadAvatar] Creating new user - Client: ${clientId}, User: ${externalUserId}`);
+        user = await this.prisma.user.create({
+          data: {
+            clientId,
+            externalUserId,
+            username: 'User',
+          },
+        });
+      }
+      const userId = user.id;
 
-    // Check for existing avatar
-    const existingAvatar = await this.prisma.avatar.findUnique({
-      where: {
-        clientId_userId: {
+      // Check for existing avatar
+      const existingAvatar = await this.prisma.avatar.findUnique({
+        where: {
+          clientId_userId: {
+            clientId,
+            userId,
+          },
+        },
+      });
+
+      // Delete old avatar files if exists
+      if (existingAvatar) {
+        this.logger.debug(`[uploadAvatar] Deleting old avatar - Client: ${clientId}, User: ${userId}`);
+        const oldAvatarPath = this.storage.getAvatarPath(domain, userId);
+        await this.storage.deleteDirectory(oldAvatarPath);
+      }
+
+      const avatarId = existingAvatar?.id || uuidv4();
+      const avatarPath = this.storage.getAvatarPath(domain, userId);
+
+      // Get metadata
+      this.logger.debug(`[uploadAvatar] Extracting metadata - Client: ${clientId}`);
+      const metadata = await this.storage.getImageMetadata(file.buffer);
+      this.logger.debug(
+        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`
+      );
+
+      // Convert to WebP
+      this.logger.debug(`[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.webpQuality}`);
+      const webpBuffer = await this.storage.convertToWebP(
+        file.buffer,
+        this.webpQuality,
+      );
+
+      // Save original avatar (renamed to original.webp for consistency)
+      this.logger.debug(`[uploadAvatar] Saving original - Client: ${clientId}, Size: ${webpBuffer.length} bytes`);
+      const originalPath = this.storage.getAvatarFilePath(domain, userId, 'original');
+      await this.storage.saveFile(originalPath, webpBuffer);
+
+      // Create and save thumbnail
+      this.logger.debug(`[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}`);
+      const thumbBuffer = await this.storage.createThumbnail(
+        webpBuffer,
+        this.thumbnailSize,
+        this.webpQuality,
+      );
+      const thumbnailPath = this.storage.getAvatarFilePath(domain, userId, 'thumb');
+      await this.storage.saveFile(thumbnailPath, thumbBuffer);
+      this.logger.debug(`[uploadAvatar] Thumbnail saved - Client: ${clientId}, Size: ${thumbBuffer.length} bytes`);
+
+      // Save/Update in database (storagePath is the base path without extension)
+      this.logger.debug(`[uploadAvatar] Saving to database - Client: ${clientId}, User: ${userId}`);
+      const avatar = await this.prisma.avatar.upsert({
+        where: {
+          clientId_userId: {
+            clientId,
+            userId,
+          },
+        },
+        update: {
+          storagePath: avatarPath,
+          format: 'webp',
+          width: metadata.width,
+          height: metadata.height,
+          size: webpBuffer.length,
+          mimeType: 'image/webp',
+          isOptimized: false,
+        },
+        create: {
+          id: avatarId,
           clientId,
           userId,
+          storagePath: avatarPath,
+          format: 'webp',
+          width: metadata.width,
+          height: metadata.height,
+          size: webpBuffer.length,
+          mimeType: 'image/webp',
+          isOptimized: false,
         },
-      },
-    });
+      });
 
-    // Delete old avatar files if exists
-    if (existingAvatar) {
-      const oldAvatarPath = this.storage.getAvatarPath(domain, userId);
-      await this.storage.deleteDirectory(oldAvatarPath);
+      this.logger.log(
+        `[uploadAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${webpBuffer.length} bytes`
+      );
+      return this.formatAvatarResponse(avatar, externalUserId);
+    } catch (error) {
+      this.logger.error(
+        `[uploadAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`
+      );
+      throw error;
     }
-
-    const avatarId = existingAvatar?.id || uuidv4();
-    const avatarPath = this.storage.getAvatarPath(domain, userId);
-
-    // Get metadata
-    const metadata = await this.storage.getImageMetadata(file.buffer);
-
-    // Convert to WebP
-    const webpBuffer = await this.storage.convertToWebP(
-      file.buffer,
-      this.webpQuality,
-    );
-
-    // Save original avatar (renamed to original.webp for consistency)
-    const originalPath = this.storage.getAvatarFilePath(domain, userId, 'original');
-    await this.storage.saveFile(originalPath, webpBuffer);
-
-    // Create and save thumbnail
-    const thumbBuffer = await this.storage.createThumbnail(
-      webpBuffer,
-      this.thumbnailSize,
-      this.webpQuality,
-    );
-    const thumbnailPath = this.storage.getAvatarFilePath(domain, userId, 'thumb');
-    await this.storage.saveFile(thumbnailPath, thumbBuffer);
-
-    // Save/Update in database (storagePath is the base path without extension)
-    const avatar = await this.prisma.avatar.upsert({
-      where: {
-        clientId_userId: {
-          clientId,
-          userId,
-        },
-      },
-      update: {
-        storagePath: avatarPath,
-        format: 'webp',
-        width: metadata.width,
-        height: metadata.height,
-        size: webpBuffer.length,
-        mimeType: 'image/webp',
-        isOptimized: false,
-      },
-      create: {
-        id: avatarId,
-        clientId,
-        userId,
-        storagePath: avatarPath,
-        format: 'webp',
-        width: metadata.width,
-        height: metadata.height,
-        size: webpBuffer.length,
-        mimeType: 'image/webp',
-        isOptimized: false,
-      },
-    });
-
-    return this.formatAvatarResponse(avatar, externalUserId);
   }
 
 
@@ -190,55 +220,71 @@ export class AvatarService {
    * Delete user avatar by external user ID
    */
   async deleteAvatar(clientId: string, externalUserId: string): Promise<DeleteAvatarResponseDto> {
-    // Find the user by clientId and externalUserId
-    const user = await this.prisma.user.findUnique({
-      where: {
-        clientId_externalUserId: {
-          clientId,
-          externalUserId,
-        },
-      },
-    });
+    this.logger.debug(`[deleteAvatar] Start - Client: ${clientId}, User: ${externalUserId}`);
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    try {
+      // Find the user by clientId and externalUserId
+      const user = await this.prisma.user.findUnique({
+        where: {
+          clientId_externalUserId: {
+            clientId,
+            externalUserId,
+          },
+        },
+      });
+
+      if (!user) {
+        this.logger.warn(`[deleteAvatar] User not found - Client: ${clientId}, User: ${externalUserId}`);
+        throw new NotFoundException('User not found');
+      }
+
+      // Verify avatar exists
+      const avatar = await this.prisma.avatar.findUnique({
+        where: {
+          clientId_userId: {
+            clientId,
+            userId: user.id,
+          },
+        },
+      });
+
+      if (!avatar) {
+        this.logger.warn(`[deleteAvatar] Avatar not found - Client: ${clientId}, User: ${externalUserId}`);
+        throw new NotFoundException('Avatar not found');
+      }
+
+      // Get client to retrieve domain
+      const client = await this.prisma.client.findUnique({
+        where: { id: clientId },
+      });
+      const domain = client?.domain || clientId;
+
+      // Delete files
+      this.logger.debug(`[deleteAvatar] Deleting files - Client: ${clientId}, User: ${user.id}`);
+      const avatarPath = this.storage.getAvatarPath(domain, user.id);
+      await this.storage.deleteDirectory(avatarPath);
+
+      // Delete from database
+      this.logger.debug(`[deleteAvatar] Deleting from database - Client: ${clientId}, User: ${user.id}`);
+      await this.prisma.avatar.delete({
+        where: {
+          clientId_userId: {
+            clientId,
+            userId: user.id,
+          },
+        },
+      });
+
+      this.logger.log(
+        `[deleteAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${avatar.size} bytes`
+      );
+      return this.formatDeleteResponse('Avatar deleted successfully');
+    } catch (error) {
+      this.logger.error(
+        `[deleteAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`
+      );
+      throw error;
     }
-
-    // Verify avatar exists
-    const avatar = await this.prisma.avatar.findUnique({
-      where: {
-        clientId_userId: {
-          clientId,
-          userId: user.id,
-        },
-      },
-    });
-
-    if (!avatar) {
-      throw new NotFoundException('Avatar not found');
-    }
-
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-    const domain = client?.domain || clientId;
-
-    // Delete files
-    const avatarPath = this.storage.getAvatarPath(domain, user.id);
-    await this.storage.deleteDirectory(avatarPath);
-
-    // Delete from database
-    await this.prisma.avatar.delete({
-      where: {
-        clientId_userId: {
-          clientId,
-          userId: user.id,
-        },
-      },
-    });
-
-    return this.formatDeleteResponse('Avatar deleted successfully');
   }
 
   /**

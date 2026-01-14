@@ -10,6 +10,7 @@ import {
   UploadedFile,
   Res,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -37,6 +38,8 @@ import {
 @Controller('avatars')
 @UseInterceptors(ClientInterceptor)
 export class AvatarController {
+  private readonly logger = new Logger(AvatarController.name);
+
   constructor(private avatarService: AvatarService) {}
 
   @Post()
@@ -56,14 +59,31 @@ export class AvatarController {
     @Body('externalUserId') externalUserId: string,
   ): Promise<AvatarResponseDto> {
     if (!file) {
+      this.logger.warn(`[uploadAvatar] No file provided - Client: ${clientId}, User: ${externalUserId}`);
       throw new BadRequestException('No file uploaded');
     }
 
     if (!externalUserId) {
+      this.logger.warn(`[uploadAvatar] Missing externalUserId - Client: ${clientId}`);
       throw new BadRequestException('externalUserId is required in form data');
     }
 
-    return this.avatarService.uploadAvatar(clientId, file, externalUserId);
+    this.logger.debug(
+      `[uploadAvatar] Starting - Client: ${clientId}, User: ${externalUserId}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`
+    );
+
+    try {
+      const result = await this.avatarService.uploadAvatar(clientId, file, externalUserId);
+      this.logger.log(
+        `[uploadAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${file.size} bytes`
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[uploadAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   @Public()
@@ -79,32 +99,51 @@ export class AvatarController {
     @Query() query: GetAvatarDto,
     @Res() res: Response,
   ) {
-    // If info mode, return metadata as JSON
-    if (query.info) {
-      const avatar = await this.avatarService.getAvatarByExternalUserId(externalUserId);
-      const metadata = this.avatarService.getAvatarMetadata(avatar, externalUserId);
-      return res.json(metadata);
-    }
-
-    // Otherwise return the file
-    const { buffer, mimeType } = await this.avatarService.getAvatarFile(
-      externalUserId,
-      query.thumb,
+    this.logger.debug(
+      `[getAvatar] Starting - User: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Download: ${query.download}`
     );
 
-    const headers: Record<string, string> = {
-      'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=86400',
-      'ETag': `"avatar-${externalUserId}${query.thumb ? '-thumb' : ''}"`,
-    };
+    try {
+      // If info mode, return metadata as JSON
+      if (query.info) {
+        const avatar = await this.avatarService.getAvatarByExternalUserId(externalUserId);
+        const metadata = this.avatarService.getAvatarMetadata(avatar, externalUserId);
+        this.logger.log(`[getAvatar] Metadata returned - User: ${externalUserId}`);
+        return res.json(metadata);
+      }
 
-    if (query.download) {
-      const filename = `avatar-${externalUserId}${query.thumb ? '-thumb' : ''}.webp`;
-      headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+      // Otherwise return the file
+      const { buffer, mimeType } = await this.avatarService.getAvatarFile(
+        externalUserId,
+        query.thumb,
+      );
+
+      const headers: Record<string, string> = {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=86400',
+        'ETag': `"avatar-${externalUserId}${query.thumb ? '-thumb' : ''}"`,
+      };
+
+      if (query.download) {
+        const filename = `avatar-${externalUserId}${query.thumb ? '-thumb' : ''}.webp`;
+        headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+        this.logger.debug(`[getAvatar] Download - User: ${externalUserId}`);
+      } else {
+        this.logger.debug(`[getAvatar] View - User: ${externalUserId}, Thumb: ${query.thumb}`);
+      }
+
+      this.logger.log(
+        `[getAvatar] Success - User: ${externalUserId}, Thumb: ${query.thumb}, Size: ${buffer.length} bytes`
+      );
+
+      res.set(headers);
+      res.send(buffer);
+    } catch (error) {
+      this.logger.error(
+        `[getAvatar] Failed - User: ${externalUserId}, Error: ${error.message}`
+      );
+      throw error;
     }
-
-    res.set(headers);
-    res.send(buffer);
   }
 
   @Delete(':externalUserId')
@@ -120,10 +159,22 @@ export class AvatarController {
     @Param('externalUserId') externalUserId: string,
   ): Promise<DeleteAvatarResponseDto> {
     if (!externalUserId) {
+      this.logger.warn(`[deleteAvatar] Missing externalUserId - Client: ${clientId}`);
       throw new BadRequestException('externalUserId is required in path');
     }
 
-    return this.avatarService.deleteAvatar(clientId, externalUserId);
+    this.logger.debug(`[deleteAvatar] Starting - Client: ${clientId}, User: ${externalUserId}`);
+
+    try {
+      const result = await this.avatarService.deleteAvatar(clientId, externalUserId);
+      this.logger.log(`[deleteAvatar] Success - Client: ${clientId}, User: ${externalUserId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[deleteAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`
+      );
+      throw error;
+    }
   }
 }
 
