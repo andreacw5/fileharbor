@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { PrismaService } from '@/prisma/prisma.service';
 import { StatsResponseDto } from './dto/stats-response.dto';
+import { ClientId } from '@/client/decorators/client.decorator';
 
 @ApiTags('App')
 @Controller()
@@ -34,10 +35,7 @@ export class StatusController {
   @Get('stats')
   @ApiOperation({ summary: 'Get client activity dashboard stats' })
   @ApiResponse({ status: 200, type: StatsResponseDto })
-  async getStats(@Query('clientId') clientId: string): Promise<StatsResponseDto> {
-    if (!clientId) {
-      throw new BadRequestException('clientId query parameter is required');
-    }
+  async getStats(@ClientId() clientId: string): Promise<StatsResponseDto> {
 
     // Aggregate stats
     const [totalImages, totalAlbums, totalStorage, topImages] = await Promise.all([
