@@ -118,14 +118,15 @@ model Avatar {
 
 // Album entity
 model Album {
-  id          String   @id @default(uuid())
-  clientId    String
-  userId      String
-  name        String
-  description String?
-  isPublic    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid())
+  clientId        String
+  userId          String
+  externalAlbumId String? // ID from client's application
+  name            String
+  description     String?
+  isPublic        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
   client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -133,6 +134,7 @@ model Album {
   albumImages AlbumImage[]
   albumTokens AlbumToken[]
 
+  @@unique([clientId, externalAlbumId])
   @@index([clientId])
   @@index([userId])
   @@index([isPublic])

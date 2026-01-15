@@ -306,5 +306,158 @@ export class AlbumController {
       throw error;
     }
   }
+
+  // ==================== External Album ID Routes ====================
+
+  @Get('external/:externalAlbumId')
+  @ApiOperation({ summary: 'Get album with images by external ID' })
+  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  async getAlbumByExternalId(
+    @ClientId() clientId: string,
+    @UserId() userId: string,
+    @Param('externalAlbumId') externalAlbumId: string,
+  ): Promise<AlbumResponseDto> {
+    this.logger.debug(
+      `[getAlbumByExternalId] Starting - External ID: ${externalAlbumId}, Client: ${clientId}, User: ${userId}`
+    );
+
+    try {
+      const result = await this.albumService.getAlbumWithImagesByExternalId(
+        externalAlbumId,
+        clientId,
+        userId
+      );
+      this.logger.log(`[getAlbumByExternalId] Success - External ID: ${externalAlbumId}, Images: ${result.imageCount}`);
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[getAlbumByExternalId] Failed - External ID: ${externalAlbumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  @Patch('external/:externalAlbumId')
+  @ApiOperation({ summary: 'Update album by external ID' })
+  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  async updateAlbumByExternalId(
+    @ClientId() clientId: string,
+    @UserId() userId: string,
+    @Param('externalAlbumId') externalAlbumId: string,
+    @Body() dto: UpdateAlbumDto,
+  ): Promise<AlbumResponseDto> {
+    if (!userId) {
+      this.logger.warn(
+        `[updateAlbumByExternalId] Missing User ID - Client: ${clientId}, External ID: ${externalAlbumId}`
+      );
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    }
+
+    this.logger.debug(
+      `[updateAlbumByExternalId] Starting - External ID: ${externalAlbumId}, Client: ${clientId}, User: ${userId}`
+    );
+
+    try {
+      const result = await this.albumService.updateAlbumByExternalId(
+        externalAlbumId,
+        clientId,
+        userId,
+        dto
+      );
+      this.logger.log(`[updateAlbumByExternalId] Success - External ID: ${externalAlbumId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[updateAlbumByExternalId] Failed - External ID: ${externalAlbumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  @Post('external/:externalAlbumId/images')
+  @ApiOperation({ summary: 'Add images to album by external ID' })
+  @ApiResponse({ status: 201, type: AlbumImagesResponseDto })
+  async addImagesToAlbumByExternalId(
+    @ClientId() clientId: string,
+    @UserId() userId: string,
+    @Param('externalAlbumId') externalAlbumId: string,
+    @Body() dto: ManageAlbumImagesDto,
+  ): Promise<AlbumImagesResponseDto> {
+    if (!userId) {
+      this.logger.warn(
+        `[addImagesToAlbumByExternalId] Missing User ID - Client: ${clientId}, External ID: ${externalAlbumId}`
+      );
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    }
+
+    this.logger.debug(
+      `[addImagesToAlbumByExternalId] Starting - External ID: ${externalAlbumId}, Client: ${clientId}, Images: ${dto.imageIds.length}`
+    );
+
+    try {
+      const result = await this.albumService.addImagesToAlbumByExternalId(
+        externalAlbumId,
+        clientId,
+        userId,
+        dto.imageIds
+      );
+      this.logger.log(
+        `[addImagesToAlbumByExternalId] Success - External ID: ${externalAlbumId}, Added: ${dto.imageIds.length}`
+      );
+      return {
+        success: true,
+        message: `Added ${dto.imageIds.length} image(s) to album`,
+        added: result.images.length,
+      };
+    } catch (error) {
+      this.logger.error(
+        `[addImagesToAlbumByExternalId] Failed - External ID: ${externalAlbumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  @Delete('external/:externalAlbumId/images')
+  @ApiOperation({ summary: 'Remove images from album by external ID' })
+  @ApiResponse({ status: 200, type: AlbumImagesResponseDto })
+  async removeImagesFromAlbumByExternalId(
+    @ClientId() clientId: string,
+    @UserId() userId: string,
+    @Param('externalAlbumId') externalAlbumId: string,
+    @Body() dto: ManageAlbumImagesDto,
+  ): Promise<AlbumImagesResponseDto> {
+    if (!userId) {
+      this.logger.warn(
+        `[removeImagesFromAlbumByExternalId] Missing User ID - Client: ${clientId}, External ID: ${externalAlbumId}`
+      );
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    }
+
+    this.logger.debug(
+      `[removeImagesFromAlbumByExternalId] Starting - External ID: ${externalAlbumId}, Client: ${clientId}, Images: ${dto.imageIds.length}`
+    );
+
+    try {
+      const result = await this.albumService.removeImagesFromAlbumByExternalId(
+        externalAlbumId,
+        clientId,
+        userId,
+        dto.imageIds
+      );
+      this.logger.log(
+        `[removeImagesFromAlbumByExternalId] Success - External ID: ${externalAlbumId}, Removed: ${result.removed}`
+      );
+      return {
+        success: true,
+        message: `Removed ${result.removed} image(s) from album`,
+        removed: result.removed,
+      };
+    } catch (error) {
+      this.logger.error(
+        `[removeImagesFromAlbumByExternalId] Failed - External ID: ${externalAlbumId}, Error: ${error.message}`
+      );
+      throw error;
+    }
+  }
 }
 

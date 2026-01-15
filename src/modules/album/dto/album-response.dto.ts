@@ -7,6 +7,11 @@ export class AlbumResponseDto {
   })
   id: string;
 
+  @ApiPropertyOptional({
+    description: 'External album ID from the client application',
+    example: 'ext-album-123',
+  })
+  externalAlbumId?: string;
 
   @ApiProperty({
     description: 'User identifier who owns the album',
@@ -50,4 +55,3 @@ export class AlbumResponseDto {
   })
   images?: any[];
 }
-
