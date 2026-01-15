@@ -40,5 +40,6 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-uploads/files/*
-uploads/avatars/*
+storage/*
+
+/generated/prisma

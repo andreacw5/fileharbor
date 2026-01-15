@@ -1,68 +1,59 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import V1Module from '../v1/v1.module';
-import { AuthModule } from '../v1/auth/auth.module';
+import { StatusController } from './status.controller';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from "@nestjs/throttler";
+import { ScheduleModule } from "@nestjs/schedule";
+import { PrismaModule } from "@/modules/prisma/prisma.module";
+import { StorageModule } from "@/modules/storage/storage.module";
+import { ClientModule } from "@/modules/client/client.module";
+import { ImageModule } from "@/modules/image/image.module";
+import { AvatarModule } from "@/modules/avatar/avatar.module";
+import { AlbumModule } from "@/modules/album/album.module";
+import { JobModule } from "@/modules/job/job.module";
 import config from '../../configs/config.schema';
-import { configValidationSchema } from '../../configs/config.validation';
-import { LoggerModule } from 'nestjs-pino';
-import { CacheModule } from '@nestjs/cache-manager';
+import { configValidationSchema } from '@/configs/config.validation';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      load: [config],
-      isGlobal: true,
-      cache: true,
-      validationSchema: configValidationSchema,
-    }),
-    CacheModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        ttl: configService.get('CACHE_TTL'),
-      }),
-      inject: [ConfigService],
-    }),
-    LoggerModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
-        const logtailTarget = configService.get('LOGS_TOKEN')
-          ? {
-              target: '@logtail/pino',
-              options: { sourceToken: configService.get('LOGS_TOKEN') },
-            }
-          : null;
+    controllers: [StatusController],
+    imports: [
+        // Configuration
+        ConfigModule.forRoot({
+            load: [config],
+            isGlobal: true,
+            cache: true,
+            validationSchema: configValidationSchema,
+        }),
 
-        const targets = [
-          {
-            target: 'pino-pretty',
-          },
-        ];
-
-        if (logtailTarget) {
-          targets.push(logtailTarget);
-        }
-
-        return {
-          pinoHttp: {
-            transport: {
-              targets,
-              options: {
-                singleLine: true,
-                levelFirst: true,
-              },
+        // Prometheus configuration
+        PrometheusModule.register({
+            defaultLabels: {
+                app: 'fileharbor',
             },
-            autoLogging: false,
-          },
-        };
-      },
-      inject: [ConfigService],
-    }),
-    V1Module,
-    AuthModule,
-  ],
-  controllers: [AppController],
-  providers: [AppService],
+        }),
+
+        // Rate limiting
+        ThrottlerModule.forRootAsync({
+            imports: [ConfigModule],
+            useFactory: (configService: ConfigService) => [{
+                ttl: configService.get('throttle.ttl') * 1000,
+                limit: configService.get('throttle.limit'),
+            }],
+            inject: [ConfigService],
+        }),
+
+        // Scheduling for jobs
+        ScheduleModule.forRoot(),
+
+        // Core modules
+        PrismaModule,
+        StorageModule,
+        ClientModule,
+        ImageModule,
+        AvatarModule,
+        AlbumModule,
+        JobModule,
+    ],
 })
 export class AppModule {}
+

@@ -4,3 +4,5 @@ npm-debug.log
 Dockerfile
 .dockerignore
 dist
+.idea
+app_logo.png
