@@ -5,6 +5,10 @@ export class UploadImageDto {
 
   @IsOptional()
   @IsString()
+  userId?: string;
+
+  @IsOptional()
+  @IsString()
   albumId?: string;
 
   @IsOptional()
