@@ -114,6 +114,44 @@ export class StorageService {
   }
 
   /**
+   * List all directories in a path
+   */
+  async listDirectories(dirPath: string): Promise<string[]> {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      return entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name);
+    } catch (error) {
+      // If directory doesn't exist or is not accessible, return empty array
+      return [];
+    }
+  }
+
+  /**
+   * Get all client domains from storage
+   */
+  async getAllClientDomains(): Promise<string[]> {
+    return this.listDirectories(this.storagePath);
+  }
+
+  /**
+   * Get all image IDs for a client domain
+   */
+  async getClientImageIds(domain: string): Promise<string[]> {
+    const imagesPath = path.join(this.getClientPath(domain), 'images');
+    return this.listDirectories(imagesPath);
+  }
+
+  /**
+   * Get all avatar user IDs for a client domain
+   */
+  async getClientAvatarUserIds(domain: string): Promise<string[]> {
+    const avatarsPath = path.join(this.getClientPath(domain), 'avatars');
+    return this.listDirectories(avatarsPath);
+  }
+
+  /**
    * Convert image to WebP
    */
   async convertToWebP(inputBuffer: Buffer, quality: number = 85): Promise<Buffer> {
