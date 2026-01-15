@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 
@@ -12,7 +13,10 @@ import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 export class AlbumService {
   private readonly logger = new Logger(AlbumService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private webhook: WebhookService,
+  ) {}
 
   /**
    * Create album
@@ -35,6 +39,20 @@ export class AlbumService {
           description: dto.description,
           isPublic: dto.isPublic || false,
         },
+      });
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_CREATED, {
+        albumId: album.id,
+        name: album.name,
+        description: album.description,
+        isPublic: album.isPublic,
+        userId,
+      }).catch((error) => {
+        this.logger.warn(
+          `[createAlbum] Failed to send webhook for album ${album.id}:`,
+          error instanceof Error ? error.message : error
+        );
       });
 
       this.logger.log(`[createAlbum] Success - Album ID: ${album.id}, Client: ${clientId}`);
@@ -224,6 +242,20 @@ export class AlbumService {
         },
       });
 
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
+        albumId: updated.id,
+        name: updated.name,
+        description: updated.description,
+        isPublic: updated.isPublic,
+        userId,
+      }).catch((error) => {
+        this.logger.warn(
+          `[updateAlbum] Failed to send webhook for album ${updated.id}:`,
+          error instanceof Error ? error.message : error
+        );
+      });
+
       this.logger.log(`[updateAlbum] Success - Album ID: ${albumId}`);
       return this.formatAlbumResponse(updated);
     } catch (error) {
@@ -252,6 +284,17 @@ export class AlbumService {
     try {
       await this.prisma.album.delete({
         where: { id: albumId },
+      });
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
+        id: albumId,
+        timestamp: new Date().toISOString(),
+      }).catch((error) => {
+        this.logger.warn(
+          `[deleteAlbum] Failed to send webhook for album ${albumId}:`,
+          error instanceof Error ? error.message : error
+        );
       });
 
       this.logger.log(`[deleteAlbum] Success - Album ID: ${albumId}`);
@@ -330,6 +373,20 @@ export class AlbumService {
         ),
       );
 
+      // Send webhook notifications for each image added (non-blocking)
+      albumImages.forEach((ai) => {
+        this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
+          albumId,
+          imageId: ai.imageId,
+          albumName: album.name,
+        }).catch((error) => {
+          this.logger.warn(
+            `[addImagesToAlbum] Failed to send webhook for image ${ai.imageId} added to album ${albumId}:`,
+            error instanceof Error ? error.message : error
+          );
+        });
+      });
+
       this.logger.log(
         `[addImagesToAlbum] Success - Album ID: ${albumId}, Added: ${albumImages.length}`
       );
@@ -378,6 +435,18 @@ export class AlbumService {
             imageId,
           },
         },
+      });
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
+        albumId,
+        imageId,
+        timestamp: new Date().toISOString(),
+      }).catch((error) => {
+        this.logger.warn(
+          `[removeImageFromAlbum] Failed to send webhook for image ${imageId} removed from album ${albumId}:`,
+          error instanceof Error ? error.message : error
+        );
       });
 
       this.logger.log(`[removeImageFromAlbum] Success - Album ID: ${albumId}, Image ID: ${imageId}`);

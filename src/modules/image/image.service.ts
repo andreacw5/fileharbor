@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
+import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -29,6 +30,7 @@ export class ImageService {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
+    private webhook: WebhookService,
   ) {
     // Original should be high quality to preserve image fidelity
     this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
@@ -164,6 +166,22 @@ export class ImageService {
           tags: tags || [],
           description: description || null,
         },
+      });
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, {
+        imageId: image.id,
+        originalName: image.originalName,
+        width: image.width,
+        height: image.height,
+        size: image.size,
+        format: image.format,
+        userId: user.externalUserId,
+      }).catch((error) => {
+        this.logger.warn(
+          `[uploadImage] Failed to send webhook for image ${imageId}:`,
+          error instanceof Error ? error.message : error
+        );
       });
 
       // Add to album if specified
@@ -376,6 +394,17 @@ export class ImageService {
       this.logger.debug(`[deleteImage] Deleting from database - ID: ${imageId}`);
       await this.prisma.image.delete({
         where: { id: imageId },
+      });
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_DELETED, {
+        id: imageId,
+        timestamp: new Date().toISOString(),
+      }).catch((error) => {
+        this.logger.warn(
+          `[deleteImage] Failed to send webhook for image ${imageId}:`,
+          error instanceof Error ? error.message : error
+        );
       });
 
       this.logger.log(

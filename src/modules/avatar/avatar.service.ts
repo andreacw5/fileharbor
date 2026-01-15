@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
+import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
@@ -22,6 +23,7 @@ export class AvatarService {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
+    private webhook: WebhookService,
   ) {
     // Original should be high quality to preserve avatar fidelity
     this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
@@ -168,6 +170,20 @@ export class AvatarService {
         },
       });
 
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.AVATAR_UPLOADED, {
+        avatarId: avatar.id,
+        userId: externalUserId,
+        width: avatar.width,
+        height: avatar.height,
+        size: avatar.size,
+      }).catch((error) => {
+        this.logger.warn(
+          `[uploadAvatar] Failed to send webhook for avatar ${avatar.id}:`,
+          error instanceof Error ? error.message : error
+        );
+      });
+
       this.logger.log(
         `[uploadAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${webpBuffer.length} bytes`
       );
@@ -277,6 +293,17 @@ export class AvatarService {
             userId: user.id,
           },
         },
+      });
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(clientId, WebhookEvent.AVATAR_DELETED, {
+        id: avatar.id,
+        timestamp: new Date().toISOString(),
+      }).catch((error) => {
+        this.logger.warn(
+          `[deleteAvatar] Failed to send webhook for avatar ${avatar.id}:`,
+          error instanceof Error ? error.message : error
+        );
       });
 
       this.logger.log(
