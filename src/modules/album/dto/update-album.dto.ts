@@ -3,6 +3,14 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateAlbumDto {
   @ApiPropertyOptional({
+    description: 'External album ID from the client application',
+    example: 'ext-album-123',
+  })
+  @IsOptional()
+  @IsString()
+  externalAlbumId?: string;
+
+  @ApiPropertyOptional({
     description: 'Album name',
     example: 'Updated Vacation Photos',
   })

@@ -358,22 +358,21 @@ export class ImageService {
   /**
    * Delete image
    */
-  async deleteImage(imageId: string, clientId: string, userId: string): Promise<DeleteResponseDto> {
+  async deleteImage(imageId: string, clientId: string): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+      `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}`
     );
 
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
         clientId,
-        userId,
       },
     });
 
     if (!image) {
       this.logger.warn(
-        `[deleteImage] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+        `[deleteImage] Image not found - ID: ${imageId}, Client: ${clientId}`
       );
       throw new NotFoundException('Image not found');
     }

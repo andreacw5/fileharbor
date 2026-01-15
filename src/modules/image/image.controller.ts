@@ -91,9 +91,15 @@ export class ImageController {
     );
 
     try {
+      // Use userId from DTO if provided, otherwise use from decorator (X-User-Id header)
+      const effectiveUserId = dto.userId || userId;
+      this.logger.debug(
+        `[Upload] Effective User ID: ${effectiveUserId || 'system'}`
+      );
+
       const result = await this.imageService.uploadImage(
         clientId,
-        userId,
+        effectiveUserId,
         file,
         dto.albumId,
         dto.tags,
@@ -102,7 +108,7 @@ export class ImageController {
       );
 
       this.logger.log(
-        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, User: ${userId || 'anonymous'}, Size: ${file.size} bytes`
+        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, User: ${effectiveUserId || 'system'}, Size: ${file.size} bytes`
       );
 
       return result;
@@ -371,25 +377,20 @@ export class ImageController {
 
 
   @Delete(':imageId')
-  @ApiOperation({ summary: 'Delete image', description: 'Permanently delete image and files. Only owner can delete.' })
+  @ApiOperation({ summary: 'Delete image', description: 'Permanently delete image and files.' })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
   @ApiResponse({ status: 200, description: 'Deleted successfully', type: DeleteResponseDto })
-  @ApiResponse({ status: 400, description: 'Missing User ID' })
-  @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async deleteImage(
     @ClientId() clientId: string,
-    @UserId() userId: string,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[DeleteImage] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+      `[DeleteImage] Starting - ImageId: ${imageId}, Client: ${clientId}`
     );
 
-    const validUserId = this.imageService.validateUserId(userId);
-
     try {
-      const result = await this.imageService.deleteImage(imageId, clientId, validUserId);
+      const result = await this.imageService.deleteImage(imageId, clientId);
 
       this.logger.log(`[DeleteImage] Success - ImageId: ${imageId}`);
 

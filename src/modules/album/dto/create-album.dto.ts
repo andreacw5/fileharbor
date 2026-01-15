@@ -2,6 +2,14 @@ import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAlbumDto {
+  @ApiPropertyOptional({
+    description: 'External album ID from the client application',
+    example: 'ext-album-123',
+  })
+  @IsOptional()
+  @IsString()
+  externalAlbumId?: string;
+
   @ApiProperty({
     description: 'Album name',
     example: 'Vacation Photos 2025',
