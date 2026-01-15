@@ -1,4 +1,4 @@
-FROM node:23.11.0-alpine3.21 AS base
+FROM node:24.13.0-alpine3.23 AS base
 
 ENV NODE_ENV=build
 
