@@ -34,7 +34,7 @@ async function bootstrap() {
 
     app.use(json({ limit: '5mb' }));
 
-    const productionPath = process.env.NODE_ENV === 'develop' ? '' : '/api';
+    const productionPath = process.env.NODE_ENV === 'develop' ? '' : '/v2';
 
     // Swagger documentation
     const config = new DocumentBuilder()

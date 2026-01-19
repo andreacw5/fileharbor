@@ -96,5 +96,14 @@ export class GetImageDto {
   @IsOptional()
   @IsString()
   token?: string;
+
+  @ApiPropertyOptional({
+    description: 'Timestamp for cache busting (ignored by server, used by browser to force reload)',
+    example: '1768848792396',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  t?: string;
 }
 

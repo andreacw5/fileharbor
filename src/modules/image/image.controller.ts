@@ -159,7 +159,7 @@ export class ImageController {
   @Get(':imageId')
   @ApiOperation({
     summary: 'Get image',
-    description: 'Unified endpoint: retrieve image file, thumbnail, metadata, or download. Supports transformations (resize, format, quality). Use ?token for private images or share links. Public for non-private images.',
+    description: 'Unified endpoint: retrieve image file, thumbnail, metadata, or download. Supports transformations (resize, format, quality). Use ?token for private images or share links. Use ?t for cache busting. Public for non-private images.',
   })
   @ApiResponse({
     status: 200,

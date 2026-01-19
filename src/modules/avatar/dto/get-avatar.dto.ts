@@ -1,4 +1,4 @@
-import { IsOptional, IsBoolean } from 'class-validator';
+import { IsOptional, IsBoolean, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -32,5 +32,14 @@ export class GetAvatarDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   download?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Timestamp for cache busting (ignored by server, used by browser to force reload)',
+    example: '1768848792396',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  t?: string;
 }
 
