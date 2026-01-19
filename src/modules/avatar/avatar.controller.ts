@@ -90,7 +90,7 @@ export class AvatarController {
   @Get(':externalUserId')
   @ApiOperation({
     summary: 'Get user avatar (public endpoint)',
-    description: 'Retrieve user avatar by external user ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), download (force download)',
+    description: 'Retrieve user avatar by external user ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), download (force download), t (timestamp for cache busting)',
   })
   @ApiResponse({ status: 200, description: 'Avatar file or metadata' })
   @ApiResponse({ status: 404, description: 'Avatar not found' })
