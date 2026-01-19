@@ -378,13 +378,18 @@ export class AvatarService {
    */
   private formatAvatarResponse(avatar: any, externalUserId: string): AvatarResponseDto {
     const apiPrefix = this.config.get('API_PREFIX') || 'v2';
+    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
+
+    const url = `/${apiPrefix}/avatars/${externalUserId}`;
+    const thumbnailUrl = `/${apiPrefix}/avatars/${externalUserId}?thumb=true`;
 
     return plainToInstance(
       AvatarResponseDto,
       {
         ...avatar,
-        url: `/${apiPrefix}/avatars/${externalUserId}`,
-        thumbnailUrl: `/${apiPrefix}/avatars/${externalUserId}?thumb=true`,
+        url,
+        thumbnailUrl,
+        fullPath: `${baseUrl}${url}`
       },
       { excludeExtraneousValues: true },
     );

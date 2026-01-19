@@ -80,5 +80,12 @@ export class AvatarResponseDto {
   })
   @Expose()
   thumbnailUrl?: string;
+
+  @ApiProperty({
+    description: 'Full URL to access the avatar (baseUrl + url)',
+    example: 'http://localhost:3000/v2/avatars/user-123',
+  })
+  @Expose()
+  fullPath: string;
 }
 
