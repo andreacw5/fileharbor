@@ -762,13 +762,18 @@ export class ImageService {
    */
   private formatImageResponse(image: any): ImageResponseDto {
     const apiPrefix = this.config.get('API_PREFIX') || 'v2';
+    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
+
+    const url = `/${apiPrefix}/images/${image.id}`;
+    const thumbnailUrl = `/${apiPrefix}/images/${image.id}?thumb=true`;
 
     return plainToInstance(
       ImageResponseDto,
       {
         ...image,
-        url: `/${apiPrefix}/images/${image.id}`,
-        thumbnailUrl: `/${apiPrefix}/images/${image.id}?thumb=true`,
+        url,
+        thumbnailUrl,
+        fullPath: `${baseUrl}${url}`,
       },
       { excludeExtraneousValues: true },
     );
