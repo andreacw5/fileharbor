@@ -4,5 +4,36 @@ npm-debug.log
 Dockerfile
 .dockerignore
 dist
+
+# Local pnpm store and caches
+.pnpm-store
+.pnpm
+
+# Environment and editor files
+.env
+.env.*
+.vscode
 .idea
-app_logo.png
+.DS_Store
+
+# Logs and temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tests and coverage
+test
+tests
+coverage
+
+# Prisma migrations (don't include SQL migrations in image)
+prisma/migrations
+
+# Scripts and local build artifacts
+scripts
+*.tgz
+
+# Misc
+*.zip
+*.tar
