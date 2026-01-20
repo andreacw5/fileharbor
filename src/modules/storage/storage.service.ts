@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -6,6 +6,7 @@ import * as sharp from 'sharp';
 
 @Injectable()
 export class StorageService {
+  private readonly logger = new Logger(StorageService.name);
   private readonly storagePath: string;
 
   constructor(private configService: ConfigService) {
@@ -19,7 +20,8 @@ export class StorageService {
     try {
       await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
-      throw new InternalServerErrorException('Failed to create directory');
+      this.logger.error(`[ensureDirectory] Failed to create directory: ${dirPath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to create directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -75,7 +77,8 @@ export class StorageService {
       await this.ensureDirectory(dir);
       await fs.writeFile(filePath, buffer);
     } catch (error) {
-      throw new InternalServerErrorException('Failed to save file');
+      this.logger.error(`[saveFile] Failed to save file: ${filePath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -86,7 +89,8 @@ export class StorageService {
     try {
       return await fs.readFile(filePath);
     } catch (error) {
-      throw new InternalServerErrorException('Failed to read file');
+      this.logger.error(`[readFile] Failed to read file: ${filePath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -97,7 +101,8 @@ export class StorageService {
     try {
       await fs.rm(dirPath, { recursive: true, force: true });
     } catch (error) {
-      throw new InternalServerErrorException('Failed to delete directory');
+      this.logger.error(`[deleteDirectory] Failed to delete directory: ${dirPath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to delete directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -160,7 +165,8 @@ export class StorageService {
         .webp({ quality })
         .toBuffer();
     } catch (error) {
-      throw new InternalServerErrorException('Failed to convert image to WebP');
+      this.logger.error(`[convertToWebP] Failed to convert image to WebP`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to convert image to WebP: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -216,7 +222,8 @@ export class StorageService {
           }).toBuffer();
       }
     } catch (error) {
-      throw new InternalServerErrorException('Failed to create thumbnail');
+      this.logger.error(`[createThumbnail] Failed to create thumbnail`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to create thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -238,7 +245,8 @@ export class StorageService {
         size: buffer.length,
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to get image metadata');
+      this.logger.error(`[getImageMetadata] Failed to get image metadata`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to get image metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -327,8 +335,8 @@ export class StorageService {
           return await pipeline.webp({ quality }).toBuffer();
       }
     } catch (error) {
-      throw new InternalServerErrorException('Failed to resize image');
+      this.logger.error(`[resizeImage] Failed to resize image`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to resize image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }
-
