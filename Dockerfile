@@ -49,4 +49,4 @@ COPY --from=builder --chown=app:app /usr/src/app/node_modules ./node_modules
 USER app
 
 # Start the server using the production build
-CMD [ "node", "dist/src/main.js" ]
+CMD [ "node", "dist/main.js" ]
