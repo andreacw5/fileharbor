@@ -36,8 +36,8 @@ ENV NODE_ENV=production
 # Create app directory
 WORKDIR /usr/src/app
 
-# Create a non-root user and group
-RUN groupadd -r app && useradd -r -g app app
+# Create a non-root user and group with specific UID/GID to match host user
+RUN groupadd -g 1001 app && useradd -u 1001 -g app -m app
 
 # Copy built artifacts and dependencies from builder with ownership set during copy
 COPY --chown=app:app package.json pnpm-lock.yaml ./
