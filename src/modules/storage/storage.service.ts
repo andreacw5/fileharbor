@@ -40,6 +40,29 @@ export class StorageService {
   }
 
   /**
+   * Get default fallback image path
+   */
+  getDefaultImagePath(type: 'not_found' | 'permission_denied'): string {
+    const filename = type === 'not_found'
+      ? 'fileharbor_not_found.webp'
+      : 'fileharbor_permission_denided.webp';
+    return path.join(this.storagePath, 'defaults.fileharbor', filename);
+  }
+
+  /**
+   * Get default fallback image buffer
+   */
+  async getDefaultImage(type: 'not_found' | 'permission_denied'): Promise<Buffer> {
+    const imagePath = this.getDefaultImagePath(type);
+    try {
+      return await fs.readFile(imagePath);
+    } catch (error) {
+      this.logger.error(`[getDefaultImage] Failed to read default image: ${imagePath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException('Failed to load default image');
+    }
+  }
+
+  /**
    * Get full file path for image variant
    */
   getImageFilePath(
