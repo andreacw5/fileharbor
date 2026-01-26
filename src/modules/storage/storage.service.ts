@@ -29,10 +29,15 @@ export class StorageService {
 
   /**
    * Sanitize path component to prevent directory traversal
+   * Allows dots for domain names (e.g., example.com)
+   * Blocks path separators and null bytes
    */
   private sanitizePathComponent(component: string): string {
-    // Remove any path traversal sequences and invalid characters
-    return component.replace(/[/\\.\0]/g, '_');
+    // Remove path separators, parent directory references, and null bytes
+    // Allow dots for domain names but block ".." sequences
+    return component
+      .replace(/\.\./g, '_')  // Block parent directory traversal
+      .replace(/[/\\\0]/g, '_');  // Block path separators and null bytes
   }
 
   /**
