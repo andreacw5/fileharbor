@@ -40,7 +40,9 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# Storage - ignore all except defaults
 storage/*
-!/storage/default.fileharbor.local/defaults/
+!/storage/defaults.fileharbor/
+!/storage/defaults.fileharbor/**
 
 /generated/prisma

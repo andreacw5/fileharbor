@@ -220,8 +220,7 @@ pnpm run prisma:migrate
 
 ## Roadmap
 
-### 🚀 Core Features (Next Release)
-- [ ] **Cloud Storage Integration**: S3/Google Cloud/Azure Blob support as alternative to local storage
+### 🚀 Core Features
 - [ ] **Advanced Image Transformations**: Watermarks, filters, blur, grayscale, sepia effects
 - [ ] **Batch Upload API**: Multiple image upload in single request with progress tracking
 - [ ] **Image Collections**: Extended album functionality with sorting, filtering, and bulk operations
@@ -230,7 +229,6 @@ pnpm run prisma:migrate
 - [ ] **Enhanced Analytics Dashboard**: Real-time usage metrics, popular images, client statistics
 - [ ] **Performance Metrics**: API response times, optimization job statistics, storage usage trends
 - [ ] **Client Usage Reports**: Bandwidth consumption, storage quotas, API call analytics
-- [ ] **Health Check Endpoints**: Detailed system status including database, storage, and job queues
 
 ### 🔐 Security & Authentication
 - [ ] **API Rate Limiting per Client**: Individual throttling limits based on client subscription
@@ -246,16 +244,13 @@ pnpm run prisma:migrate
 - [ ] **WebSocket Support**: Real-time notifications for upload progress, optimization status
 - [ ] **Webhook System**: Client notifications for image events (upload, optimization, deletion)
 - [ ] **CDN Integration**: CloudFlare, AWS CloudFront integration for global distribution
-- [ ] **GraphQL API**: Alternative to REST for complex data queries and relations
 
 ### 📱 User Experience
-- [ ] **Image Comparison Tool**: Before/after optimization views with metrics
-- [ ] **Drag & Drop Upload Interface**: Enhanced web interface for bulk operations
 - [ ] **Image Search & Filtering**: Advanced search by tags, date ranges, formats, sizes
 - [ ] **Bulk Operations Dashboard**: Mass deletion, optimization, and metadata editing
 
 ### 🏗️ Infrastructure & Performance
-- [ ] **Caching Layer**: Redis caching for frequently accessed images and metadata
+- [ ] **Caching Layer**: Redis caching for frequently accessed images
 
 ### 🌐 Enterprise Features
 - [ ] **SSO Integration**: SAML/OAuth2 integration for enterprise client authentication
@@ -265,7 +260,6 @@ pnpm run prisma:migrate
 ### 🔄 Automation & Intelligence
 - [ ] **Smart Cleanup**: Auto-deletion of unused images based on configurable policies
 - [ ] **Predictive Optimization**: Machine learning for optimal compression settings
-- [ ] **Auto-Scaling Jobs**: Dynamic job scheduling based on upload patterns
 - [ ] **Content Insights**: Usage analytics and recommendations for image management
 
 ## License
