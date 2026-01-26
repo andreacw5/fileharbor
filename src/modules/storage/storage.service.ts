@@ -14,10 +14,38 @@ export class StorageService {
   }
 
   /**
+   * Validate that a path is within the storage directory
+   * Prevents directory traversal attacks
+   */
+  private validatePath(targetPath: string): void {
+    const normalizedTarget = path.resolve(targetPath);
+    const normalizedStorage = path.resolve(this.storagePath);
+
+    if (!normalizedTarget.startsWith(normalizedStorage)) {
+      this.logger.error(`[validatePath] Path traversal attempt detected: ${targetPath}`);
+      throw new InternalServerErrorException('Invalid path: Access denied');
+    }
+  }
+
+  /**
+   * Sanitize path component to prevent directory traversal
+   * Allows dots for domain names (e.g., example.com)
+   * Blocks path separators and null bytes
+   */
+  private sanitizePathComponent(component: string): string {
+    // Remove path separators, parent directory references, and null bytes
+    // Allow dots for domain names but block ".." sequences
+    return component
+      .replace(/\.\./g, '_')  // Block parent directory traversal
+      .replace(/[/\\\0]/g, '_');  // Block path separators and null bytes
+  }
+
+  /**
    * Ensure directory exists
    */
   async ensureDirectory(dirPath: string): Promise<void> {
     try {
+      this.validatePath(dirPath);
       await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
       this.logger.error(`[ensureDirectory] Failed to create directory: ${dirPath}`, error instanceof Error ? error.stack : error);
@@ -29,14 +57,39 @@ export class StorageService {
    * Get storage path for client
    */
   getClientPath(domain: string): string {
-    return path.join(this.storagePath, domain);
+    const sanitizedDomain = this.sanitizePathComponent(domain);
+    return path.join(this.storagePath, sanitizedDomain);
   }
 
   /**
    * Get storage path for image
    */
   getImagePath(domain: string, imageId: string): string {
-    return path.join(this.getClientPath(domain), 'images', imageId);
+    const sanitizedImageId = this.sanitizePathComponent(imageId);
+    return path.join(this.getClientPath(domain), 'images', sanitizedImageId);
+  }
+
+  /**
+   * Get default fallback image path
+   */
+  getDefaultImagePath(type: 'not_found' | 'permission_denied'): string {
+    const filename = type === 'not_found'
+      ? 'fileharbor_not_found.webp'
+      : 'fileharbor_permission_denided.webp';
+    return path.join(this.storagePath, 'defaults.fileharbor', filename);
+  }
+
+  /**
+   * Get default fallback image buffer
+   */
+  async getDefaultImage(type: 'not_found' | 'permission_denied'): Promise<Buffer> {
+    const imagePath = this.getDefaultImagePath(type);
+    try {
+      return await fs.readFile(imagePath);
+    } catch (error) {
+      this.logger.error(`[getDefaultImage] Failed to read default image: ${imagePath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException('Failed to load default image');
+    }
   }
 
   /**
@@ -54,7 +107,8 @@ export class StorageService {
    * Get storage path for avatar
    */
   getAvatarPath(domain: string, userId: string): string {
-    return path.join(this.getClientPath(domain), 'avatars', userId);
+    const sanitizedUserId = this.sanitizePathComponent(userId);
+    return path.join(this.getClientPath(domain), 'avatars', sanitizedUserId);
   }
 
   /**
@@ -73,6 +127,7 @@ export class StorageService {
    */
   async saveFile(filePath: string, buffer: Buffer): Promise<void> {
     try {
+      this.validatePath(filePath);
       const dir = path.dirname(filePath);
       await this.ensureDirectory(dir);
       await fs.writeFile(filePath, buffer);
@@ -87,6 +142,7 @@ export class StorageService {
    */
   async readFile(filePath: string): Promise<Buffer> {
     try {
+      this.validatePath(filePath);
       return await fs.readFile(filePath);
     } catch (error) {
       this.logger.error(`[readFile] Failed to read file: ${filePath}`, error instanceof Error ? error.stack : error);
@@ -99,6 +155,8 @@ export class StorageService {
    */
   async deleteDirectory(dirPath: string): Promise<void> {
     try {
+      // Validate path is within storage directory before deletion
+      this.validatePath(dirPath);
       await fs.rm(dirPath, { recursive: true, force: true });
     } catch (error) {
       this.logger.error(`[deleteDirectory] Failed to delete directory: ${dirPath}`, error instanceof Error ? error.stack : error);

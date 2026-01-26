@@ -11,6 +11,8 @@ import {
   UploadedFile,
   Res,
   BadRequestException,
+  NotFoundException,
+  ForbiddenException,
   Req,
   Logger, StreamableFile,
 } from '@nestjs/common';
@@ -26,6 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ImageService } from './image.service';
+import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { ClientId, UserId } from '@/modules/client/decorators/client.decorator';
 import { Public } from '@/modules/client/decorators/public.decorator';
@@ -49,7 +52,10 @@ import { Readable } from 'node:stream';
 export class ImageController {
   private readonly logger = new Logger(ImageController.name);
 
-  constructor(private imageService: ImageService) {}
+  constructor(
+    private imageService: ImageService,
+    private storageService: StorageService,
+  ) {}
 
 
   @Post()
@@ -254,6 +260,37 @@ export class ImageController {
       });
 
     } catch (error) {
+      // Return default images for 404 and 403 errors (only for file requests, not metadata)
+      if (!query.info && (error instanceof NotFoundException || error instanceof ForbiddenException)) {
+        const defaultType = error instanceof NotFoundException ? 'not_found' : 'permission_denied';
+
+        this.logger.warn(
+          `[GetImage] ${defaultType.toUpperCase()} | ${imageId} | Returning default image | ${error.message}`
+        );
+
+        try {
+          const buffer = await this.storageService.getDefaultImage(defaultType);
+          const mimeType = 'image/webp';
+
+          res.set({
+            'Content-Type': mimeType,
+            'Cache-Control': 'public, max-age=3600',
+            'X-FileHarbor-Fallback': defaultType,
+          });
+
+          return new StreamableFile(Readable.from(buffer), {
+            type: mimeType,
+            length: buffer.length,
+          });
+        } catch (defaultError) {
+          this.logger.error(
+            `[GetImage] FAILED to load default image | ${defaultType} | ${defaultError.message}`
+          );
+          // If default image fails, throw the original error
+          throw error;
+        }
+      }
+
       this.logger.error(`[GetImage] FAILED | ${imageId} | ${error.message}`);
       throw error;
     }
