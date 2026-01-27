@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom, catchError, of } from 'rxjs';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { formatFileSize } from '@/modules/webhook/helpers/file-size.helper';
 
 export interface WebhookPayload {
   event: string;
@@ -131,7 +132,8 @@ export class WebhookService {
       fields: this.buildEmbedFields(event, payload.data),
       timestamp: payload.timestamp,
       footer: {
-        text: 'FileHarbor Monitoring Sender',
+        text: 'FileHarbor Monitoring',
+        icon_url: 'https://fileharbor.heyatom.dev/v2/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
       },
     };
 
@@ -142,7 +144,6 @@ export class WebhookService {
       embed.thumbnail = {
         url: thumbnailUrl,
       };
-      embed.footer.icon_url = thumbnailUrl;
     }
 
     // Add avatar thumbnail for avatar upload events
@@ -152,7 +153,6 @@ export class WebhookService {
       embed.thumbnail = {
         url: avatarUrl,
       };
-      embed.footer.icon_url = avatarUrl;
     }
 
     return embed;
@@ -166,48 +166,48 @@ export class WebhookService {
   ): { title: string; description: string; color: number } {
     const configs: Record<WebhookEvent, { title: string; description: string; color: number }> = {
       [WebhookEvent.IMAGE_UPLOADED]: {
-        title: 'Nuova immagine caricata!',
-        description: 'Una nuova immagine è stata correttamente caricata.',
+        title: 'New Image Uploaded!',
+        description: 'A new image has been successfully uploaded.',
         color: 0xFFAD58, // Orange color from your example
       },
       [WebhookEvent.IMAGE_DELETED]: {
-        title: 'Immagine eliminata',
-        description: 'Un\'immagine è stata eliminata.',
+        title: 'Image Deleted',
+        description: 'An image has been deleted.',
         color: 0xe74c3c,
       },
       [WebhookEvent.AVATAR_UPLOADED]: {
-        title: 'Nuovo avatar caricato!',
-        description: 'Un nuovo avatar è stato correttamente caricato.',
+        title: 'New Avatar Uploaded!',
+        description: 'A new avatar has been successfully uploaded.',
         color: 0xFFAD58,
       },
       [WebhookEvent.AVATAR_DELETED]: {
-        title: 'Avatar eliminato',
-        description: 'Un avatar è stato eliminato.',
+        title: 'Avatar Deleted',
+        description: 'An avatar has been deleted.',
         color: 0xe74c3c,
       },
       [WebhookEvent.ALBUM_CREATED]: {
-        title: 'Nuovo album creato!',
-        description: 'Un nuovo album è stato creato.',
+        title: 'New Album Created!',
+        description: 'A new album has been created.',
         color: 0x2ecc71,
       },
       [WebhookEvent.ALBUM_UPDATED]: {
-        title: 'Album aggiornato',
-        description: 'Un album è stato aggiornato.',
+        title: 'Album Updated',
+        description: 'An album has been updated.',
         color: 0xf39c12,
       },
       [WebhookEvent.ALBUM_DELETED]: {
-        title: 'Album eliminato',
-        description: 'Un album è stato eliminato.',
+        title: 'Album Deleted',
+        description: 'An album has been deleted.',
         color: 0xe74c3c,
       },
       [WebhookEvent.IMAGE_ADDED_TO_ALBUM]: {
-        title: 'Immagine aggiunta all\'album',
-        description: 'Una immagine è stata aggiunta a un album.',
+        title: 'Image Added to Album',
+        description: 'An image has been added to an album.',
         color: 0x3498db,
       },
       [WebhookEvent.IMAGE_REMOVED_FROM_ALBUM]: {
-        title: 'Immagine rimossa dall\'album',
-        description: 'Una immagine è stata rimossa da un album.',
+        title: 'Image Removed from Album',
+        description: 'An image has been removed from an album.',
         color: 0xe74c3c,
       },
     };
@@ -224,37 +224,37 @@ export class WebhookService {
     switch (event) {
       case WebhookEvent.IMAGE_UPLOADED:
         fields.push(
-          { name: 'Identificativo', value: data.imageId || 'N/A' },
-          { name: 'Dimensioni', value: `${(data.size / 1024).toFixed(2)} KB`, inline: true },
-          { name: 'Utente', value: data.userId || 'System', inline: true }
+          { name: 'ID', value: data.imageId || 'N/A' },
+          { name: 'Size', value: formatFileSize(data.size), inline: true },
+          { name: 'User', value: data.userId || 'System', inline: true }
         );
         break;
 
       case WebhookEvent.AVATAR_UPLOADED:
         fields.push(
-          { name: 'Identificativo', value: data.avatarId || 'N/A' },
-          { name: 'Dimensioni', value: `${(data.size / 1024).toFixed(2)} KB`, inline: true },
-          { name: 'Utente', value: data.userId || 'System', inline: true }
+          { name: 'ID', value: data.avatarId || 'N/A' },
+          { name: 'Size', value: formatFileSize(data.size), inline: true },
+          { name: 'User', value: data.userId || 'System', inline: true }
         );
         break;
 
       case WebhookEvent.ALBUM_CREATED:
       case WebhookEvent.ALBUM_UPDATED:
         fields.push(
-          { name: 'Identificativo', value: data.albumId || 'N/A' },
-          { name: 'Nome', value: data.name || 'N/A' },
-          { name: 'Pubblico', value: data.isPublic ? 'Sì' : 'No', inline: true },
-          { name: 'Utente', value: data.userId || 'System', inline: true }
+          { name: 'ID', value: data.albumId || 'N/A' },
+          { name: 'Name', value: data.name || 'N/A' },
+          { name: 'Public', value: data.isPublic ? 'Yes' : 'No', inline: true },
+          { name: 'User', value: data.userId || 'System', inline: true }
         );
         if (data.description) {
-          fields.push({ name: 'Descrizione', value: data.description });
+          fields.push({ name: 'Description', value: data.description });
         }
         break;
 
       case WebhookEvent.IMAGE_ADDED_TO_ALBUM:
         fields.push(
           { name: 'Album', value: data.albumName || 'N/A' },
-          { name: 'Immagine', value: data.imageId || 'N/A' }
+          { name: 'Image', value: data.imageId || 'N/A' }
         );
         break;
 
@@ -263,8 +263,8 @@ export class WebhookService {
       case WebhookEvent.ALBUM_DELETED:
       case WebhookEvent.IMAGE_REMOVED_FROM_ALBUM:
         fields.push(
-          { name: 'Identificativo', value: data.id || 'N/A' },
-          { name: 'Timestamp', value: new Date(data.timestamp || Date.now()).toLocaleString('it-IT') }
+          { name: 'ID', value: data.id || 'N/A' },
+          { name: 'Timestamp', value: new Date(data.timestamp || Date.now()).toLocaleString('en-US') }
         );
         break;
     }
