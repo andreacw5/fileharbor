@@ -61,6 +61,7 @@ async function bootstrap() {
     logger.log(`📚 API Documentation: http://localhost:${port}/docs`);
     logger.log(`📈 Metrics endpoint: http://localhost:${port}/metrics`);
     logger.log(`📝 Logging enabled for: log, error, warn, debug, verbose`);
+    logger.log(`Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`);
 
   } catch (error) {
 
