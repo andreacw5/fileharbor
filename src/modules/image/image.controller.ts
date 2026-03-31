@@ -144,12 +144,13 @@ export class ImageController {
     const filters = {
       clientId: clientId,
       userId: query.userId,
+      albumId: query.albumId,
       page: query.page,
       perPage: query.perPage,
     };
 
     this.logger.debug(
-      `[ListImages] Client: ${clientId}, User: ${query.userId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`
+      `[ListImages] Client: ${clientId}, User: ${query.userId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`
     );
 
     const result = await this.imageService.listImages(filters);

@@ -50,6 +50,12 @@ export class AlbumResponseDto {
   imageCount?: number;
 
   @ApiPropertyOptional({
+    description: 'Cover image URL (first image in the album)',
+    example: 'http://localhost:3000/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423',
+  })
+  coverUrl?: string;
+
+  @ApiPropertyOptional({
     description: 'Array of images in the album',
     type: [Object],
   })

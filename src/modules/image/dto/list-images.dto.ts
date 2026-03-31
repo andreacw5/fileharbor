@@ -12,6 +12,14 @@ export class ListImagesDto {
   userId?: string;
 
   @ApiPropertyOptional({
+    description: 'Filter by album ID',
+    example: 'album-456'
+  })
+  @IsOptional()
+  @IsString()
+  albumId?: string;
+
+  @ApiPropertyOptional({
     description: 'Page number',
     minimum: 1,
     default: 1,

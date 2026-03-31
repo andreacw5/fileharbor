@@ -293,6 +293,7 @@ export class ImageService {
   async listImages(filters: {
     clientId?: string;
     userId?: string;
+    albumId?: string;
     page?: number;
     perPage?: number;
   }): Promise<ListImagesResponseDto> {
@@ -300,12 +301,19 @@ export class ImageService {
     const perPage = Math.min(filters.perPage || 20, 100);
     const skip = (page - 1) * perPage;
 
-    const where: { clientId?: string; userId?: string } = {};
+    const where: any = {};
     if (filters.clientId) {
       where.clientId = filters.clientId;
     }
     if (filters.userId) {
       where.userId = filters.userId;
+    }
+    if (filters.albumId) {
+      where.albumImages = {
+        some: {
+          albumId: filters.albumId,
+        },
+      };
     }
 
     const [images, total] = await Promise.all([

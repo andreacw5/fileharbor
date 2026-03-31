@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AlbumService } from './album.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { WebhookService } from '@/modules/webhook/webhook.service';
@@ -258,7 +259,6 @@ describe('AlbumService', () => {
         'different-user',
       );
 
-      expect(result.images).toHaveLength(1);
       expect(result.imageCount).toBe(1);
       expect(result.isPublic).toBe(true);
     });
@@ -272,9 +272,7 @@ describe('AlbumService', () => {
         mockUserId,
       );
 
-      expect(result.images).toHaveLength(1);
       expect(result.imageCount).toBe(1);
-      expect(result.images[0].id).toBe(mockImageId);
     });
 
     it('should throw ForbiddenException when accessing private album without permission', async () => {
@@ -688,9 +686,9 @@ describe('AlbumService', () => {
 
       const result = await service.getAlbumBySharedToken(mockToken);
 
-      expect(result.id).toBe(mockAlbumId);
-      expect(result.images).toHaveLength(1);
+      expect(result.id).toBe(mockAlbumId)
       expect(result.imageCount).toBe(1);
+      expect(result.coverUrl).toBe(`http://localhost:3000/v2/images/${mockImageId}`);
     });
 
     it('should throw ForbiddenException for invalid token', async () => {
@@ -804,8 +802,8 @@ describe('AlbumService', () => {
         'any-user',
       );
 
-      expect(result.images).toHaveLength(1);
       expect(result.isPublic).toBe(true);
+      expect(result.coverUrl).toBe(`http://localhost:3000/v2/images/${mockImageId}`);
     });
 
     it('should throw ForbiddenException for private album without permission', async () => {
