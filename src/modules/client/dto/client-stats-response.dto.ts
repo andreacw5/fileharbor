@@ -29,4 +29,7 @@ export class ClientStatsResponseDto {
     views: number;
     size: number;
   }>;
+
+  @ApiProperty({ example: 7, description: 'Images added on last 7 days' })
+  uploadedLast7Days: number;
 }

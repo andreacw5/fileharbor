@@ -18,7 +18,7 @@ export class ClientController {
   @ApiResponse({ status: 200, type: ClientStatsResponseDto })
   async getStats(@ClientId() clientId: string): Promise<ClientStatsResponseDto> {
     // Aggregate stats for the specific client
-    const [totalImages, totalAlbums, totalStorage, topImages] = await Promise.all([
+    const [totalImages, totalAlbums, totalStorage, topImages, uploadedLast7Days] = await Promise.all([
       this.prisma.image.count({ where: { clientId } }),
       this.prisma.album.count({ where: { clientId } }),
       this.prisma.image.aggregate({
@@ -36,6 +36,9 @@ export class ClientController {
           size: true,
         },
       }),
+      this.prisma.image.count({
+        where: { clientId, createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      })
     ]);
 
     return {
@@ -43,6 +46,7 @@ export class ClientController {
       totalAlbums,
       totalStorage: totalStorage._sum.size || 0,
       topImages,
+      uploadedLast7Days,
     };
   }
 }
