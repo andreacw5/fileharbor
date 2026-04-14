@@ -1,5 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
+import { GlobalStatsResponseDto } from './dto/global-stats-response.dto';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -129,5 +131,44 @@ export class ClientService {
     const randomPart = randomBytes(24).toString('hex');
     const timestamp = Date.now().toString(36); // Compact timestamp representation
     return `fh_${randomPart}_${timestamp}`;
+  }
+
+  /**
+   * Get aggregated statistics for a client
+   */
+  async getStats(clientId: string): Promise<ClientStatsResponseDto> {
+    const [totalImages, totalAlbums, totalStorage, uploadedLast7Days] = await Promise.all([
+      this.prisma.image.count({ where: { clientId } }),
+      this.prisma.album.count({ where: { clientId } }),
+      this.prisma.image.aggregate({
+        where: { clientId },
+        _sum: { size: true },
+      }),
+      this.prisma.image.count({
+        where: { clientId, createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      }),
+    ]);
+
+    return {
+      totalImages,
+      totalAlbums,
+      totalStorage: totalStorage._sum.size || 0,
+      uploadedLast7Days,
+    };
+  }
+
+  /**
+   * Get aggregated statistics across ALL clients (admin use only)
+   */
+  async getGlobalStats(): Promise<GlobalStatsResponseDto> {
+    const [totalImages, totalStorage] = await Promise.all([
+      this.prisma.image.count(),
+      this.prisma.image.aggregate({ _sum: { size: true } }),
+    ]);
+
+    return {
+      totalImages,
+      totalStorage: totalStorage._sum.size || 0,
+    };
   }
 }
