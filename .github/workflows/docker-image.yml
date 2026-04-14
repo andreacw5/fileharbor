@@ -9,23 +9,45 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  docker:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver: docker
 
       - name: Get the version
         id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
 
-      - name: Build and push the Docker image
-        uses: docker/build-push-action@v1
+      - name: Log in to GitLab Container Registry
+        uses: docker/login-action@v4
         with:
+          registry: registry.gitlab.com
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          registry: registry.gitlab.com
-          repository: heyatomdev/fileharbor
-          tags: ${{ steps.get_version.outputs.VERSION }}
-          always_pull: true
+
+      - name: Build and push the Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: registry.gitlab.com/heyatomdev/fileharbor:${{ steps.get_version.outputs.VERSION }}
+          pull: true
+
+      - name: List Docker images
+        run: docker images
+
+      - name: Scan the Docker image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: 'registry.gitlab.com/heyatomdev/fileharbor:${{ steps.get_version.outputs.VERSION }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
