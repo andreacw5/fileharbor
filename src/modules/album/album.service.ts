@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,6 +17,7 @@ export class AlbumService {
   constructor(
     private prisma: PrismaService,
     private webhook: WebhookService,
+    private config: ConfigService,
   ) {}
 
   /**
@@ -75,12 +77,16 @@ export class AlbumService {
         clientId,
       },
       include: {
+        _count: {
+          select: { albumImages: true },
+        },
         albumImages: {
-          include: {
-            image: true,
-          },
+          take: 1,
           orderBy: {
             order: 'asc',
+          },
+          include: {
+            image: true,
           },
         },
       },
@@ -104,23 +110,12 @@ export class AlbumService {
       throw new ForbiddenException('Access denied to private album');
     }
 
-    const images = album.albumImages.map((ai) => ({
-      id: ai.image.id,
-      originalName: ai.image.originalName,
-      format: ai.image.format,
-      width: ai.image.width,
-      height: ai.image.height,
-      size: ai.image.size,
-      createdAt: ai.image.createdAt,
-      url: `/v2/images/${ai.image.id}`,
-      thumbnailUrl: `/v2/images/${ai.image.id}/thumb`,
-      order: ai.order,
-    }));
-
     return {
       ...this.formatAlbumResponse(album),
-      images,
-      imageCount: images.length,
+      imageCount: album._count.albumImages,
+      coverUrl: album.albumImages[0]?.image
+        ? this.buildImageFullPath(album.albumImages[0].image.id)
+        : undefined,
     };
   }
 
@@ -137,6 +132,15 @@ export class AlbumService {
         _count: {
           select: { albumImages: true },
         },
+        albumImages: {
+          take: 1,
+          orderBy: {
+            order: 'asc',
+          },
+          include: {
+            image: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -146,6 +150,9 @@ export class AlbumService {
     return albums.map((album) => ({
       ...this.formatAlbumResponse(album),
       imageCount: album._count.albumImages,
+      coverUrl: album.albumImages[0]?.image
+        ? this.buildImageFullPath(album.albumImages[0].image.id)
+        : undefined,
     }));
   }
 
@@ -188,6 +195,15 @@ export class AlbumService {
           _count: {
             select: { albumImages: true },
           },
+          albumImages: {
+            take: 1,
+            orderBy: {
+              order: 'asc',
+            },
+            include: {
+              image: true,
+            },
+          },
         },
         orderBy: {
           createdAt: 'desc',
@@ -202,6 +218,9 @@ export class AlbumService {
       data: albums.map((album) => ({
         ...this.formatAlbumResponse(album),
         imageCount: album._count.albumImages,
+        coverUrl: album.albumImages[0]?.image
+          ? this.buildImageFullPath(album.albumImages[0].image.id)
+          : undefined,
       })),
       pagination: {
         page,
@@ -392,12 +411,11 @@ export class AlbumService {
       });
 
       this.logger.log(
-        `[addImagesToAlbum] Success - Album ID: ${albumId}, Added: ${albumImages.length}`
+        `[addImagesToAlbum] Success - Album ID: ${albumId}`
       );
 
       return {
         albumId,
-        imageCount: album.albumImages.length + albumImages.length,
         images: albumImages.map((ai) => ({ imageId: ai.imageId, order: ai.order })),
       };
     } catch (error) {
@@ -552,16 +570,20 @@ export class AlbumService {
     // Validate token expiration
     await this.validateAlbumToken(tokenRecord.albumId, token);
 
-    // Get album with images
+    // Get album with count and first image
     const album = await this.prisma.album.findUnique({
       where: { id: tokenRecord.albumId },
       include: {
+        _count: {
+          select: { albumImages: true },
+        },
         albumImages: {
-          include: {
-            image: true,
-          },
+          take: 1,
           orderBy: {
             order: 'asc',
+          },
+          include: {
+            image: true,
           },
         },
       },
@@ -571,23 +593,12 @@ export class AlbumService {
       throw new NotFoundException('Album not found');
     }
 
-    const images = album.albumImages.map((ai) => ({
-      id: ai.image.id,
-      originalName: ai.image.originalName,
-      format: ai.image.format,
-      width: ai.image.width,
-      height: ai.image.height,
-      size: ai.image.size,
-      createdAt: ai.image.createdAt,
-      url: `/v2/images/${ai.image.id}`,
-      thumbnailUrl: `/v2/images/${ai.image.id}/thumb`,
-      order: ai.order,
-    }));
-
     return {
       ...this.formatAlbumResponse(album),
-      images,
-      imageCount: images.length,
+      imageCount: album._count.albumImages,
+      coverUrl: album.albumImages[0]?.image
+        ? this.buildImageFullPath(album.albumImages[0].image.id)
+        : undefined,
     };
   }
 
@@ -702,12 +713,16 @@ export class AlbumService {
         },
       },
       include: {
+        _count: {
+          select: { albumImages: true },
+        },
         albumImages: {
-          include: {
-            image: true,
-          },
+          take: 1,
           orderBy: {
             order: 'asc',
+          },
+          include: {
+            image: true,
           },
         },
       },
@@ -735,23 +750,12 @@ export class AlbumService {
       throw new ForbiddenException('Access denied to private album');
     }
 
-    const images = album.albumImages.map((ai) => ({
-      id: ai.image.id,
-      originalName: ai.image.originalName,
-      format: ai.image.format,
-      width: ai.image.width,
-      height: ai.image.height,
-      size: ai.image.size,
-      createdAt: ai.image.createdAt,
-      url: `/v2/images/${ai.image.id}`,
-      thumbnailUrl: `/v2/images/${ai.image.id}/thumb`,
-      order: ai.order,
-    }));
-
     return {
       ...this.formatAlbumResponse(album),
-      images,
-      imageCount: images.length,
+      imageCount: album._count.albumImages,
+      coverUrl: album.albumImages[0]?.image
+        ? this.buildImageFullPath(album.albumImages[0].image.id)
+        : undefined,
     };
   }
 
@@ -897,13 +901,12 @@ export class AlbumService {
       });
 
       this.logger.log(
-        `[addImagesToAlbumByExternalId] Success - Album ID: ${album.id}, Added: ${albumImages.length}`
+        `[addImagesToAlbumByExternalId] Success - Album ID: ${album.id}`
       );
 
       return {
         albumId: album.id,
         externalAlbumId,
-        imageCount: album.albumImages.length + albumImages.length,
         images: albumImages.map((ai) => ({ imageId: ai.imageId, order: ai.order })),
       };
     } catch (error) {
@@ -972,6 +975,15 @@ export class AlbumService {
       isPublic: album.isPublic,
       createdAt: album.createdAt,
     };
+  }
+
+  /**
+   * Build full path URL for image
+   */
+  private buildImageFullPath(imageId: string): string {
+    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
+    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
+    return `${baseUrl}/${apiPrefix}/images/${imageId}`;
   }
 }
 

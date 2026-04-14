@@ -37,4 +37,7 @@ export default () => ({
   logging: {
     level: process.env.LOG_LEVEL || 'info', // debug, info, warn, error
   },
+
+  // Admin
+  adminSecret: process.env.ADMIN_SECRET,
 });

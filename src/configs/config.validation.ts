@@ -29,4 +29,7 @@ export const configValidationSchema = Joi.object({
 
   // Logging
   LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'debug', 'verbose').default('info'),
+
+  // Admin
+  ADMIN_SECRET: Joi.string().required(),
 });
