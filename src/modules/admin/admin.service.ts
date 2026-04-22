@@ -25,6 +25,7 @@ import {
   AdminAlbumResponseDto,
   AdminImageResponseDto,
   AdminAvatarResponseDto,
+  AdminClientUserResponseDto,
   DailyDataPointDto,
   StatsTrendDto,
 } from './dto/admin-response.dto';
@@ -879,6 +880,65 @@ export class AdminService {
       { ...updated, totalImages: updated._count.albumImages, activeTokens: updated._count.albumTokens },
       { excludeExtraneousValues: true },
     );
+  }
+
+  // ─── Users ────────────────────────────────────────────────────────────────
+
+  async listUsers(
+    admin: AdminJwtPayload,
+    filters: {
+      clientId?: string;
+      search?: string;
+      page?: number;
+      perPage?: number;
+    } = {},
+  ) {
+    const page = filters.page || 1;
+    const perPage = filters.perPage || 20;
+    const take = Math.min(perPage, 100);
+    const skip = (page - 1) * take;
+    const where: any = this.buildClientWhere(admin, filters.clientId);
+
+    if (filters.search) {
+      where.OR = [
+        { externalUserId: { contains: filters.search, mode: 'insensitive' } },
+        { username: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Exclude system user
+    where.externalUserId = { ...(where.externalUserId || {}), not: 'system' };
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          _count: { select: { images: true, avatars: true } },
+          client: { select: { id: true, name: true, domain: true } },
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    const data = users.map((u) =>
+      plainToInstance(
+        AdminClientUserResponseDto,
+        {
+          ...u,
+          totalImages: u._count.images,
+          totalAvatars: u._count.avatars,
+        },
+        { excludeExtraneousValues: true },
+      ),
+    );
+
+    return {
+      data,
+      pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
+    };
   }
 
   // ─── Tags ─────────────────────────────────────────────────────────────────

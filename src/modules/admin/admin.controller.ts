@@ -50,6 +50,7 @@ import {
   AdminAlbumResponseDto,
   AdminImageResponseDto,
   AdminAvatarResponseDto,
+  AdminClientUserResponseDto,
 } from './dto/admin-response.dto';
 
 @ApiTags('Admin')
@@ -208,6 +209,32 @@ export class AdminController {
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminClientResponseDto> {
     return this.adminService.updateClient(id, dto, adminUser);
+  }
+
+  // ─── Users ────────────────────────────────────────────────────────────────
+
+  @Get('users')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List users (scoped to accessible clients, system user excluded)' })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by externalUserId or username' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Paginated user list (email is never returned)' })
+  listUsers(
+    @AdminUser() adminUser: AdminJwtPayload,
+    @Query('clientId') clientId?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.adminService.listUsers(adminUser, {
+      clientId,
+      search,
+      page: Number(page) || 1,
+      perPage: Number(perPage) || 20,
+    });
   }
 
   // ─── Images ───────────────────────────────────────────────────────────────
