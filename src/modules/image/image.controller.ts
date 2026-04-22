@@ -74,6 +74,7 @@ export class ImageController {
         tags: { type: 'array', items: { type: 'string' } },
         description: { type: 'string' },
         isPrivate: { type: 'boolean', default: false },
+        username: { type: 'string', description: 'Username of the uploader (saved/updated on the user record)' },
       },
     },
   })
@@ -111,6 +112,7 @@ export class ImageController {
         dto.tags,
         dto.description,
         dto.isPrivate,
+        dto.username,
       );
 
       this.logger.log(

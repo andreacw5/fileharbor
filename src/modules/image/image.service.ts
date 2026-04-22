@@ -50,6 +50,7 @@ export class ImageService {
     tags?: string[],
     description?: string,
     isPrivate?: boolean,
+    username?: string,
   ) {
     const imageId = uuidv4();
     this.logger.debug(
@@ -78,24 +79,24 @@ export class ImageService {
       // Get or create user
       let user;
       if (externalUserId) {
-        // If externalUserId is provided, get or create that user
-        user = await this.prisma.user.findUnique({
+        // Upsert user: create if not exists, update username if provided
+        this.logger.debug(`[uploadImage] Upserting user - ID: ${imageId}, External: ${externalUserId}, Username: ${username || 'unchanged'}`);
+        user = await this.prisma.user.upsert({
           where: {
             clientId_externalUserId: {
               clientId,
               externalUserId,
             },
           },
+          update: {
+            ...(username ? { username } : {}),
+          },
+          create: {
+            clientId,
+            externalUserId,
+            ...(username ? { username } : {}),
+          },
         });
-        if (!user) {
-          this.logger.debug(`[uploadImage] Creating new user - ID: ${imageId}, External: ${externalUserId}`);
-          user = await this.prisma.user.create({
-            data: {
-              clientId,
-              externalUserId,
-            },
-          });
-        }
       } else {
         // If no externalUserId, use the system user
         user = await this.prisma.user.findUnique({
