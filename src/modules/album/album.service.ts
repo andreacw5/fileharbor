@@ -329,6 +329,24 @@ export class AlbumService {
   }
 
   /**
+   * Force-delete an album by ID scoped to a client (admin use — bypasses ownership check).
+   */
+  async forceDeleteAlbum(albumId: string, clientId: string): Promise<{ success: boolean; message: string }> {
+    const album = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+    if (!album) throw new NotFoundException('Album not found');
+
+    await this.prisma.album.delete({ where: { id: albumId } });
+
+    this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
+      id: albumId,
+      timestamp: new Date().toISOString(),
+    }).catch((err) => this.logger.warn(`[forceDeleteAlbum] Webhook failed for album ${albumId}: ${err.message}`));
+
+    this.logger.log(`[forceDeleteAlbum] Success - Album ID: ${albumId}`);
+    return { success: true, message: 'Album deleted successfully' };
+  }
+
+  /**
    * Add images to album
    */
   async addImagesToAlbum(

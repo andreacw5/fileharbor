@@ -10,6 +10,7 @@ import { ImageModule } from "@/modules/image/image.module";
 import { AvatarModule } from "@/modules/avatar/avatar.module";
 import { AlbumModule } from "@/modules/album/album.module";
 import { JobModule } from "@/modules/job/job.module";
+import { AdminModule } from "@/modules/admin/admin.module";
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '@/configs/config.validation';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
@@ -53,6 +54,7 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
         AvatarModule,
         AlbumModule,
         JobModule,
+        AdminModule,
     ],
 })
 export class AppModule {}

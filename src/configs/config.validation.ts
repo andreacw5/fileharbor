@@ -32,4 +32,8 @@ export const configValidationSchema = Joi.object({
 
   // Admin
   ADMIN_SECRET: Joi.string().required(),
+
+  // Admin JWT
+  JWT_ADMIN_SECRET: Joi.string().default('change-me-in-production'),
+  JWT_ADMIN_EXPIRES_IN: Joi.string().default('8h'),
 });

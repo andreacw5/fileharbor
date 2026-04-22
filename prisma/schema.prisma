@@ -175,6 +175,60 @@ model AlbumToken {
   @@map("album_tokens")
 }
 
+// Admin user for the management GUI
+model AdminUser {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  name              String?
+  role              AdminRole @default(VIEWER)
+  active            Boolean   @default(true)
+  allClientsAccess  Boolean   @default(false) // if true, can access all clients
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  clientAccess    AdminClientAccess[]
+  refreshTokens   AdminRefreshToken[]
+
+  @@map("admin_users")
+}
+
+// Allowed clients for an admin user (used when allClientsAccess = false)
+model AdminClientAccess {
+  id          String   @id @default(uuid())
+  adminUserId String
+  clientId    String
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, clientId])
+  @@index([adminUserId])
+  @@index([clientId])
+  @@map("admin_client_access")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  VIEWER
+}
+
+// Refresh tokens for admin sessions
+model AdminRefreshToken {
+  id          String    @id @default(uuid())
+  adminUserId String
+  tokenHash   String    @unique // SHA-256 hash of the raw token
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@map("admin_refresh_tokens")
+}
+
 // Token for private image sharing
 model ImageShareLink {
   id        String    @id @default(uuid())

@@ -321,6 +321,23 @@ export class AvatarService {
   /**
    * Get avatars not optimized
    */
+  /**
+   * Delete avatar by its internal ID (admin use — bypasses externalUserId lookup).
+   */
+  async deleteAvatarById(avatarId: string, clientId: string): Promise<DeleteAvatarResponseDto> {
+    const avatar = await this.prisma.avatar.findFirst({
+      where: { id: avatarId, clientId },
+      include: { user: { select: { externalUserId: true } } },
+    });
+
+    if (!avatar) throw new NotFoundException('Avatar not found');
+
+    const externalUserId = avatar.user?.externalUserId;
+    if (!externalUserId) throw new NotFoundException('User not found for avatar');
+
+    return this.deleteAvatar(clientId, externalUserId);
+  }
+
   async getUnoptimizedAvatars() {
     return this.prisma.avatar.findMany({
       where: {

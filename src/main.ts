@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   try {
@@ -25,7 +26,7 @@ async function bootstrap() {
     app.enableCors({
       origin: process.env.CORS_ORIGIN || '*',
       methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'X-API-Key', 'X-User-Id'],
+      allowedHeaders: ['Content-Type', 'X-API-Key', 'X-User-Id', 'Authorization'],
       credentials: true,
     });
 
@@ -33,6 +34,7 @@ async function bootstrap() {
     app.useGlobalFilters(new HttpExceptionFilter());
 
     app.use(json({ limit: '5mb' }));
+    app.use(cookieParser());
 
     const productionPath = process.env.NODE_ENV === 'develop' ? '' : '/v2';
 
@@ -42,6 +44,7 @@ async function bootstrap() {
       .setDescription('Multi-tenant image management system API')
       .setVersion(process?.env?.npm_package_version || '2.0.0')
       .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
+      .addBearerAuth()
       .setBasePath(productionPath)
       .setLicense(
         'MIT',
