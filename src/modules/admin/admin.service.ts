@@ -12,7 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { Prisma } from '../../../generated/prisma';
+import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import {
   AdminLoginResponseDto,
