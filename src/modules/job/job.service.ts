@@ -16,7 +16,7 @@ export class JobService {
    * Clean up orphaned files from disk every night at 2 AM
    * Removes image and avatar files that don't have a corresponding database record
    */
-  @Cron('0 2 * * *')
+  //@Cron('0 2 * * *')
   async cleanOrphanedFiles() {
     this.logger.log('Starting orphaned files cleanup job...');
 

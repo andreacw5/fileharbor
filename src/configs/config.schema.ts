@@ -40,4 +40,8 @@ export default () => ({
 
   // Admin
   adminSecret: process.env.ADMIN_SECRET,
+
+  // Admin JWT
+  jwtAdminSecret: process.env.JWT_ADMIN_SECRET || 'change-me-in-production',
+  jwtAdminExpiresIn: process.env.JWT_ADMIN_EXPIRES_IN || '8h',
 });

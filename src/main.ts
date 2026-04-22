@@ -25,7 +25,7 @@ async function bootstrap() {
     app.enableCors({
       origin: process.env.CORS_ORIGIN || '*',
       methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'X-API-Key', 'X-User-Id'],
+      allowedHeaders: ['Content-Type', 'X-API-Key', 'X-User-Id', 'Authorization'],
       credentials: true,
     });
 
@@ -42,6 +42,7 @@ async function bootstrap() {
       .setDescription('Multi-tenant image management system API')
       .setVersion(process?.env?.npm_package_version || '2.0.0')
       .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
+      .addBearerAuth()
       .setBasePath(productionPath)
       .setLicense(
         'MIT',
