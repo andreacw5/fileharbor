@@ -15,13 +15,35 @@ export class AdminUserResponseDto {
 }
 
 export class AdminLoginResponseDto {
-  @ApiProperty({ description: 'JWT access token' })
+  @ApiProperty({ description: 'Short-lived JWT access token' })
   @Expose()
   accessToken: string;
+
+  @ApiProperty({ description: 'Long-lived opaque refresh token' })
+  @Expose()
+  refreshToken: string;
+
+  @ApiProperty({ description: 'Access token expiry in seconds' })
+  @Expose()
+  expiresIn: number;
 
   @ApiProperty()
   @Expose()
   user: AdminUserResponseDto;
+}
+
+export class AdminRefreshResponseDto {
+  @ApiProperty({ description: 'New short-lived JWT access token' })
+  @Expose()
+  accessToken: string;
+
+  @ApiProperty({ description: 'New refresh token (old one is revoked)' })
+  @Expose()
+  refreshToken: string;
+
+  @ApiProperty({ description: 'Access token expiry in seconds' })
+  @Expose()
+  expiresIn: number;
 }
 
 export class AdminClientResponseDto {

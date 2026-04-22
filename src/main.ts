@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   try {
@@ -33,6 +34,7 @@ async function bootstrap() {
     app.useGlobalFilters(new HttpExceptionFilter());
 
     app.use(json({ limit: '5mb' }));
+    app.use(cookieParser());
 
     const productionPath = process.env.NODE_ENV === 'develop' ? '' : '/v2';
 

@@ -188,7 +188,8 @@ model AdminUser {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  clientAccess AdminClientAccess[]
+  clientAccess    AdminClientAccess[]
+  refreshTokens   AdminRefreshToken[]
 
   @@map("admin_users")
 }
@@ -211,6 +212,21 @@ model AdminClientAccess {
 enum AdminRole {
   SUPER_ADMIN
   VIEWER
+}
+
+// Refresh tokens for admin sessions
+model AdminRefreshToken {
+  id          String    @id @default(uuid())
+  adminUserId String
+  tokenHash   String    @unique // SHA-256 hash of the raw token
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@map("admin_refresh_tokens")
 }
 
 // Token for private image sharing

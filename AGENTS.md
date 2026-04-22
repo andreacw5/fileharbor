@@ -14,6 +14,7 @@ Multi-tenant NestJS 10 image management API. All data is scoped by `clientId`; r
 | `storage` | All disk I/O and Sharp image processing |
 | `webhook` | Fire-and-forget Discord webhook notifications |
 | `job` | Scheduled cleanup (cron jobs — see note below) |
+| `admin` | Admin portal: JWT auth, multi-role user management, cross-client ops |
 | `prisma` | Database service wrapper |
 
 ## Auth & Request Context
@@ -87,9 +88,35 @@ this.config.get('THUMBNAIL_SIZE')       // raw env key
 this.config.get('throttle.ttl')         // nested key from config.schema.ts
 ```
 
-## Adding a New Feature Module
+## Admin Module
 
-1. Follow existing module structure: `controller` → `service` → `dto/` subdir
+The `admin` module (`src/modules/admin/`) is a separate auth domain — it does **not** use `ClientInterceptor` or `X-API-Key`. Instead it uses its own JWT-based `Bearer` token flow:
+
+- **`AdminJwtGuard`** (`guards/admin-jwt.guard.ts`) — validates `Authorization: Bearer <token>` and attaches `request.adminUser` (`AdminJwtPayload`).
+- **`@AdminUser()`** decorator (`decorators/admin-user.decorator.ts`) — extracts `AdminJwtPayload` from the request.
+- **`AdminInitService`** — on startup, creates the first `SUPER_ADMIN` from `ADMIN_DEFAULT_EMAIL` / `ADMIN_DEFAULT_PASSWORD` env vars if no admin users exist yet.
+
+Admin users have roles (`SUPER_ADMIN` / `ADMIN`) and an `allClientsAccess` flag. When `allClientsAccess` is `false`, access is limited to `allowedClientIds` (stored in the JWT payload).
+
+Auth flow:
+1. `POST /admin/auth/login` → returns `accessToken` + sets `httpOnly` `admin_rt` cookie (refresh token).
+2. `POST /admin/auth/refresh` → reads cookie, issues new access token and rotates cookie.
+3. `POST /admin/auth/logout` → revokes session and clears cookie.
+
+All other admin endpoints require `@UseGuards(AdminJwtGuard)` and `@ApiBearerAuth()`. The admin controller covers cross-client operations for images, avatars, albums, and clients — always guarded by `allClientsAccess` or `allowedClientIds` checks in `AdminService`.
+
+Required env vars for the admin module:
+```
+ADMIN_DEFAULT_EMAIL=
+ADMIN_DEFAULT_PASSWORD=
+ADMIN_DEFAULT_NAME=           # optional, defaults to "Super Admin"
+JWT_ADMIN_SECRET=
+JWT_ADMIN_EXPIRES_IN=         # e.g. 15m
+JWT_ADMIN_REFRESH_SECRET=
+JWT_ADMIN_REFRESH_EXPIRES_IN= # e.g. 7d
+```
+
+## Adding a New Feature Module1. Follow existing module structure: `controller` → `service` → `dto/` subdir
 2. Apply `@UseInterceptors(ClientInterceptor)` at controller class level
 3. Use `@ClientId()` / `@UserId()` decorators for tenant/user context
 4. Scope all Prisma queries with `where: { clientId }` 
