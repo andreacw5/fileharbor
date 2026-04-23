@@ -204,6 +204,7 @@ export class AdminClientUserClientDto {
 }
 
 export class AdminClientUserResponseDto {
+  @ApiProperty({ description: 'Internal user UUID' }) @Expose() id: string;
   @ApiProperty({ description: 'External user ID from the client system' }) @Expose() externalUserId: string;
   @ApiPropertyOptional() @Expose() username?: string;
   @ApiProperty() @Expose() clientId: string;
@@ -211,6 +212,7 @@ export class AdminClientUserResponseDto {
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() totalImages?: number;
   @ApiPropertyOptional() @Expose() totalAvatars?: number;
+  @ApiPropertyOptional() @Expose() totalAlbums?: number;
 
   @ApiPropertyOptional({ type: AdminClientUserClientDto })
   @Expose()
@@ -226,6 +228,20 @@ export class AdminTagsResponseDto {
   @ApiProperty({ description: 'Total number of distinct tags returned' })
   @Expose()
   total: number;
+}
+
+export class AdminAlbumImageEntryDto {
+  @ApiProperty() @Expose() imageId: string;
+  @ApiProperty() @Expose() order: number;
+}
+
+export class AdminAddImagesToAlbumResponseDto {
+  @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
+  @ApiProperty({ description: 'Images added with their order', type: [AdminAlbumImageEntryDto] })
+  @Expose()
+  @Type(() => AdminAlbumImageEntryDto)
+  images: AdminAlbumImageEntryDto[];
+  @ApiProperty({ description: 'Number of images processed' }) @Expose() count: number;
 }
 
 

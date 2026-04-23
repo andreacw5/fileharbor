@@ -32,12 +32,13 @@ import { AdminService } from './admin.service';
 import { AdminJwtGuard, AdminJwtPayload } from './guards/admin-jwt.guard';
 import { AdminUser } from './decorators/admin-user.decorator';
 import { AdminLoginDto } from './dto/admin-login.dto';
-import { AdminRefreshDto } from './dto/admin-refresh.dto';
 import { AdminUpdateClientDto } from './dto/admin-update-client.dto';
 import { AdminUpdateAlbumDto } from './dto/admin-update-album.dto';
 import { AdminUpdateImageDto } from './dto/admin-update-image.dto';
 import { AdminUploadImageDto } from './dto/admin-upload-image.dto';
 import { AdminUpdateProfileDto, AdminChangePasswordDto } from './dto/admin-update-profile.dto';
+import { AdminCreateAlbumDto } from './dto/admin-create-album.dto';
+import { AdminAddImagesToAlbumDto } from './dto/admin-add-images-to-album.dto';
 import { ImageResponseDto } from '@/modules/image/dto';
 import {
   AdminLoginResponseDto,
@@ -51,6 +52,7 @@ import {
   AdminImageResponseDto,
   AdminAvatarResponseDto,
   AdminClientUserResponseDto,
+  AdminAddImagesToAlbumResponseDto,
 } from './dto/admin-response.dto';
 
 @ApiTags('Admin')
@@ -237,6 +239,20 @@ export class AdminController {
     });
   }
 
+  @Get('users/:id')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user details by internal UUID (email and sensitive data excluded)' })
+  @ApiResponse({ status: 200, type: AdminClientUserResponseDto })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  getUser(
+    @Param('id') id: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminClientUserResponseDto> {
+    return this.adminService.getUser(id, adminUser);
+  }
+
   // ─── Images ───────────────────────────────────────────────────────────────
 
   @Post('images')
@@ -418,6 +434,24 @@ export class AdminController {
 
   // ─── Albums ───────────────────────────────────────────────────────────────
 
+  @Post('albums')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create an album on behalf of a client',
+    description: 'Admin-only album creation. Specify the target clientId in the body. The album is attributed to the given externalUserId (defaults to "system").',
+  })
+  @ApiResponse({ status: 201, description: 'Album created successfully', type: AdminAlbumResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 403, description: 'Admin has no access to the given client' })
+  createAlbum(
+    @Body() dto: AdminCreateAlbumDto,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminAlbumResponseDto> {
+    return this.adminService.adminCreateAlbum(dto, adminUser);
+  }
+
   @Get('albums')
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
@@ -471,6 +505,25 @@ export class AdminController {
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminAlbumResponseDto> {
     return this.adminService.getAlbum(id, adminUser);
+  }
+
+  @Post('albums/:id/images')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Add images to an album (admin)',
+    description: 'Admin-only. Bypasses ownership check — verifies only that both album and images belong to the same client.',
+  })
+  @ApiResponse({ status: 200, description: 'Images added successfully', type: AdminAddImagesToAlbumResponseDto })
+  @ApiResponse({ status: 404, description: 'Album or some images not found' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  addImagesToAlbum(
+    @Param('id') id: string,
+    @Body() dto: AdminAddImagesToAlbumDto,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminAddImagesToAlbumResponseDto> {
+    return this.adminService.adminAddImagesToAlbum(id, dto.imageIds, adminUser);
   }
 
   @Patch('albums/:id')

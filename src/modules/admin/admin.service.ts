@@ -26,6 +26,7 @@ import {
   AdminImageResponseDto,
   AdminAvatarResponseDto,
   AdminClientUserResponseDto,
+  AdminAddImagesToAlbumResponseDto,
   DailyDataPointDto,
   StatsTrendDto,
 } from './dto/admin-response.dto';
@@ -34,6 +35,7 @@ import { AdminUpdateClientDto } from './dto/admin-update-client.dto';
 import { AdminUpdateAlbumDto } from './dto/admin-update-album.dto';
 import { AdminUpdateImageDto } from './dto/admin-update-image.dto';
 import { AdminUploadImageDto } from './dto/admin-upload-image.dto';
+import { AdminCreateAlbumDto } from './dto/admin-create-album.dto';
 import { ImageService } from '@/modules/image/image.service';
 import { AvatarService } from '@/modules/avatar/avatar.service';
 import { AlbumService } from '@/modules/album/album.service';
@@ -882,6 +884,49 @@ export class AdminService {
     );
   }
 
+  async adminCreateAlbum(
+    dto: AdminCreateAlbumDto,
+    admin: AdminJwtPayload,
+  ): Promise<AdminAlbumResponseDto> {
+    this.assertClientAccess(admin, dto.clientId);
+
+    const externalUserId = dto.externalUserId || 'system';
+    const user = await this.clientService.getOrCreateUser(dto.clientId, externalUserId);
+
+    const album = await this.albumService.createAlbum(dto.clientId, user.id, {
+      name: dto.name,
+      description: dto.description,
+      isPublic: dto.isPublic,
+      externalAlbumId: dto.externalAlbumId,
+    });
+
+    this.logger.log(`[Admin] Album created: ${album.id} for client: ${dto.clientId}`);
+
+    // Re-fetch with counts for consistent response shape
+    return this.getAlbum(album.id, admin);
+  }
+
+  async adminAddImagesToAlbum(
+    albumId: string,
+    imageIds: string[],
+    admin: AdminJwtPayload,
+  ): Promise<AdminAddImagesToAlbumResponseDto> {
+    const album = await this.prisma.album.findUnique({ where: { id: albumId } });
+    if (!album) throw new NotFoundException('Album not found');
+
+    this.assertClientAccess(admin, album.clientId);
+
+    const result = await this.albumService.forceAddImagesToAlbum(albumId, album.clientId, imageIds);
+
+    this.logger.log(`[Admin] Added ${result.images.length} images to album: ${albumId}`);
+
+    return plainToInstance(
+      AdminAddImagesToAlbumResponseDto,
+      { albumId: result.albumId, images: result.images, count: result.images.length },
+      { excludeExtraneousValues: true },
+    );
+  }
+
   // ─── Users ────────────────────────────────────────────────────────────────
 
   async listUsers(
@@ -939,6 +984,31 @@ export class AdminService {
       data,
       pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
     };
+  }
+
+  async getUser(userId: string, admin: AdminJwtPayload): Promise<AdminClientUserResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        _count: { select: { images: true, avatars: true, albums: true } },
+        client: { select: { id: true, name: true, domain: true } },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    this.assertClientAccess(admin, user.clientId);
+
+    return plainToInstance(
+      AdminClientUserResponseDto,
+      {
+        ...user,
+        totalImages: user._count.images,
+        totalAvatars: user._count.avatars,
+        totalAlbums: user._count.albums,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   // ─── Tags ─────────────────────────────────────────────────────────────────

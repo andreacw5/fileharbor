@@ -329,6 +329,65 @@ export class AlbumService {
   }
 
   /**
+   * Force-add images to an album (admin use — bypasses ownership check).
+   * Verifies that the album and all images belong to the given clientId.
+   */
+  async forceAddImagesToAlbum(
+    albumId: string,
+    clientId: string,
+    imageIds: string[],
+  ): Promise<{ albumId: string; images: { imageId: string; order: number }[] }> {
+    this.logger.debug(
+      `[forceAddImagesToAlbum] Start - Album ID: ${albumId}, Client: ${clientId}, Images: ${imageIds.length}`,
+    );
+
+    const album = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+    if (!album) throw new NotFoundException('Album not found');
+
+    // Verify all images belong to the client (no ownership restriction for admin)
+    const images = await this.prisma.image.findMany({
+      where: { id: { in: imageIds }, clientId },
+    });
+
+    if (images.length !== imageIds.length) {
+      throw new NotFoundException('Some images not found or do not belong to this client');
+    }
+
+    const maxOrder = await this.prisma.albumImage.findFirst({
+      where: { albumId },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    });
+
+    let currentOrder = (maxOrder?.order || 0) + 1;
+
+    const albumImages = await Promise.all(
+      imageIds.map((imageId) =>
+        this.prisma.albumImage.upsert({
+          where: { albumId_imageId: { albumId, imageId } },
+          update: {},
+          create: { albumId, imageId, order: currentOrder++ },
+        }),
+      ),
+    );
+
+    albumImages.forEach((ai) => {
+      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
+        albumId,
+        imageId: ai.imageId,
+        albumName: album.name,
+      }).catch((error) => {
+        this.logger.warn(
+          `[forceAddImagesToAlbum] Webhook failed for image ${ai.imageId} in album ${albumId}: ${error.message}`,
+        );
+      });
+    });
+
+    this.logger.log(`[forceAddImagesToAlbum] Success - Album ID: ${albumId}, Added: ${albumImages.length}`);
+    return { albumId, images: albumImages.map((ai) => ({ imageId: ai.imageId, order: ai.order })) };
+  }
+
+  /**
    * Force-delete an album by ID scoped to a client (admin use — bypasses ownership check).
    */
   async forceDeleteAlbum(albumId: string, clientId: string): Promise<{ success: boolean; message: string }> {
