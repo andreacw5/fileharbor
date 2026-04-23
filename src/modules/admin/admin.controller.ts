@@ -47,11 +47,9 @@ import {
   AdminClientResponseDto,
   AdminStatsResponseDto,
   AdminDeleteResponseDto,
-  AdminTagsResponseDto,
   AdminAlbumResponseDto,
   AdminImageResponseDto,
   AdminAvatarResponseDto,
-  AdminClientUserResponseDto,
   AdminAddImagesToAlbumResponseDto,
 } from './dto/admin-response.dto';
 
@@ -213,46 +211,6 @@ export class AdminController {
     return this.adminService.updateClient(id, dto, adminUser);
   }
 
-  // ─── Users ────────────────────────────────────────────────────────────────
-
-  @Get('users')
-  @UseGuards(AdminJwtGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List users (scoped to accessible clients, system user excluded)' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by externalUserId or username' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'Paginated user list (email is never returned)' })
-  listUsers(
-    @AdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ) {
-    return this.adminService.listUsers(adminUser, {
-      clientId,
-      search,
-      page: Number(page) || 1,
-      perPage: Number(perPage) || 20,
-    });
-  }
-
-  @Get('users/:id')
-  @UseGuards(AdminJwtGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get user details by internal UUID (email and sensitive data excluded)' })
-  @ApiResponse({ status: 200, type: AdminClientUserResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
-  getUser(
-    @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
-  ): Promise<AdminClientUserResponseDto> {
-    return this.adminService.getUser(id, adminUser);
-  }
-
   // ─── Images ───────────────────────────────────────────────────────────────
 
   @Post('images')
@@ -325,26 +283,6 @@ export class AdminController {
     });
   }
 
-  @Get('images/tags')
-  @UseGuards(AdminJwtGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List distinct image tags (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
-  @ApiQuery({ name: 'search', required: false, description: 'Filter tags by partial match' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max tags to return (default 200, max 500)' })
-  @ApiResponse({ status: 200, type: AdminTagsResponseDto })
-  listTags(
-    @AdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
-    @Query('limit') limit?: string,
-  ): Promise<AdminTagsResponseDto> {
-    return this.adminService.listTags(adminUser, {
-      clientId,
-      search,
-      limit: Number(limit) || undefined,
-    });
-  }
 
   @Delete('images/:id')
   @UseGuards(AdminJwtGuard)

@@ -203,33 +203,6 @@ export class AdminClientUserClientDto {
   @ApiPropertyOptional() @Expose() domain?: string;
 }
 
-export class AdminClientUserResponseDto {
-  @ApiProperty({ description: 'Internal user UUID' }) @Expose() id: string;
-  @ApiProperty({ description: 'External user ID from the client system' }) @Expose() externalUserId: string;
-  @ApiPropertyOptional() @Expose() username?: string;
-  @ApiProperty() @Expose() clientId: string;
-  @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
-  @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
-  @ApiPropertyOptional() @Expose() totalImages?: number;
-  @ApiPropertyOptional() @Expose() totalAvatars?: number;
-  @ApiPropertyOptional() @Expose() totalAlbums?: number;
-
-  @ApiPropertyOptional({ type: AdminClientUserClientDto })
-  @Expose()
-  @Type(() => AdminClientUserClientDto)
-  client?: AdminClientUserClientDto;
-}
-
-export class AdminTagsResponseDto {
-  @ApiProperty({ description: 'List of distinct tags used across images', type: [String] })
-  @Expose()
-  tags: string[];
-
-  @ApiProperty({ description: 'Total number of distinct tags returned' })
-  @Expose()
-  total: number;
-}
-
 export class AdminAlbumImageEntryDto {
   @ApiProperty() @Expose() imageId: string;
   @ApiProperty() @Expose() order: number;

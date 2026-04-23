@@ -12,7 +12,6 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import {
   AdminLoginResponseDto,
@@ -21,11 +20,9 @@ import {
   AdminClientResponseDto,
   AdminStatsResponseDto,
   AdminDeleteResponseDto,
-  AdminTagsResponseDto,
   AdminAlbumResponseDto,
   AdminImageResponseDto,
   AdminAvatarResponseDto,
-  AdminClientUserResponseDto,
   AdminAddImagesToAlbumResponseDto,
   DailyDataPointDto,
   StatsTrendDto,
@@ -41,6 +38,11 @@ import { AvatarService } from '@/modules/avatar/avatar.service';
 import { AlbumService } from '@/modules/album/album.service';
 import { ClientService } from '@/modules/client/client.service';
 import { ImageResponseDto } from '@/modules/image/dto';
+import {
+  resolveAllowedClients,
+  assertClientAccess,
+  buildClientWhere,
+} from '@/modules/admin/helpers/admin-access.helper';
 
 @Injectable()
 export class AdminService {
@@ -55,42 +57,6 @@ export class AdminService {
     private readonly albumService: AlbumService,
     private readonly clientService: ClientService,
   ) {}
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
-  /**
-   * Returns the list of allowed clientIds for a given admin payload.
-   * SUPER_ADMIN or allClientsAccess=true → null (no restriction).
-   * Otherwise → array of allowed IDs (may be empty).
-   */
-  private resolveAllowedClients(admin: AdminJwtPayload): string[] | null {
-    if (admin.role === 'SUPER_ADMIN' || admin.allClientsAccess) return null;
-    return admin.allowedClientIds;
-  }
-
-  /**
-   * Asserts that `clientId` is in the admin's allowed list (or unrestricted).
-   */
-  private assertClientAccess(admin: AdminJwtPayload, clientId: string): void {
-    const allowed = this.resolveAllowedClients(admin);
-    if (allowed !== null && !allowed.includes(clientId)) {
-      throw new ForbiddenException('You do not have access to this client');
-    }
-  }
-
-  /** Build Prisma WHERE clause that scopes by allowed clients */
-  private buildClientWhere(
-    admin: AdminJwtPayload,
-    extraClientId?: string,
-  ): { clientId?: string | { in: string[] } } {
-    if (extraClientId) {
-      this.assertClientAccess(admin, extraClientId);
-      return { clientId: extraClientId };
-    }
-    const allowed = this.resolveAllowedClients(admin);
-    if (allowed === null) return {};
-    return { clientId: { in: allowed } };
-  }
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
 
@@ -290,7 +256,7 @@ export class AdminService {
   // ─── Stats ───────────────────────────────────────────────────────────────
 
   async getGlobalStats(admin: AdminJwtPayload): Promise<AdminStatsResponseDto> {
-    const clientWhere = this.buildClientWhere(admin);
+    const clientWhere = buildClientWhere(admin);
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -400,7 +366,7 @@ export class AdminService {
   // ─── Clients ─────────────────────────────────────────────────────────────
 
   async listClients(admin: AdminJwtPayload): Promise<AdminClientResponseDto[]> {
-    const allowed = this.resolveAllowedClients(admin);
+    const allowed = resolveAllowedClients(admin);
     const where = allowed !== null ? { id: { in: allowed } } : {};
 
     const clients = await this.prisma.client.findMany({
@@ -437,7 +403,7 @@ export class AdminService {
   }
 
   async getClient(clientId: string, admin: AdminJwtPayload): Promise<AdminClientResponseDto> {
-    this.assertClientAccess(admin, clientId);
+    assertClientAccess(admin, clientId);
 
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
@@ -469,7 +435,7 @@ export class AdminService {
     dto: AdminUpdateClientDto,
     admin: AdminJwtPayload,
   ): Promise<AdminClientResponseDto> {
-    this.assertClientAccess(admin, clientId);
+    assertClientAccess(admin, clientId);
 
     const exists = await this.clientService.getClientById(clientId);
     if (!exists) throw new NotFoundException('Client not found');
@@ -524,7 +490,7 @@ export class AdminService {
     const perPage = filters.perPage || 20;
     const take = Math.min(perPage, 100);
     const skip = (page - 1) * take;
-    const where: any = this.buildClientWhere(admin, filters.clientId);
+    const where: any = buildClientWhere(admin, filters.clientId);
 
     if (filters.userId) {
       where.user = { externalUserId: filters.userId };
@@ -571,7 +537,7 @@ export class AdminService {
     const image = await this.prisma.image.findUnique({ where: { id: imageId } });
     if (!image) throw new NotFoundException('Image not found');
 
-    this.assertClientAccess(admin, image.clientId);
+    assertClientAccess(admin, image.clientId);
 
     await this.imageService.deleteImage(imageId, image.clientId);
 
@@ -588,7 +554,7 @@ export class AdminService {
     dto: AdminUploadImageDto,
     admin: AdminJwtPayload,
   ): Promise<ImageResponseDto> {
-    this.assertClientAccess(admin, dto.clientId);
+    assertClientAccess(admin, dto.clientId);
 
     this.logger.log(
       `[Admin] Image upload - Client: ${dto.clientId}, User: ${dto.externalUserId || 'system'}, File: ${file.originalname}`,
@@ -625,7 +591,7 @@ export class AdminService {
     });
 
     if (!image) throw new NotFoundException('Image not found');
-    this.assertClientAccess(admin, image.clientId);
+    assertClientAccess(admin, image.clientId);
 
     const apiPrefix = this.config.get('API_PREFIX') || 'v2';
     const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
@@ -648,7 +614,7 @@ export class AdminService {
   ): Promise<AdminImageResponseDto> {
     const image = await this.prisma.image.findUnique({ where: { id: imageId } });
     if (!image) throw new NotFoundException('Image not found');
-    this.assertClientAccess(admin, image.clientId);
+    assertClientAccess(admin, image.clientId);
 
     const data: Record<string, any> = {};
     if (dto.originalName !== undefined) data.originalName = dto.originalName;
@@ -681,7 +647,7 @@ export class AdminService {
     const perPage = filters.perPage || 20;
     const take = Math.min(perPage, 100);
     const skip = (page - 1) * take;
-    const where: any = this.buildClientWhere(admin, filters.clientId);
+    const where: any = buildClientWhere(admin, filters.clientId);
 
     if (filters.userId) {
       where.user = { externalUserId: filters.userId };
@@ -720,7 +686,7 @@ export class AdminService {
     const avatar = await this.prisma.avatar.findUnique({ where: { id: avatarId } });
     if (!avatar) throw new NotFoundException('Avatar not found');
 
-    this.assertClientAccess(admin, avatar.clientId);
+    assertClientAccess(admin, avatar.clientId);
 
     await this.avatarService.deleteAvatarById(avatarId, avatar.clientId);
 
@@ -739,7 +705,7 @@ export class AdminService {
     });
 
     if (!avatar) throw new NotFoundException('Avatar not found');
-    this.assertClientAccess(admin, avatar.clientId);
+    assertClientAccess(admin, avatar.clientId);
 
     const apiPrefix = this.config.get('API_PREFIX') || 'v2';
     const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
@@ -766,7 +732,7 @@ export class AdminService {
     const perPage = filters.perPage || 20;
     const take = Math.min(perPage, 100);
     const skip = (page - 1) * take;
-    const where: any = this.buildClientWhere(admin, filters.clientId);
+    const where: any = buildClientWhere(admin, filters.clientId);
 
     if (filters.userId) {
       where.user = { externalUserId: filters.userId };
@@ -806,7 +772,7 @@ export class AdminService {
     const album = await this.prisma.album.findUnique({ where: { id: albumId } });
     if (!album) throw new NotFoundException('Album not found');
 
-    this.assertClientAccess(admin, album.clientId);
+    assertClientAccess(admin, album.clientId);
 
     await this.albumService.forceDeleteAlbum(albumId, album.clientId);
 
@@ -835,7 +801,7 @@ export class AdminService {
 
     if (!album) throw new NotFoundException('Album not found');
 
-    this.assertClientAccess(admin, album.clientId);
+    assertClientAccess(admin, album.clientId);
 
     return plainToInstance(
       AdminAlbumResponseDto,
@@ -852,7 +818,7 @@ export class AdminService {
     const album = await this.prisma.album.findUnique({ where: { id: albumId } });
     if (!album) throw new NotFoundException('Album not found');
 
-    this.assertClientAccess(admin, album.clientId);
+    assertClientAccess(admin, album.clientId);
 
     const data: Record<string, any> = {};
     if (dto.name !== undefined) data.name = dto.name;
@@ -888,7 +854,7 @@ export class AdminService {
     dto: AdminCreateAlbumDto,
     admin: AdminJwtPayload,
   ): Promise<AdminAlbumResponseDto> {
-    this.assertClientAccess(admin, dto.clientId);
+    assertClientAccess(admin, dto.clientId);
 
     const externalUserId = dto.externalUserId || 'system';
     const user = await this.clientService.getOrCreateUser(dto.clientId, externalUserId);
@@ -914,7 +880,7 @@ export class AdminService {
     const album = await this.prisma.album.findUnique({ where: { id: albumId } });
     if (!album) throw new NotFoundException('Album not found');
 
-    this.assertClientAccess(admin, album.clientId);
+    assertClientAccess(admin, album.clientId);
 
     const result = await this.albumService.forceAddImagesToAlbum(albumId, album.clientId, imageIds);
 
@@ -923,143 +889,6 @@ export class AdminService {
     return plainToInstance(
       AdminAddImagesToAlbumResponseDto,
       { albumId: result.albumId, images: result.images, count: result.images.length },
-      { excludeExtraneousValues: true },
-    );
-  }
-
-  // ─── Users ────────────────────────────────────────────────────────────────
-
-  async listUsers(
-    admin: AdminJwtPayload,
-    filters: {
-      clientId?: string;
-      search?: string;
-      page?: number;
-      perPage?: number;
-    } = {},
-  ) {
-    const page = filters.page || 1;
-    const perPage = filters.perPage || 20;
-    const take = Math.min(perPage, 100);
-    const skip = (page - 1) * take;
-    const where: any = this.buildClientWhere(admin, filters.clientId);
-
-    if (filters.search) {
-      where.OR = [
-        { externalUserId: { contains: filters.search, mode: 'insensitive' } },
-        { username: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
-
-    // Exclude system user
-    where.externalUserId = { ...(where.externalUserId || {}), not: 'system' };
-
-    const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-        include: {
-          _count: { select: { images: true, avatars: true } },
-          client: { select: { id: true, name: true, domain: true } },
-        },
-      }),
-      this.prisma.user.count({ where }),
-    ]);
-
-    const data = users.map((u) =>
-      plainToInstance(
-        AdminClientUserResponseDto,
-        {
-          ...u,
-          totalImages: u._count.images,
-          totalAvatars: u._count.avatars,
-        },
-        { excludeExtraneousValues: true },
-      ),
-    );
-
-    return {
-      data,
-      pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
-    };
-  }
-
-  async getUser(userId: string, admin: AdminJwtPayload): Promise<AdminClientUserResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        _count: { select: { images: true, avatars: true, albums: true } },
-        client: { select: { id: true, name: true, domain: true } },
-      },
-    });
-
-    if (!user) throw new NotFoundException('User not found');
-
-    this.assertClientAccess(admin, user.clientId);
-
-    return plainToInstance(
-      AdminClientUserResponseDto,
-      {
-        ...user,
-        totalImages: user._count.images,
-        totalAvatars: user._count.avatars,
-        totalAlbums: user._count.albums,
-      },
-      { excludeExtraneousValues: true },
-    );
-  }
-
-  // ─── Tags ─────────────────────────────────────────────────────────────────
-
-  /**
-   * Returns distinct tags used across images, optionally scoped by clientId
-   * and filtered by a search string. Uses a raw SQL `unnest` for efficiency —
-   * no full table scan in application memory.
-   */
-  async listTags(
-    admin: AdminJwtPayload,
-    filters: { clientId?: string; search?: string; limit?: number } = {},
-  ): Promise<AdminTagsResponseDto> {
-    const limit = Math.min(filters.limit || 200, 500);
-
-    // Build the client restriction
-    let clientConstraint: Prisma.Sql;
-    if (filters.clientId) {
-      this.assertClientAccess(admin, filters.clientId);
-      clientConstraint = Prisma.sql`"clientId" = ${filters.clientId}`;
-    } else {
-      const allowed = this.resolveAllowedClients(admin);
-      if (allowed !== null) {
-        clientConstraint = Prisma.sql`"clientId" = ANY(${allowed}::text[])`;
-      } else {
-        clientConstraint = Prisma.sql`TRUE`;
-      }
-    }
-
-    const searchConstraint = filters.search
-      ? Prisma.sql`AND tag ILIKE ${'%' + filters.search + '%'}`
-      : Prisma.sql``;
-
-    const rows = await this.prisma.$queryRaw<{ tag: string }[]>`
-      SELECT tag FROM (
-        SELECT DISTINCT unnest(tags) AS tag
-        FROM "images"
-        WHERE ${clientConstraint}
-          AND tags IS NOT NULL
-          AND array_length(tags, 1) > 0
-      ) sub
-      WHERE TRUE ${searchConstraint}
-      ORDER BY tag
-      LIMIT ${limit}
-    `;
-
-    const tags = rows.map((r) => r.tag);
-
-    return plainToInstance(
-      AdminTagsResponseDto,
-      { tags, total: tags.length },
       { excludeExtraneousValues: true },
     );
   }
