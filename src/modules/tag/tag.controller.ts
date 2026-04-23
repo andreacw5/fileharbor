@@ -17,11 +17,11 @@ import { AdminUser } from '@/modules/admin/decorators/admin-user.decorator';
 import { TagsResponseDto } from './dto/tag-response.dto';
 
 @ApiTags('Admin')
-@Controller('admin/images')
+@Controller('admin/tags')
 export class TagController {
   constructor(private readonly tagAdminService: TagService) {}
 
-  @Get('tags')
+  @Get()
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List distinct image tags (scoped to accessible clients)' })
