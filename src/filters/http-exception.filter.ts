@@ -55,7 +55,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // Common attack patterns (scanner bots)
     /^\/wp-.*$/,                           // WordPress paths
-    /^\/admin.*$/,                         // admin paths (if not using /admin)
+    /^\/admin\.php.*$/,                    // admin.php paths (WordPress/PHP)
     /^\/phpmyadmin.*$/,                    // phpMyAdmin
     /^\/\.env$/,                           // .env file requests
     /^\/\.git\/.*$/,                       // git directory

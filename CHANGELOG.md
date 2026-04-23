@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.2.3] – 2026-04-23
+
+### Added
+- Added new admin API for show single user details
+- Added new admin API for adding image to an album
+- Added new admin API for for creating an album
+### Changed
+- Separated admin tags and users in dedicated controllers and services to improve code organization and maintainability.
+
+
+---
+
 ## [2.2.2] – 2026-04-22
 
 ### Added
