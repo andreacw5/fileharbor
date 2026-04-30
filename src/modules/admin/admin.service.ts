@@ -2,7 +2,6 @@ import {
   Injectable,
   UnauthorizedException,
   NotFoundException,
-  ForbiddenException,
   BadRequestException,
   ConflictException,
   Logger,
@@ -18,14 +17,11 @@ import {
   AdminRefreshResponseDto,
   AdminUserResponseDto,
   AdminClientResponseDto,
-  AdminStatsResponseDto,
   AdminDeleteResponseDto,
   AdminAlbumResponseDto,
   AdminImageResponseDto,
   AdminAvatarResponseDto,
   AdminAddImagesToAlbumResponseDto,
-  DailyDataPointDto,
-  StatsTrendDto,
 } from './dto/admin-response.dto';
 import { AdminJwtPayload } from './guards/admin-jwt.guard';
 import { AdminUpdateClientDto } from './dto/admin-update-client.dto';
@@ -43,6 +39,7 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '@/modules/admin/helpers/admin-access.helper';
+import { buildImageTagCreateInput, extractTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
 
 @Injectable()
 export class AdminService {
@@ -253,181 +250,22 @@ export class AdminService {
     return { message: 'Password changed successfully' };
   }
 
-  // ─── Stats ───────────────────────────────────────────────────────────────
-
-  async getGlobalStats(admin: AdminJwtPayload): Promise<AdminStatsResponseDto> {
-    const clientWhere = buildClientWhere(admin);
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
-    const clientWhere7d = { ...clientWhere, createdAt: { gte: sevenDaysAgo } };
-
-    const [
-      totalClients,
-      totalImages,
-      totalAvatars,
-      totalAlbums,
-      totalUsers,
-      storageAgg,
-      newImages,
-      newAvatars,
-      newAlbums,
-      newUsers,
-      newStorageAgg,
-    ] = await Promise.all([
-      this.prisma.client.count(
-        Object.keys(clientWhere).length
-          ? { where: { id: (clientWhere as any).clientId } }
-          : undefined,
-      ),
-      this.prisma.image.count({ where: clientWhere }),
-      this.prisma.avatar.count({ where: clientWhere }),
-      this.prisma.album.count({ where: clientWhere }),
-      this.prisma.user.count({ where: clientWhere }),
-      this.prisma.image.aggregate({ where: clientWhere, _sum: { size: true } }),
-      this.prisma.image.count({ where: clientWhere7d }),
-      this.prisma.avatar.count({ where: clientWhere7d }),
-      this.prisma.album.count({ where: clientWhere7d }),
-      this.prisma.user.count({ where: clientWhere7d }),
-      this.prisma.image.aggregate({ where: clientWhere7d, _sum: { size: true } }),
-    ]);
-
-    // Build daily chart data for the last 7 days
-    const dailyChart = await this.buildDailyChart(clientWhere, sevenDaysAgo);
-
-    const last7Days = plainToInstance(
-      StatsTrendDto,
-      { newImages, newAvatars, newAlbums, newUsers, newStorage: newStorageAgg._sum.size || 0 },
-      { excludeExtraneousValues: true },
-    );
-
-    return plainToInstance(
-      AdminStatsResponseDto,
-      {
-        totalClients,
-        totalImages,
-        totalAvatars,
-        totalAlbums,
-        totalUsers,
-        totalStorage: storageAgg._sum.size || 0,
-        last7Days,
-        dailyChart,
-      },
-      { excludeExtraneousValues: true },
-    );
-  }
-
-  /**
-   * Build per-day counts for images, avatars, albums and users
-   * for the 7-day window starting at `from`.
-   */
-  private async buildDailyChart(
-    clientWhere: object,
-    from: Date,
-  ): Promise<DailyDataPointDto[]> {
-    // Generate the 7 day labels
-    const days: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(from);
-      d.setDate(d.getDate() + i);
-      days.push(d.toISOString().slice(0, 10));
-    }
-
-    const to = new Date(from);
-    to.setDate(to.getDate() + 7);
-
-    const timeWhere = { ...clientWhere, createdAt: { gte: from, lt: to } };
-
-    const [images, avatars, albums] = await Promise.all([
-      this.prisma.image.findMany({ where: timeWhere, select: { createdAt: true } }),
-      this.prisma.avatar.findMany({ where: timeWhere, select: { createdAt: true } }),
-      this.prisma.album.findMany({ where: timeWhere, select: { createdAt: true } }),
-    ]);
-
-    const countByDay = (records: { createdAt: Date }[], date: string) =>
-      records.filter((r) => r.createdAt.toISOString().slice(0, 10) === date).length;
-
-    return days.map((date) =>
-      plainToInstance(
-        DailyDataPointDto,
-        {
-          date,
-          images: countByDay(images, date),
-          avatars: countByDay(avatars, date),
-          albums: countByDay(albums, date),
-        },
-        { excludeExtraneousValues: true },
-      ),
-    );
-  }
 
   // ─── Clients ─────────────────────────────────────────────────────────────
 
   async listClients(admin: AdminJwtPayload): Promise<AdminClientResponseDto[]> {
     const allowed = resolveAllowedClients(admin);
-    const where = allowed !== null ? { id: { in: allowed } } : {};
-
-    const clients = await this.prisma.client.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: { select: { images: true, avatars: true, albums: true } },
-      },
-    });
-
-    const storagePerClient = await this.prisma.image.groupBy({
-      by: ['clientId'],
-      where: allowed !== null ? { clientId: { in: allowed } } : undefined,
-      _sum: { size: true },
-    });
-
-    const storageMap = new Map(
-      storagePerClient.map((s) => [s.clientId, s._sum.size || 0]),
-    );
-
+    const clients = await this.clientService.listClientsWithStats(allowed);
     return clients.map((c) =>
-      plainToInstance(
-        AdminClientResponseDto,
-        {
-          ...c,
-          totalImages: c._count.images,
-          totalAvatars: c._count.avatars,
-          totalAlbums: c._count.albums,
-          totalStorage: storageMap.get(c.id) || 0,
-        },
-        { excludeExtraneousValues: true },
-      ),
+      plainToInstance(AdminClientResponseDto, c, { excludeExtraneousValues: true }),
     );
   }
 
   async getClient(clientId: string, admin: AdminJwtPayload): Promise<AdminClientResponseDto> {
     assertClientAccess(admin, clientId);
-
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-      include: { _count: { select: { images: true, avatars: true, albums: true } } },
-    });
-
+    const client = await this.clientService.getClientWithStats(clientId);
     if (!client) throw new NotFoundException('Client not found');
-
-    const storageAgg = await this.prisma.image.aggregate({
-      where: { clientId },
-      _sum: { size: true },
-    });
-
-    return plainToInstance(
-      AdminClientResponseDto,
-      {
-        ...client,
-        totalImages: client._count.images,
-        totalAvatars: client._count.avatars,
-        totalAlbums: client._count.albums,
-        totalStorage: storageAgg._sum.size || 0,
-      },
-      { excludeExtraneousValues: true },
-    );
+    return plainToInstance(AdminClientResponseDto, client, { excludeExtraneousValues: true });
   }
 
   async updateClient(
@@ -446,30 +284,9 @@ export class AdminService {
     if (dto.webhookEnabled !== undefined) data.webhookEnabled = dto.webhookEnabled;
     if ('webhookUrl' in dto) data.webhookUrl = dto.webhookUrl ?? null;
 
-    const updated = await this.prisma.client.update({
-      where: { id: clientId },
-      data,
-      include: { _count: { select: { images: true, avatars: true, albums: true } } },
-    });
-
-    const storageAgg = await this.prisma.image.aggregate({
-      where: { clientId },
-      _sum: { size: true },
-    });
-
+    const updated = await this.clientService.updateClientWithStats(clientId, data);
     this.logger.log(`[Admin] Client updated: ${clientId}`);
-
-    return plainToInstance(
-      AdminClientResponseDto,
-      {
-        ...updated,
-        totalImages: updated._count.images,
-        totalAvatars: updated._count.avatars,
-        totalAlbums: updated._count.albums,
-        totalStorage: storageAgg._sum.size || 0,
-      },
-      { excludeExtraneousValues: true },
-    );
+    return plainToInstance(AdminClientResponseDto, updated, { excludeExtraneousValues: true });
   }
 
   // ─── Images ───────────────────────────────────────────────────────────────
@@ -487,56 +304,24 @@ export class AdminService {
     } = {},
   ) {
     const page = filters.page || 1;
-    const perPage = filters.perPage || 20;
-    const take = Math.min(perPage, 100);
+    const take = Math.min(filters.perPage || 20, 100);
     const skip = (page - 1) * take;
+
     const where: any = buildClientWhere(admin, filters.clientId);
-
-    if (filters.userId) {
-      where.user = { externalUserId: filters.userId };
-    }
-    if (filters.albumId) {
-      where.albumImages = { some: { albumId: filters.albumId } };
-    }
-    if (filters.name) {
-      where.originalName = { contains: filters.name, mode: 'insensitive' };
-    }
+    if (filters.userId) where.user = { externalUserId: filters.userId };
+    if (filters.albumId) where.albumImages = { some: { albumId: filters.albumId } };
+    if (filters.name) where.originalName = { contains: filters.name, mode: 'insensitive' };
     if (filters.tags && filters.tags.length > 0) {
-      where.tags = { hasSome: filters.tags };
+      where.imageTags = {
+        some: { tag: { name: { in: normalizeTagNames(filters.tags) } } },
+      };
     }
 
-    const [images, total] = await Promise.all([
-      this.prisma.image.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-        include: {
-          user: { select: { externalUserId: true, username: true } },
-          client: { select: { name: true, domain: true } },
-        },
-      }),
-      this.prisma.image.count({ where }),
-    ]);
-
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
-
-    const data = images.map((image) => {
-      const fullPath = `${baseUrl}/${apiPrefix}/images/${image.id}`;
-      return { ...image, fullPath };
-    });
-
-    return {
-      data,
-      pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
-    };
+    return this.imageService.findAdminImages(where, { skip, take, page });
   }
 
   async deleteImage(imageId: string, admin: AdminJwtPayload): Promise<AdminDeleteResponseDto> {
-    const image = await this.prisma.image.findUnique({ where: { id: imageId } });
-    if (!image) throw new NotFoundException('Image not found');
-
+    const image = await this.imageService.getImageById(imageId);
     assertClientAccess(admin, image.clientId);
 
     await this.imageService.deleteImage(imageId, image.clientId);
@@ -572,24 +357,7 @@ export class AdminService {
   }
 
   async getImage(imageId: string, admin: AdminJwtPayload): Promise<AdminImageResponseDto> {
-    const now = new Date();
-    const image = await this.prisma.image.findUnique({
-      where: { id: imageId },
-      include: {
-        user: { select: { externalUserId: true, username: true } },
-        albumImages: {
-          include: {
-            album: { select: { id: true, name: true, externalAlbumId: true, isPublic: true } },
-          },
-        },
-        _count: {
-          select: {
-            shareLinks: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
-          },
-        },
-      },
-    });
-
+    const image = await this.imageService.findAdminImageById(imageId);
     if (!image) throw new NotFoundException('Image not found');
     assertClientAccess(admin, image.clientId);
 
@@ -602,7 +370,7 @@ export class AdminService {
 
     return plainToInstance(
       AdminImageResponseDto,
-      { ...image, fullPath, albums, activeShareLinks },
+      { ...image, tags: extractTagNames(image), fullPath, albums, activeShareLinks },
       { excludeExtraneousValues: true },
     );
   }
@@ -612,24 +380,28 @@ export class AdminService {
     dto: AdminUpdateImageDto,
     admin: AdminJwtPayload,
   ): Promise<AdminImageResponseDto> {
-    const image = await this.prisma.image.findUnique({ where: { id: imageId } });
-    if (!image) throw new NotFoundException('Image not found');
-    assertClientAccess(admin, image.clientId);
+    const existing = await this.imageService.getImageById(imageId);
+    assertClientAccess(admin, existing.clientId);
 
     const data: Record<string, any> = {};
     if (dto.originalName !== undefined) data.originalName = dto.originalName;
     if (dto.isPrivate !== undefined) data.isPrivate = dto.isPrivate;
-    if (dto.tags !== undefined) data.tags = dto.tags;
     if ('description' in dto) data.description = dto.description ?? null;
+    if (dto.tags !== undefined) {
+      const imageTagsInput = buildImageTagCreateInput(existing.clientId, dto.tags);
+      data.imageTags = {
+        deleteMany: {},
+        ...(imageTagsInput.length > 0 && { create: imageTagsInput }),
+      };
+    }
 
-    const updated = await this.prisma.image.update({
-      where: { id: imageId },
-      data,
-      include: { user: { select: { externalUserId: true, username: true } } },
-    });
-
+    const updated = await this.imageService.adminUpdateImage(imageId, data);
     this.logger.log(`[Admin] Image updated: ${imageId}`);
-    return plainToInstance(AdminImageResponseDto, updated, { excludeExtraneousValues: true });
+    return plainToInstance(
+      AdminImageResponseDto,
+      { ...updated, tags: extractTagNames(updated) },
+      { excludeExtraneousValues: true },
+    );
   }
 
   // ─── Avatars ──────────────────────────────────────────────────────────────
@@ -644,28 +416,13 @@ export class AdminService {
     } = {},
   ) {
     const page = filters.page || 1;
-    const perPage = filters.perPage || 20;
-    const take = Math.min(perPage, 100);
+    const take = Math.min(filters.perPage || 20, 100);
     const skip = (page - 1) * take;
+
     const where: any = buildClientWhere(admin, filters.clientId);
+    if (filters.userId) where.user = { externalUserId: filters.userId };
 
-    if (filters.userId) {
-      where.user = { externalUserId: filters.userId };
-    }
-
-    const [avatars, total] = await Promise.all([
-      this.prisma.avatar.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-        include: {
-          user: { select: { externalUserId: true, username: true } },
-          client: { select: { name: true, domain: true } },
-        },
-      }),
-      this.prisma.avatar.count({ where }),
-    ]);
+    const { avatars, total } = await this.avatarService.findAdminAvatars(where, { skip, take });
 
     const apiPrefix = this.config.get('API_PREFIX') || 'v2';
     const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
@@ -683,9 +440,8 @@ export class AdminService {
   }
 
   async deleteAvatar(avatarId: string, admin: AdminJwtPayload): Promise<AdminDeleteResponseDto> {
-    const avatar = await this.prisma.avatar.findUnique({ where: { id: avatarId } });
+    const avatar = await this.avatarService.getAvatarById(avatarId);
     if (!avatar) throw new NotFoundException('Avatar not found');
-
     assertClientAccess(admin, avatar.clientId);
 
     await this.avatarService.deleteAvatarById(avatarId, avatar.clientId);
@@ -699,11 +455,7 @@ export class AdminService {
   }
 
   async getAvatar(avatarId: string, admin: AdminJwtPayload): Promise<AdminAvatarResponseDto> {
-    const avatar = await this.prisma.avatar.findUnique({
-      where: { id: avatarId },
-      include: { user: { select: { externalUserId: true, username: true } } },
-    });
-
+    const avatar = await this.avatarService.getAvatarById(avatarId);
     if (!avatar) throw new NotFoundException('Avatar not found');
     assertClientAccess(admin, avatar.clientId);
 
@@ -729,38 +481,15 @@ export class AdminService {
     } = {},
   ) {
     const page = filters.page || 1;
-    const perPage = filters.perPage || 20;
-    const take = Math.min(perPage, 100);
+    const take = Math.min(filters.perPage || 20, 100);
     const skip = (page - 1) * take;
+
     const where: any = buildClientWhere(admin, filters.clientId);
+    if (filters.userId) where.user = { externalUserId: filters.userId };
+    if (filters.search) where.name = { contains: filters.search, mode: 'insensitive' };
+    if (filters.public !== undefined) where.isPublic = filters.public;
 
-    if (filters.userId) {
-      where.user = { externalUserId: filters.userId };
-    }
-    if (filters.search) {
-      where.name = { contains: filters.search, mode: 'insensitive' };
-    }
-    if (filters.public !== undefined) {
-      where.isPublic = filters.public;
-    }
-
-    const now = new Date();
-    const activeTokensWhere = { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
-
-    const [albums, total] = await Promise.all([
-      this.prisma.album.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-        include: {
-          user: { select: { externalUserId: true, username: true } },
-          client: { select: { name: true, domain: true } },
-          _count: { select: { albumImages: true, albumTokens: { where: activeTokensWhere } } },
-        },
-      }),
-      this.prisma.album.count({ where }),
-    ]);
+    const { albums, total } = await this.albumService.findAdminAlbums(where, { skip, take });
 
     return {
       data: albums.map((a) => ({ ...a, totalImages: a._count.albumImages, activeTokens: a._count.albumTokens })),
@@ -769,9 +498,8 @@ export class AdminService {
   }
 
   async deleteAlbum(albumId: string, admin: AdminJwtPayload): Promise<AdminDeleteResponseDto> {
-    const album = await this.prisma.album.findUnique({ where: { id: albumId } });
+    const album = await this.albumService.getAlbumByIdUnscoped(albumId);
     if (!album) throw new NotFoundException('Album not found');
-
     assertClientAccess(admin, album.clientId);
 
     await this.albumService.forceDeleteAlbum(albumId, album.clientId);
@@ -785,22 +513,8 @@ export class AdminService {
   }
 
   async getAlbum(albumId: string, admin: AdminJwtPayload): Promise<AdminAlbumResponseDto> {
-    const now = new Date();
-    const album = await this.prisma.album.findUnique({
-      where: { id: albumId },
-      include: {
-        user: { select: { externalUserId: true, username: true } },
-        _count: {
-          select: {
-            albumImages: true,
-            albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
-          },
-        },
-      },
-    });
-
+    const album = await this.albumService.findAdminAlbumById(albumId);
     if (!album) throw new NotFoundException('Album not found');
-
     assertClientAccess(admin, album.clientId);
 
     return plainToInstance(
@@ -815,10 +529,9 @@ export class AdminService {
     dto: AdminUpdateAlbumDto,
     admin: AdminJwtPayload,
   ): Promise<AdminAlbumResponseDto> {
-    const album = await this.prisma.album.findUnique({ where: { id: albumId } });
-    if (!album) throw new NotFoundException('Album not found');
-
-    assertClientAccess(admin, album.clientId);
+    const existing = await this.albumService.getAlbumByIdUnscoped(albumId);
+    if (!existing) throw new NotFoundException('Album not found');
+    assertClientAccess(admin, existing.clientId);
 
     const data: Record<string, any> = {};
     if (dto.name !== undefined) data.name = dto.name;
@@ -826,21 +539,7 @@ export class AdminService {
     if (dto.isPublic !== undefined) data.isPublic = dto.isPublic;
     if ('externalAlbumId' in dto) data.externalAlbumId = dto.externalAlbumId ?? null;
 
-    const now = new Date();
-    const updated = await this.prisma.album.update({
-      where: { id: albumId },
-      data,
-      include: {
-        user: { select: { externalUserId: true, username: true } },
-        _count: {
-          select: {
-            albumImages: true,
-            albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
-          },
-        },
-      },
-    });
-
+    const updated = await this.albumService.adminUpdateAlbum(albumId, data);
     this.logger.log(`[Admin] Album updated: ${albumId}`);
 
     return plainToInstance(
@@ -877,7 +576,7 @@ export class AdminService {
     imageIds: string[],
     admin: AdminJwtPayload,
   ): Promise<AdminAddImagesToAlbumResponseDto> {
-    const album = await this.prisma.album.findUnique({ where: { id: albumId } });
+    const album = await this.albumService.getAlbumByIdUnscoped(albumId);
     if (!album) throw new NotFoundException('Album not found');
 
     assertClientAccess(admin, album.clientId);

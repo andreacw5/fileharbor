@@ -11,6 +11,7 @@ import { AvatarModule } from "@/modules/avatar/avatar.module";
 import { AlbumModule } from "@/modules/album/album.module";
 import { JobModule } from "@/modules/job/job.module";
 import { AdminModule } from "@/modules/admin/admin.module";
+import { StatisticsModule } from "@/modules/statistics/statistics.module";
 import { UserModule } from "@/modules/user/user.module";
 import { TagModule } from "@/modules/tag/tag.module";
 import config from '../../configs/config.schema';
@@ -57,6 +58,7 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
         AlbumModule,
         JobModule,
         AdminModule,
+        StatisticsModule,
         UserModule,
         TagModule,
     ],

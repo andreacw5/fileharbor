@@ -18,6 +18,7 @@ import {
   ListImagesResponseDto,
   PaginationMetaDto,
 } from './dto';
+import { buildImageTagCreateInput, extractTagNames } from '@/modules/tag/tag.utils';
 
 @Injectable()
 export class ImageService {
@@ -150,6 +151,7 @@ export class ImageService {
       this.logger.debug(
         `[uploadImage] Saving to database - ID: ${imageId}, Tags: ${tags?.length || 0}, Private: ${isPrivate}`
       );
+      const imageTagsInput = buildImageTagCreateInput(clientId, tags);
       const image = await this.prisma.image.create({
         data: {
           id: imageId,
@@ -164,8 +166,19 @@ export class ImageService {
           mimeType: 'image/webp',
           isOptimized: false,
           isPrivate: isPrivate || false,
-          tags: tags || [],
           description: description || null,
+          ...(imageTagsInput.length > 0 && { imageTags: { create: imageTagsInput } }),
+        },
+        include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -212,7 +225,20 @@ export class ImageService {
       where.clientId = clientId;
     }
 
-    const image = await this.prisma.image.findFirst({ where });
+    const image = await this.prisma.image.findFirst({
+      where,
+      include: {
+        imageTags: {
+          include: {
+            tag: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
 
     if (!image) {
       throw new NotFoundException('Image not found');
@@ -280,6 +306,17 @@ export class ImageService {
         clientId,
         userId,
       },
+      include: {
+        imageTags: {
+          include: {
+            tag: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: {
         createdAt: 'desc',
       },
@@ -326,6 +363,15 @@ export class ImageService {
         skip,
         take: perPage,
         include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
           user: {
             select: {
               id: true,
@@ -511,11 +557,28 @@ export class ImageService {
       throw new NotFoundException('Image not found');
     }
 
+    const imageTagsInput = tags !== undefined ? buildImageTagCreateInput(clientId, tags) : undefined;
     const updatedImage = await this.prisma.image.update({
       where: { id: imageId },
       data: {
-        ...(tags !== undefined && { tags }),
         ...(description !== undefined && { description }),
+        ...(imageTagsInput !== undefined && {
+          imageTags: {
+            deleteMany: {},
+            ...(imageTagsInput.length > 0 && { create: imageTagsInput }),
+          },
+        }),
+      },
+      include: {
+        imageTags: {
+          include: {
+            tag: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -662,7 +725,21 @@ export class ImageService {
   async getImageByShareToken(readToken: string) {
     const shareLink = await this.prisma.imageShareLink.findUnique({
       where: { readToken },
-      include: { image: true },
+      include: {
+        image: {
+          include: {
+            imageTags: {
+              include: {
+                tag: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!shareLink) {
@@ -780,6 +857,7 @@ export class ImageService {
       ImageResponseDto,
       {
         ...image,
+        tags: extractTagNames(image),
         url,
         thumbnailUrl,
         fullPath: `${baseUrl}${url}`,
@@ -813,6 +891,91 @@ export class ImageService {
       { success: true, message },
       { excludeExtraneousValues: true },
     );
+  }
+
+  /**
+   * Admin paginated image listing — accepts a pre-built Prisma where clause
+   * and adds admin-specific includes (user, client join).
+   * The caller is responsible for computing skip and take.
+   */
+  async findAdminImages(
+    where: any,
+    options: { skip: number; take: number; page: number },
+  ) {
+    const [images, total] = await Promise.all([
+      this.prisma.image.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: options.skip,
+        take: options.take,
+        include: {
+          imageTags: { include: { tag: { select: { name: true } } } },
+          user: { select: { externalUserId: true, username: true } },
+          client: { select: { name: true, domain: true } },
+        },
+      }),
+      this.prisma.image.count({ where }),
+    ]);
+
+    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
+    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
+
+    const data = images.map((image) => ({
+      ...image,
+      tags: extractTagNames(image),
+      fullPath: `${baseUrl}/${apiPrefix}/images/${image.id}`,
+    }));
+
+    return {
+      data,
+      pagination: {
+        page: options.page,
+        perPage: options.take,
+        total,
+        totalPages: Math.ceil(total / options.take),
+      },
+    };
+  }
+
+  /**
+   * Admin full image fetch — includes albums, active share-link count, user.
+   * Returns null if not found.
+   */
+  async findAdminImageById(imageId: string) {
+    const now = new Date();
+    return this.prisma.image.findUnique({
+      where: { id: imageId },
+      include: {
+        imageTags: { include: { tag: { select: { name: true } } } },
+        user: { select: { externalUserId: true, username: true } },
+        albumImages: {
+          include: {
+            album: { select: { id: true, name: true, externalAlbumId: true, isPublic: true } },
+          },
+        },
+        _count: {
+          select: {
+            shareLinks: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Admin image update — accepts a fully-formed Prisma data object
+   * (supports originalName, isPrivate, description, imageTags).
+   * Returns the updated image with tags and user for DTO mapping.
+   */
+  async adminUpdateImage(imageId: string, data: Record<string, any>) {
+    return this.prisma.image.update({
+      where: { id: imageId },
+      data,
+      include: {
+        imageTags: { include: { tag: { select: { name: true } } } },
+        user: { select: { externalUserId: true, username: true } },
+      },
+    });
   }
 
   /**
