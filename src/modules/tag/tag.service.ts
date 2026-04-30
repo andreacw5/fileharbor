@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
 import {
@@ -21,8 +20,7 @@ export class TagService {
 
   /**
    * Returns distinct tags used across images, optionally scoped by clientId
-   * and filtered by a search string. Uses a raw SQL `unnest` for efficiency —
-   * no full table scan in application memory.
+   * and filtered by a search string.
    */
   async listTags(
     admin: AdminJwtPayload,
@@ -34,37 +32,49 @@ export class TagService {
 
     const limit = Math.min(filters.limit || 200, 500);
 
-    let clientConstraint: Prisma.Sql;
+    const where: Record<string, any> = {
+      imageTags: {
+        some: {},
+      },
+    };
+
     if (filters.clientId) {
       assertClientAccess(admin, filters.clientId);
-      clientConstraint = Prisma.sql`"clientId" = ${filters.clientId}`;
+      where.clientId = filters.clientId;
     } else {
       const allowed = resolveAllowedClients(admin);
       if (allowed !== null) {
-        clientConstraint = Prisma.sql`"clientId" = ANY(${allowed}::text[])`;
-      } else {
-        clientConstraint = Prisma.sql`TRUE`;
+        where.clientId = { in: allowed };
       }
     }
 
-    const searchConstraint = filters.search
-      ? Prisma.sql`AND tag ILIKE ${'%' + filters.search + '%'}`
-      : Prisma.sql``;
+    if (filters.search) {
+      where.name = {
+        contains: filters.search,
+        mode: 'insensitive',
+      };
+    }
 
-    const rows = await this.prisma.$queryRaw<{ tag: string }[]>`
-      SELECT tag FROM (
-        SELECT DISTINCT unnest(tags) AS tag
-        FROM "images"
-        WHERE ${clientConstraint}
-          AND tags IS NOT NULL
-          AND array_length(tags, 1) > 0
-      ) sub
-      WHERE TRUE ${searchConstraint}
-      ORDER BY tag
-      LIMIT ${limit}
-    `;
+    const rows = await this.prisma.tag.findMany({
+      where,
+      orderBy: {
+        name: 'asc',
+      },
+      take: limit,
+      select: {
+        name: true,
+        _count: {
+          select: {
+            imageTags: true,
+          },
+        },
+      },
+    });
 
-    const tags = rows.map((r) => r.tag);
+    const tags = rows.map((row) => ({
+      name: row.name,
+      imageCount: row._count.imageTags,
+    }));
     this.logger.debug(`listTags returned ${tags.length} distinct tags`);
 
     return plainToInstance(

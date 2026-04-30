@@ -29,6 +29,7 @@ model Client {
   images  Image[]
   avatars Avatar[]
   albums  Album[]
+  tags    Tag[]
 
   @@map("clients")
 }
@@ -70,7 +71,6 @@ model Image {
   isOptimized  Boolean   @default(false)
   optimizedAt  DateTime?
   isPrivate    Boolean   @default(false)
-  tags         String[] // Array of textual tags
   views        Int       @default(0)
   downloads    Int       @default(0)
   description  String?
@@ -81,6 +81,7 @@ model Image {
   client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   albumImages AlbumImage[]
+  imageTags   ImageTag[]
   shareLinks  ImageShareLink[]
 
   @@index([clientId])
@@ -88,6 +89,37 @@ model Image {
   @@index([isOptimized])
   @@index([isPrivate])
   @@map("images")
+}
+
+// Client-scoped tag entity
+model Tag {
+  id        String    @id @default(uuid())
+  clientId  String
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  imageTags ImageTag[]
+
+  @@unique([clientId, name])
+  @@index([clientId])
+  @@index([name])
+  @@map("tags")
+}
+
+// Many-to-many relationship between Image and Tag
+model ImageTag {
+  imageId    String
+  tagId      String
+  createdAt  DateTime @default(now())
+
+  image      Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([imageId, tagId])
+  @@index([tagId])
+  @@map("image_tags")
 }
 
 // Avatar entity - one active per user per client
