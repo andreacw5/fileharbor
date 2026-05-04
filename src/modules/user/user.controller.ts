@@ -1,11 +1,15 @@
 import {
+  Body,
   Controller,
   Get,
+  Patch,
   Param,
   Query,
+  UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiSecurity,
   ApiTags,
   ApiOperation,
   ApiResponse,
@@ -15,7 +19,10 @@ import {
 import { UserService } from './user.service';
 import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin/decorators/admin-user.decorator';
+import { ClientId } from '@/modules/client/decorators/client.decorator';
+import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { UserResponseDto } from './dto/user-response.dto';
+import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
 
 @ApiTags('Admin')
 @Controller('admin/users')
@@ -58,6 +65,29 @@ export class UserController {
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<UserResponseDto> {
     return this.userAdminService.getUser(id, adminUser);
+  }
+
+}
+
+@ApiTags('Users')
+@ApiSecurity('api-key')
+@Controller('users')
+@UseInterceptors(ClientInterceptor)
+export class UserClientController {
+  constructor(private readonly userService: UserService) {}
+
+  @Patch('external/:externalUserId')
+  @ApiOperation({ summary: 'Sync user username/email by externalUserId' })
+  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid payload or no fields to update' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid X-API-Key header' })
+  @ApiResponse({ status: 404, description: 'User not found for this client' })
+  updateUserByExternalUserId(
+    @ClientId() clientId: string,
+    @Param('externalUserId') externalUserId: string,
+    @Body() dto: UpdateUserByExternalIdDto,
+  ): Promise<UserResponseDto> {
+    return this.userService.updateUserByExternalUserId(clientId, externalUserId, dto);
   }
 }
 
