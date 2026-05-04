@@ -1,10 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
+
+export class TagListItemDto {
+  @ApiProperty({ description: 'Tag name', example: 'nature' })
+  @Expose()
+  name: string;
+
+  @ApiProperty({ description: 'Number of images associated with this tag', example: 42 })
+  @Expose()
+  imageCount: number;
+}
 
 export class TagsResponseDto {
-  @ApiProperty({ description: 'List of distinct tags used across images', type: [String] })
+  @ApiProperty({ description: 'List of distinct tags used across images', type: [TagListItemDto] })
   @Expose()
-  tags: string[];
+  @Type(() => TagListItemDto)
+  tags: TagListItemDto[];
 
   @ApiProperty({ description: 'Total number of distinct tags returned' })
   @Expose()

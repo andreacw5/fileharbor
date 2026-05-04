@@ -101,7 +101,7 @@ describe('ImageService', () => {
     },
     user: {
       findUnique: jest.fn(),
-      create: jest.fn(),
+      upsert: jest.fn(),
     },
     image: {
       create: jest.fn(),
@@ -196,7 +196,7 @@ describe('ImageService', () => {
   describe('uploadImage', () => {
     beforeEach(() => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+      mockPrismaService.user.upsert.mockResolvedValue(mockUser);
       mockStorageService.getImageMetadata.mockResolvedValue(mockImageMetadata);
       mockStorageService.convertToWebP.mockResolvedValue(Buffer.from('webp-data'));
       mockStorageService.createThumbnail.mockResolvedValue(Buffer.from('thumb-data'));
@@ -219,6 +219,19 @@ describe('ImageService', () => {
       expect(result.originalName).toBe('test.jpg');
       expect(mockPrismaService.client.findUnique).toHaveBeenCalledWith({
         where: { id: mockClientId },
+      });
+      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
+        where: {
+          clientId_externalUserId: {
+            clientId: mockClientId,
+            externalUserId: mockExternalUserId,
+          },
+        },
+        update: {},
+        create: {
+          clientId: mockClientId,
+          externalUserId: mockExternalUserId,
+        },
       });
       expect(mockStorageService.convertToWebP).toHaveBeenCalled();
       expect(mockStorageService.createThumbnail).toHaveBeenCalled();
@@ -250,16 +263,23 @@ describe('ImageService', () => {
       });
     });
 
-    it('should create new user if not exists', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue(null);
-      mockPrismaService.user.create.mockResolvedValue(mockUser);
+    it('should upsert user with username when provided', async () => {
+      await service.uploadImage(mockClientId, mockExternalUserId, mockFile, undefined, undefined, undefined, undefined, 'Andrea');
 
-      await service.uploadImage(mockClientId, mockExternalUserId, mockFile);
-
-      expect(mockPrismaService.user.create).toHaveBeenCalledWith({
-        data: {
+      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
+        where: {
+          clientId_externalUserId: {
+            clientId: mockClientId,
+            externalUserId: mockExternalUserId,
+          },
+        },
+        update: {
+          username: 'Andrea',
+        },
+        create: {
           clientId: mockClientId,
           externalUserId: mockExternalUserId,
+          username: 'Andrea',
         },
       });
     });
@@ -336,8 +356,26 @@ describe('ImageService', () => {
       expect(mockPrismaService.image.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            tags,
             description,
+            imageTags: {
+              create: expect.arrayContaining([
+                expect.objectContaining({
+                  tag: expect.objectContaining({
+                    connectOrCreate: expect.objectContaining({
+                      where: {
+                        clientId_name: {
+                          clientId: mockClientId,
+                          name: 'test',
+                        },
+                      },
+                    }),
+                  }),
+                }),
+              ]),
+            },
+          }),
+          include: expect.objectContaining({
+            imageTags: expect.any(Object),
           }),
         }),
       );
@@ -381,6 +419,17 @@ describe('ImageService', () => {
           id: mockImageId,
           clientId: mockClientId,
         },
+        include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
       });
     });
 
@@ -408,6 +457,17 @@ describe('ImageService', () => {
         where: {
           clientId: mockClientId,
           userId: mockUserId,
+        },
+        include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -595,6 +655,64 @@ describe('ImageService', () => {
         data: {
           isOptimized: true,
           optimizedAt: expect.any(Date),
+        },
+      });
+    });
+  });
+
+  describe('updateImageMetadata', () => {
+    it('should sync relational tags and description', async () => {
+      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        description: 'Updated description',
+        imageTags: [
+          { tag: { name: 'nature' } },
+          { tag: { name: 'sunset' } },
+        ],
+      });
+
+      const result = await service.updateImageMetadata(
+        mockImageId,
+        mockClientId,
+        mockUserId,
+        ['nature', 'sunset'],
+        'Updated description',
+      );
+
+      expect(result.tags).toEqual(['nature', 'sunset']);
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith({
+        where: { id: mockImageId },
+        data: {
+          description: 'Updated description',
+          imageTags: {
+            deleteMany: {},
+            create: expect.arrayContaining([
+              expect.objectContaining({
+                tag: expect.objectContaining({
+                  connectOrCreate: expect.objectContaining({
+                    where: {
+                      clientId_name: {
+                        clientId: mockClientId,
+                        name: 'nature',
+                      },
+                    },
+                  }),
+                }),
+              }),
+            ]),
+          },
+        },
+        include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
         },
       });
     });

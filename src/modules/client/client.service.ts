@@ -158,6 +158,88 @@ export class ClientService {
   }
 
   /**
+   * List all clients enriched with entity counts and total storage (admin use).
+   * `allowed` is null for unrestricted admins, or an array of clientIds.
+   */
+  async listClientsWithStats(allowed: string[] | null) {
+    const where = allowed !== null ? { id: { in: allowed } } : {};
+
+    const clients = await this.prisma.client.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { images: true, avatars: true, albums: true } },
+      },
+    });
+
+    const storagePerClient = await this.prisma.image.groupBy({
+      by: ['clientId'],
+      where: allowed !== null ? { clientId: { in: allowed } } : undefined,
+      _sum: { size: true },
+    });
+
+    const storageMap = new Map(storagePerClient.map((s) => [s.clientId, s._sum.size || 0]));
+
+    return clients.map((c) => ({
+      ...c,
+      totalImages: c._count.images,
+      totalAvatars: c._count.avatars,
+      totalAlbums: c._count.albums,
+      totalStorage: storageMap.get(c.id) || 0,
+    }));
+  }
+
+  /**
+   * Get a single client enriched with entity counts and storage.
+   * Returns null if not found.
+   */
+  async getClientWithStats(clientId: string) {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      include: { _count: { select: { images: true, avatars: true, albums: true } } },
+    });
+
+    if (!client) return null;
+
+    const storageAgg = await this.prisma.image.aggregate({
+      where: { clientId },
+      _sum: { size: true },
+    });
+
+    return {
+      ...client,
+      totalImages: client._count.images,
+      totalAvatars: client._count.avatars,
+      totalAlbums: client._count.albums,
+      totalStorage: storageAgg._sum.size || 0,
+    };
+  }
+
+  /**
+   * Update arbitrary client fields and return the enriched result (admin use).
+   */
+  async updateClientWithStats(clientId: string, data: Record<string, any>) {
+    const updated = await this.prisma.client.update({
+      where: { id: clientId },
+      data,
+      include: { _count: { select: { images: true, avatars: true, albums: true } } },
+    });
+
+    const storageAgg = await this.prisma.image.aggregate({
+      where: { clientId },
+      _sum: { size: true },
+    });
+
+    return {
+      ...updated,
+      totalImages: updated._count.images,
+      totalAvatars: updated._count.avatars,
+      totalAlbums: updated._count.albums,
+      totalStorage: storageAgg._sum.size || 0,
+    };
+  }
+
+  /**
    * Get aggregated statistics across ALL clients (admin use only)
    */
   async getGlobalStats(): Promise<GlobalStatsResponseDto> {

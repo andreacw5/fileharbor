@@ -45,7 +45,6 @@ import {
   AdminRefreshResponseDto,
   AdminUserResponseDto,
   AdminClientResponseDto,
-  AdminStatsResponseDto,
   AdminDeleteResponseDto,
   AdminAlbumResponseDto,
   AdminImageResponseDto,
@@ -164,16 +163,6 @@ export class AdminController {
     return this.adminService.changePassword(adminUser, dto.currentPassword, dto.newPassword);
   }
 
-  // ─── Stats ────────────────────────────────────────────────────────────────
-
-  @Get('stats')
-  @UseGuards(AdminJwtGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics (scoped to accessible clients)' })
-  @ApiResponse({ status: 200, type: AdminStatsResponseDto })
-  getGlobalStats(@AdminUser() adminUser: AdminJwtPayload): Promise<AdminStatsResponseDto> {
-    return this.adminService.getGlobalStats(adminUser);
-  }
 
   // ─── Clients ──────────────────────────────────────────────────────────────
 

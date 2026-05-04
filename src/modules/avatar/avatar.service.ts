@@ -319,6 +319,43 @@ export class AvatarService {
   }
 
   /**
+   * Admin paginated avatar listing — accepts a pre-built Prisma where clause
+   * and adds admin-specific includes (user, client join).
+   * The caller is responsible for computing skip and take.
+   */
+  async findAdminAvatars(
+    where: any,
+    options: { skip: number; take: number },
+  ) {
+    const [avatars, total] = await Promise.all([
+      this.prisma.avatar.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: options.skip,
+        take: options.take,
+        include: {
+          user: { select: { externalUserId: true, username: true } },
+          client: { select: { name: true, domain: true } },
+        },
+      }),
+      this.prisma.avatar.count({ where }),
+    ]);
+
+    return { avatars, total };
+  }
+
+  /**
+   * Get avatar by internal ID with user join (admin use).
+   * Returns null if not found.
+   */
+  async getAvatarById(avatarId: string) {
+    return this.prisma.avatar.findUnique({
+      where: { id: avatarId },
+      include: { user: { select: { externalUserId: true, username: true } } },
+    });
+  }
+
+  /**
    * Get avatars not optimized
    */
   /**

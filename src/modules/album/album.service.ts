@@ -329,6 +329,85 @@ export class AlbumService {
   }
 
   /**
+   * Admin paginated album listing — accepts a pre-built Prisma where clause
+   * and adds admin-specific includes (user, client, activeTokens count).
+   * The caller is responsible for computing skip and take.
+   */
+  async findAdminAlbums(
+    where: any,
+    options: { skip: number; take: number },
+  ) {
+    const now = new Date();
+    const activeTokensWhere = { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+
+    const [albums, total] = await Promise.all([
+      this.prisma.album.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: options.skip,
+        take: options.take,
+        include: {
+          user: { select: { externalUserId: true, username: true } },
+          client: { select: { name: true, domain: true } },
+          _count: { select: { albumImages: true, albumTokens: { where: activeTokensWhere } } },
+        },
+      }),
+      this.prisma.album.count({ where }),
+    ]);
+
+    return { albums, total };
+  }
+
+  /**
+   * Admin full album fetch — includes user and active token count.
+   * Returns null if not found.
+   */
+  async findAdminAlbumById(albumId: string) {
+    const now = new Date();
+    return this.prisma.album.findUnique({
+      where: { id: albumId },
+      include: {
+        user: { select: { externalUserId: true, username: true } },
+        _count: {
+          select: {
+            albumImages: true,
+            albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Admin album update — bypasses ownership check.
+   * Accepts a fully-formed Prisma data object and returns the enriched result.
+   */
+  async adminUpdateAlbum(albumId: string, data: Record<string, any>) {
+    const now = new Date();
+    return this.prisma.album.update({
+      where: { id: albumId },
+      data,
+      include: {
+        user: { select: { externalUserId: true, username: true } },
+        _count: {
+          select: {
+            albumImages: true,
+            albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Get album by internal ID only — no client scope (admin access-check use).
+   * Returns null if not found.
+   */
+  async getAlbumByIdUnscoped(albumId: string) {
+    return this.prisma.album.findUnique({ where: { id: albumId } });
+  }
+
+  /**
    * Force-add images to an album (admin use — bypasses ownership check).
    * Verifies that the album and all images belong to the given clientId.
    */

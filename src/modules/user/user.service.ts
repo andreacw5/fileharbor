@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
 import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
@@ -7,6 +12,7 @@ import {
   buildClientWhere,
 } from '@/modules/admin/helpers/admin-access.helper';
 import { UserResponseDto } from './dto/user-response.dto';
+import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
 
 @Injectable()
 export class UserService {
@@ -108,6 +114,63 @@ export class UserService {
         totalImages: user._count.images,
         totalAvatars: user._count.avatars,
         totalAlbums: user._count.albums,
+      },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  async updateUserByExternalUserId(
+    clientId: string,
+    externalUserId: string,
+    dto: UpdateUserByExternalIdDto,
+  ): Promise<UserResponseDto> {
+    this.logger.log(
+      `updateUserByExternalUserId called for clientId=${clientId} externalUserId=${externalUserId}`,
+    );
+
+    if (!dto.username && !dto.email) {
+      throw new BadRequestException('At least one field between username and email must be provided');
+    }
+
+    if (externalUserId === 'system') {
+      throw new BadRequestException('System user cannot be updated with this endpoint');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        clientId_externalUserId: {
+          clientId,
+          externalUserId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        ...(dto.username !== undefined ? { username: dto.username } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+      },
+      include: {
+        _count: { select: { images: true, avatars: true, albums: true } },
+        client: { select: { id: true, name: true, domain: true } },
+      },
+    });
+
+    this.logger.log(`updateUserByExternalUserId updated user=${updated.id} clientId=${updated.clientId}`);
+
+    return plainToInstance(
+      UserResponseDto,
+      {
+        ...updated,
+        totalImages: updated._count.images,
+        totalAvatars: updated._count.avatars,
+        totalAlbums: updated._count.albums,
       },
       { excludeExtraneousValues: true },
     );
