@@ -308,7 +308,7 @@ export class AdminService {
     const skip = (page - 1) * take;
 
     const where: any = buildClientWhere(admin, filters.clientId);
-    if (filters.userId) where.user = { externalUserId: filters.userId };
+    if (filters.userId) where.user = { id: filters.userId };
     if (filters.albumId) where.albumImages = { some: { albumId: filters.albumId } };
     if (filters.name) where.originalName = { contains: filters.name, mode: 'insensitive' };
     if (filters.tags && filters.tags.length > 0) {
