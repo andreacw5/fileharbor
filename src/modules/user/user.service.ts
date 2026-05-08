@@ -6,13 +6,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
-import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   assertClientAccess,
   buildClientWhere,
 } from '@/modules/admin/helpers/admin-access.helper';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
+import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
 
 @Injectable()
 export class UserService {
@@ -114,6 +115,83 @@ export class UserService {
         totalImages: user._count.images,
         totalAvatars: user._count.avatars,
         totalAlbums: user._count.albums,
+      },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  async updateUserAdmin(
+    userId: string,
+    dto: UpdateUserAdminDto,
+    admin: AdminJwtPayload,
+  ): Promise<UserResponseDto> {
+    this.logger.log(`updateUserAdmin called by admin=${admin.sub} userId=${userId}`);
+
+    if (!dto.externalUserId && !dto.username && !dto.email) {
+      throw new BadRequestException(
+        'At least one field between externalUserId, username, and email must be provided',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, clientId: true, externalUserId: true },
+    });
+
+    if (!user) {
+      this.logger.warn(`updateUserAdmin: user not found userId=${userId}`);
+      throw new NotFoundException('User not found');
+    }
+
+    assertClientAccess(admin, user.clientId);
+
+    if (user.externalUserId === 'system') {
+      throw new BadRequestException('System user cannot be updated');
+    }
+
+    // Check if new externalUserId conflicts with existing user
+    if (dto.externalUserId && dto.externalUserId !== user.externalUserId) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: {
+          clientId_externalUserId: {
+            clientId: user.clientId,
+            externalUserId: dto.externalUserId,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException(
+          `User with externalUserId "${dto.externalUserId}" already exists for this client`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.externalUserId !== undefined ? { externalUserId: dto.externalUserId } : {}),
+        ...(dto.username !== undefined ? { username: dto.username } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+      },
+      include: {
+        _count: { select: { images: true, avatars: true, albums: true } },
+        client: { select: { id: true, name: true, domain: true } },
+      },
+    });
+
+    this.logger.log(
+      `updateUserAdmin: updated user=${updated.id} clientId=${updated.clientId}`,
+    );
+
+    return plainToInstance(
+      UserResponseDto,
+      {
+        ...updated,
+        totalImages: updated._count.images,
+        totalAvatars: updated._count.avatars,
+        totalAlbums: updated._count.albums,
       },
       { excludeExtraneousValues: true },
     );
