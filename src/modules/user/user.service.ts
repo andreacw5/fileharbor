@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,6 +15,7 @@ import {
 import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
 import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UserService {
@@ -22,6 +24,105 @@ export class UserService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+
+  // ─── API-Key scoped methods ───────────────────────────────────────────────
+
+  async listUsersForClient(
+    clientId: string,
+    filters: { search?: string; page?: number; perPage?: number } = {},
+  ) {
+    this.logger.log(
+      `listUsersForClient clientId=${clientId} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
+    );
+
+    const page = filters.page || 1;
+    const perPage = filters.perPage || 20;
+    const take = Math.min(perPage, 100);
+    const skip = (page - 1) * take;
+
+    const where: any = { clientId, externalUserId: { not: 'system' } };
+
+    if (filters.search) {
+      where.OR = [
+        { externalUserId: { contains: filters.search, mode: 'insensitive' } },
+        { username: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          _count: { select: { images: true, avatars: true } },
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    this.logger.debug(`listUsersForClient returned ${users.length}/${total} users`);
+
+    const data = users.map((u) =>
+      plainToInstance(
+        UserResponseDto,
+        { ...u, totalImages: u._count.images, totalAvatars: u._count.avatars },
+        { excludeExtraneousValues: true },
+      ),
+    );
+
+    return {
+      data,
+      pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
+    };
+  }
+
+  async createUserForClient(
+    clientId: string,
+    dto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    this.logger.log(
+      `createUserForClient clientId=${clientId} externalUserId=${dto.externalUserId}`,
+    );
+
+    if (dto.externalUserId === 'system') {
+      throw new BadRequestException('externalUserId "system" is reserved');
+    }
+
+    const existing = await this.prisma.user.findUnique({
+      where: {
+        clientId_externalUserId: { clientId, externalUserId: dto.externalUserId },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `User with externalUserId "${dto.externalUserId}" already exists for this client`,
+      );
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        clientId,
+        externalUserId: dto.externalUserId,
+        ...(dto.username !== undefined ? { username: dto.username } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+      },
+      include: {
+        _count: { select: { images: true, avatars: true } },
+      },
+    });
+
+    this.logger.log(`createUserForClient created user=${user.id} clientId=${clientId}`);
+
+    return plainToInstance(
+      UserResponseDto,
+      { ...user, totalImages: user._count.images, totalAvatars: user._count.avatars },
+      { excludeExtraneousValues: true },
+    );
+  }
 
   // ─── Users ────────────────────────────────────────────────────────────────
 
