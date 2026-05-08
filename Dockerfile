@@ -6,7 +6,7 @@ ENV NODE_ENV=build
 WORKDIR /usr/src/app
 
 # Install pnpm and build dependencies
-RUN npm install -g pnpm
+RUN npm install -g pnpm@8.15.0
 
 # Install build deps needed for native modules and prisma generation
 RUN apt-get update && \
@@ -15,7 +15,7 @@ RUN apt-get update && \
 
 # Install app dependencies (including dev dependencies) for the build
 COPY package.json pnpm-lock.yaml .npmrc ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Bundle app source
 COPY . .
@@ -39,8 +39,13 @@ WORKDIR /usr/src/app
 # Create a non-root user and group with specific UID/GID to match host user
 RUN groupadd -g 1001 app && useradd -u 1001 -g app -m app
 
+# Install runtime dependencies for Sharp image processing
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libvips-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy built artifacts and dependencies from builder with ownership set during copy
-COPY --chown=app:app package.json pnpm-lock.yaml .npmrc ./
+COPY --chown=app:app package.json pnpm-lock.yaml ./
 COPY --from=builder --chown=app:app /usr/src/app/prisma ./prisma
 COPY --from=builder --chown=app:app /usr/src/app/dist ./dist
 COPY --from=builder --chown=app:app /usr/src/app/node_modules ./node_modules
