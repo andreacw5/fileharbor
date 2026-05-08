@@ -1,4 +1,4 @@
-FROM node:24.13.0-slim AS builder
+FROM node:24.15.0-slim AS builder
 
 ENV NODE_ENV=build
 
@@ -28,7 +28,7 @@ RUN pnpm build
 RUN pnpm prune --prod
 
 # Start a fresh runtime image
-FROM node:24.13.0-slim AS prod
+FROM node:24.15.0-slim AS prod
 
 # Set the NODE_ENV to production
 ENV NODE_ENV=production
