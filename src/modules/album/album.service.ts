@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -253,15 +254,27 @@ export class AlbumService {
       throw new ForbiddenException('You can only update your own albums');
     }
 
+    // Validate cover image if provided and changed
+    if (dto.coverImageId !== undefined && dto.coverImageId !== null) {
+      await this.validateCoverImageInAlbum(dto.coverImageId, albumId, clientId, userId);
+    }
+
     try {
+      const updateData: any = {
+        externalAlbumId: dto.externalAlbumId,
+        name: dto.name,
+        description: dto.description,
+        isPublic: dto.isPublic,
+      };
+
+      // Handle coverImageId: allow explicit null to remove, or set new value
+      if (dto.coverImageId !== undefined) {
+        updateData.coverImageId = dto.coverImageId;
+      }
+
       const updated = await this.prisma.album.update({
         where: { id: albumId },
-        data: {
-          externalAlbumId: dto.externalAlbumId,
-          name: dto.name,
-          description: dto.description,
-          isPublic: dto.isPublic,
-        },
+        data: updateData,
       });
 
       // Send webhook notification (non-blocking)
@@ -271,6 +284,7 @@ export class AlbumService {
         name: updated.name,
         description: updated.description,
         isPublic: updated.isPublic,
+        coverImageId: updated.coverImageId,
         userId,
       }).catch((error) => {
         this.logger.warn(
@@ -952,9 +966,11 @@ export class AlbumService {
     return {
       ...this.formatAlbumResponse(album),
       imageCount: album._count.albumImages,
-      coverUrl: album.albumImages[0]?.image
-        ? this.buildImageFullPath(album.albumImages[0].image.id)
-        : undefined,
+      coverUrl: album.coverImageId
+        ? this.buildImageFullPath(album.coverImageId)
+        : album.albumImages[0]?.image
+          ? this.buildImageFullPath(album.albumImages[0].image.id)
+          : undefined,
     };
   }
 
@@ -980,15 +996,27 @@ export class AlbumService {
       throw new ForbiddenException('You can only update your own albums');
     }
 
+    // Validate cover image if provided and changed
+    if (dto.coverImageId !== undefined && dto.coverImageId !== null) {
+      await this.validateCoverImageInAlbum(dto.coverImageId, album.id, clientId, userId);
+    }
+
     try {
+      const updateData: any = {
+        externalAlbumId: dto.externalAlbumId || externalAlbumId,
+        name: dto.name,
+        description: dto.description,
+        isPublic: dto.isPublic,
+      };
+
+      // Handle coverImageId: allow explicit null to remove, or set new value
+      if (dto.coverImageId !== undefined) {
+        updateData.coverImageId = dto.coverImageId;
+      }
+
       const updated = await this.prisma.album.update({
         where: { id: album.id },
-        data: {
-          externalAlbumId: dto.externalAlbumId || externalAlbumId,
-          name: dto.name,
-          description: dto.description,
-          isPublic: dto.isPublic,
-        },
+        data: updateData,
       });
 
       // Send webhook notification (non-blocking)
@@ -998,6 +1026,7 @@ export class AlbumService {
         name: updated.name,
         description: updated.description,
         isPublic: updated.isPublic,
+        coverImageId: updated.coverImageId,
         userId,
       }).catch((error) => {
         this.logger.warn(
@@ -1172,6 +1201,7 @@ export class AlbumService {
       name: album.name,
       description: album.description,
       isPublic: album.isPublic,
+      coverImageId: album.coverImageId,
       createdAt: album.createdAt,
     };
   }
@@ -1184,5 +1214,59 @@ export class AlbumService {
     const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
     return `${baseUrl}/${apiPrefix}/images/${imageId}`;
   }
-}
 
+  /**
+   * Validate that a cover image exists and belongs to the client/user
+   */
+  private async validateCoverImage(imageId: string, clientId: string, userId: string): Promise<void> {
+    const image = await this.prisma.image.findFirst({
+      where: {
+        id: imageId,
+        clientId,
+        userId,
+      },
+    });
+
+    if (!image) {
+      throw new BadRequestException('Cover image not found or unauthorized');
+    }
+  }
+
+  /**
+   * Validate that a cover image belongs to the album
+   */
+  private async validateCoverImageInAlbum(
+    imageId: string,
+    albumId: string,
+    clientId: string,
+    userId: string,
+  ): Promise<void> {
+    // Check if the image exists in this album
+    const albumImage = await this.prisma.albumImage.findUnique({
+      where: {
+        albumId_imageId: {
+          albumId,
+          imageId,
+        },
+      },
+      include: {
+        image: {
+          select: {
+            id: true,
+            clientId: true,
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!albumImage) {
+      throw new BadRequestException('Cover image must be part of the album');
+    }
+
+    // Verify the image belongs to the correct client and user
+    if (albumImage.image.clientId !== clientId || albumImage.image.userId !== userId) {
+      throw new BadRequestException('Cover image does not belong to this client or user');
+    }
+  }
+}

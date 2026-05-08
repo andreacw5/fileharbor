@@ -16,7 +16,7 @@ import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admi
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { TagsResponseDto } from './dto/tag-response.dto';
 
-@ApiTags('Admin')
+@ApiTags('Admin - Tags')
 @Controller('admin/tags')
 export class TagController {
   constructor(private readonly tagAdminService: TagService) {}

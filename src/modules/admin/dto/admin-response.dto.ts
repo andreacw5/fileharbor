@@ -70,6 +70,8 @@ export class AdminAlbumResponseDto {
   @ApiPropertyOptional() @Expose() description?: string;
   @ApiPropertyOptional() @Expose() externalAlbumId?: string;
   @ApiProperty() @Expose() isPublic: boolean;
+  @ApiPropertyOptional() @Expose() coverImageId?: string;
+  @ApiPropertyOptional({ description: 'Full URL to the cover image' }) @Expose() coverImageUrl?: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
 

@@ -20,6 +20,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
@@ -48,6 +49,7 @@ export class AlbumsAdminController {
   constructor(
     private readonly albumService: AlbumService,
     private readonly clientService: ClientService,
+    private readonly config: ConfigService,
   ) {}
 
   @Post()
@@ -159,13 +161,19 @@ export class AlbumsAdminController {
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.isPublic !== undefined) data.isPublic = dto.isPublic;
     if ('externalAlbumId' in dto) data.externalAlbumId = dto.externalAlbumId ?? null;
+    if ('coverImageId' in dto) data.coverImageId = dto.coverImageId ?? null;
 
     const updated = await this.albumService.adminUpdateAlbum(id, data);
     this.logger.log(`[Admin] Album updated: ${id}`);
 
     return plainToInstance(
       AdminAlbumResponseDto,
-      { ...updated, totalImages: updated._count.albumImages, activeTokens: updated._count.albumTokens },
+      {
+        ...updated,
+        totalImages: updated._count.albumImages,
+        activeTokens: updated._count.albumTokens,
+        coverImageUrl: updated.coverImageId ? this.buildImageFullPath(updated.coverImageId) : undefined,
+      },
       { excludeExtraneousValues: true },
     );
   }
@@ -249,6 +257,15 @@ export class AlbumsAdminController {
       { success: true, message: 'Album deleted successfully' },
       { excludeExtraneousValues: true },
     );
+  }
+
+  /**
+   * Build full path URL for image
+   */
+  private buildImageFullPath(imageId: string): string {
+    const apiPrefix = this.config.get('apiPrefix') || 'v2';
+    const baseUrl = this.config.get('baseUrl') || 'http://localhost:3000';
+    return `${baseUrl}/${apiPrefix}/images/${imageId}`;
   }
 }
 

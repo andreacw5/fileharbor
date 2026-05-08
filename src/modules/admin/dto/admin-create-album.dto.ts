@@ -55,5 +55,14 @@ export class AdminCreateAlbumDto {
   @IsOptional()
   @IsString()
   externalAlbumId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Cover image ID (must be an image that belongs to the album)',
+    format: 'uuid',
+    example: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+  })
+  @IsOptional()
+  @IsUUID()
+  coverImageId?: string;
 }
 

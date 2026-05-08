@@ -9,8 +9,6 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import {
   AdminLoginResponseDto,
@@ -18,6 +16,8 @@ import {
   AdminUserResponseDto,
 } from './dto/admin-response.dto';
 import { AdminJwtPayload } from './guards/admin-jwt.guard';
+import { CryptoUtils } from './utils/crypto.utils';
+import { parseExpiresInToSeconds, parseDays } from './utils/token.utils';
 
 @Injectable()
 export class AdminAuthService {
@@ -31,24 +31,33 @@ export class AdminAuthService {
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
 
-  /** Generate a signed access token for the given admin payload */
+  /**
+   * Generate a signed JWT access token for admin user
+   * @param payload The JWT payload
+   * @returns Object containing the token and expiration time in seconds
+   */
   private signAccessToken(payload: Omit<AdminJwtPayload, never>): { token: string; expiresIn: number } {
     const expiresIn = this.config.get<string>('jwtAdminExpiresIn') || '15m';
     const token = this.jwtService.sign(payload, {
       secret: this.config.get<string>('jwtAdminSecret'),
       expiresIn: expiresIn as any,
     });
-    // Parse seconds from strings like '15m', '2h', '1d'
-    const seconds = this.parseExpiresInToSeconds(expiresIn);
+    const seconds = parseExpiresInToSeconds(expiresIn);
     return { token, expiresIn: seconds };
   }
 
-  /** Create and persist a refresh token, returns the raw (unhashed) token */
+  /**
+   * Create and persist a refresh token
+   * The raw token is returned to the client, while only its hash is stored in the database
+   * @param adminUserId The admin user ID
+   * @returns The raw (unhashed) refresh token to be sent to the client
+   */
   private async createRefreshToken(adminUserId: string): Promise<string> {
-    const rawToken = crypto.randomBytes(40).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const rawToken = CryptoUtils.generateSecureToken();
+    const tokenHash = CryptoUtils.hashToken(rawToken);
 
-    const days = this.config.get<number>('jwtAdminRefreshExpiresInDays') || 7;
+    const refreshExpiresIn = this.config.get<string | number>('jwtAdminRefreshExpiresInDays') || 7;
+    const days = parseDays(refreshExpiresIn);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + days);
 
@@ -59,15 +68,14 @@ export class AdminAuthService {
     return rawToken;
   }
 
-  /** Convert NestJS/jsonwebtoken expiresIn string to seconds */
-  private parseExpiresInToSeconds(value: string): number {
-    const match = value.match(/^(\d+)([smhd])$/);
-    if (!match) return 900; // default 15m
-    const n = parseInt(match[1], 10);
-    const unit = match[2];
-    return unit === 's' ? n : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n * 86400;
-  }
 
+  /**
+   * Authenticate an admin user and generate access/refresh tokens
+   * @param email Admin user email
+   * @param password Admin user password
+   * @returns Login response with tokens and user info
+   * @throws UnauthorizedException if credentials are invalid
+   */
   async login(email: string, password: string): Promise<AdminLoginResponseDto> {
     const adminUser = await this.prisma.adminUser.findUnique({
       where: { email },
@@ -78,7 +86,7 @@ export class AdminAuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isValid = await bcrypt.compare(password, adminUser.passwordHash);
+    const isValid = await CryptoUtils.verifyPassword(password, adminUser.passwordHash);
     if (!isValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -103,6 +111,8 @@ export class AdminAuthService {
 
     const userDto = this.formatAdminUser(adminUser, allowedClientIds);
 
+    this.logger.log(`[Admin] User logged in: ${email}`);
+
     return plainToInstance(
       AdminLoginResponseDto,
       { accessToken, refreshToken, expiresIn, user: userDto },
@@ -110,8 +120,15 @@ export class AdminAuthService {
     );
   }
 
+  /**
+   * Refresh access token using a valid refresh token
+   * Implements token rotation: old refresh token is revoked and a new one is issued
+   * @param rawRefreshToken The raw refresh token from the client
+   * @returns New access and refresh tokens
+   * @throws UnauthorizedException if refresh token is invalid or expired
+   */
   async refresh(rawRefreshToken: string): Promise<AdminRefreshResponseDto> {
-    const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+    const tokenHash = CryptoUtils.hashToken(rawRefreshToken);
 
     const stored = await this.prisma.adminRefreshToken.findUnique({
       where: { tokenHash },
@@ -156,8 +173,13 @@ export class AdminAuthService {
     );
   }
 
+  /**
+   * Logout an admin user by revoking their refresh token
+   * @param rawRefreshToken The raw refresh token to revoke
+   * @returns Success message
+   */
   async logout(rawRefreshToken: string): Promise<{ message: string }> {
-    const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+    const tokenHash = CryptoUtils.hashToken(rawRefreshToken);
 
     const stored = await this.prisma.adminRefreshToken.findUnique({ where: { tokenHash } });
 
@@ -177,6 +199,12 @@ export class AdminAuthService {
 
   // ─── Profile ────────────────────────────────────────────────────────────────
 
+  /**
+   * Get the current admin user's profile
+   * @param admin The authenticated admin JWT payload
+   * @returns Admin user profile
+   * @throws NotFoundException if admin user not found
+   */
   async getProfile(admin: AdminJwtPayload): Promise<AdminUserResponseDto> {
     const adminUser = await this.prisma.adminUser.findUnique({
       where: { id: admin.sub },
@@ -186,6 +214,13 @@ export class AdminAuthService {
     return this.formatAdminUser(adminUser, adminUser.clientAccess.map((a) => a.clientId));
   }
 
+  /**
+   * Update the current admin user's profile (name and/or email)
+   * @param admin The authenticated admin JWT payload
+   * @param data Profile update data
+   * @returns Updated admin user profile
+   * @throws ConflictException if email is already in use
+   */
   async updateProfile(
     admin: AdminJwtPayload,
     data: { name?: string; email?: string },
@@ -203,9 +238,20 @@ export class AdminAuthService {
       include: { clientAccess: { select: { clientId: true } } },
     });
 
+    this.logger.log(`[Admin] Profile updated for user: ${updated.email}`);
+
     return this.formatAdminUser(updated, updated.clientAccess.map((a) => a.clientId));
   }
 
+  /**
+   * Change the current admin user's password
+   * @param admin The authenticated admin JWT payload
+   * @param currentPassword The current password for verification
+   * @param newPassword The new password to set
+   * @returns Success message
+   * @throws NotFoundException if admin user not found
+   * @throws BadRequestException if current password is incorrect
+   */
   async changePassword(
     admin: AdminJwtPayload,
     currentPassword: string,
@@ -214,17 +260,25 @@ export class AdminAuthService {
     const adminUser = await this.prisma.adminUser.findUnique({ where: { id: admin.sub } });
     if (!adminUser) throw new NotFoundException('Admin user not found');
 
-    const isValid = await bcrypt.compare(currentPassword, adminUser.passwordHash);
+    const isValid = await CryptoUtils.verifyPassword(currentPassword, adminUser.passwordHash);
     if (!isValid) throw new BadRequestException('Current password is incorrect');
 
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await CryptoUtils.hashPassword(newPassword);
     await this.prisma.adminUser.update({ where: { id: admin.sub }, data: { passwordHash } });
+
+    this.logger.log(`[Admin] Password changed for user: ${adminUser.email}`);
 
     return { message: 'Password changed successfully' };
   }
 
   // ─── Formatter ────────────────────────────────────────────────────────────
 
+  /**
+   * Format admin user for response
+   * @param user The admin user from database
+   * @param allowedClientIds List of allowed client IDs
+   * @returns Formatted admin user response DTO
+   */
   private formatAdminUser(
     user: any,
     allowedClientIds: string[],
