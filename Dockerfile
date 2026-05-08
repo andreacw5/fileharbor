@@ -14,7 +14,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install app dependencies (including dev dependencies) for the build
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
 
 # Bundle app source
@@ -40,7 +40,7 @@ WORKDIR /usr/src/app
 RUN groupadd -g 1001 app && useradd -u 1001 -g app -m app
 
 # Copy built artifacts and dependencies from builder with ownership set during copy
-COPY --chown=app:app package.json pnpm-lock.yaml ./
+COPY --chown=app:app package.json pnpm-lock.yaml .npmrc ./
 COPY --from=builder --chown=app:app /usr/src/app/prisma ./prisma
 COPY --from=builder --chown=app:app /usr/src/app/dist ./dist
 COPY --from=builder --chown=app:app /usr/src/app/node_modules ./node_modules
