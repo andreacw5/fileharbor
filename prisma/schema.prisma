@@ -24,6 +24,12 @@ model Client {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Tinify credentials (optional, can be set per client for image optimization)
+  tinifyActive       Boolean @default(false)
+  tinifyApiKey       String?
+  currentTinifyUsage Int     @default(0) // Track current month's usage for billing purposes
+  currentTinifyLimit Int     @default(500) // Monthly compression limit (default: 500 for free tier)
+
   // Relations
   users   User[]
   images  Image[]
@@ -70,6 +76,7 @@ model Image {
   mimeType     String
   isOptimized  Boolean   @default(false)
   optimizedAt  DateTime?
+  tinifyOptimized Boolean @default(false) // Track if image was compressed with Tinify to avoid reprocessing
   isPrivate    Boolean   @default(false)
   views        Int       @default(0)
   downloads    Int       @default(0)

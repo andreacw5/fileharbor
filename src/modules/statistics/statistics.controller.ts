@@ -5,7 +5,7 @@ import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admi
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminStatsResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
-@ApiTags('Admin')
+@ApiTags('Admin - Statistics')
 @Controller('admin/stats')
 export class StatisticsController {
   constructor(private readonly statisticsService: StatisticsService) {}

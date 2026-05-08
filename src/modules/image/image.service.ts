@@ -5,20 +5,24 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
+import { lastValueFrom } from 'rxjs';
 import {
   ImageResponseDto,
   ShareLinkResponseDto,
   DeleteResponseDto,
   ListImagesResponseDto,
   PaginationMetaDto,
+  TinifyCompressionResponseDto,
 } from './dto';
 import { buildImageTagCreateInput, extractTagNames } from '@/modules/tag/tag.utils';
+
 
 @Injectable()
 export class ImageService {
@@ -32,6 +36,7 @@ export class ImageService {
     private storage: StorageService,
     private config: ConfigService,
     private webhook: WebhookService,
+    private httpService: HttpService,
   ) {
     // Original should be high quality to preserve image fidelity
     this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
@@ -901,11 +906,14 @@ export class ImageService {
   async findAdminImages(
     where: any,
     options: { skip: number; take: number; page: number },
+    sort?: { field: string; order: 'asc' | 'desc' },
   ) {
+    const orderBy: any = sort ? { [sort.field]: sort.order } : { createdAt: 'desc' };
+
     const [images, total] = await Promise.all([
       this.prisma.image.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: options.skip,
         take: options.take,
         include: {
@@ -993,5 +1001,223 @@ export class ImageService {
     });
 
     return result.count;
+  }
+
+  /**
+   * Compress image with Tinify (TinyPNG) API
+   * Replaces the original image and regenerates thumbnail
+   */
+  async compressImageWithTinify(imageId: string): Promise<TinifyCompressionResponseDto> {
+    this.logger.debug(`[compressImageWithTinify] Start - ID: ${imageId}`);
+
+    // Get image from database
+    const image = await this.prisma.image.findUnique({
+      where: { id: imageId },
+      include: {
+        imageTags: {
+          include: {
+            tag: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!image) {
+      this.logger.warn(`[compressImageWithTinify] Image not found - ID: ${imageId}`);
+      throw new NotFoundException('Image not found');
+    }
+
+    // Check if image was already compressed with Tinify to avoid reprocessing
+    if (image.tinifyOptimized) {
+      this.logger.warn(`[compressImageWithTinify] Image already compressed with Tinify - ID: ${imageId}`);
+      throw new BadRequestException('This image has already been compressed with Tinify');
+    }
+
+    // Get client to retrieve Tinify configuration
+    const client = await this.prisma.client.findUnique({
+      where: { id: image.clientId },
+    });
+
+    if (!client) {
+      this.logger.error(`[compressImageWithTinify] Client not found - ID: ${image.clientId}`);
+      throw new NotFoundException('Client not found');
+    }
+
+    // Check if Tinify is enabled for this client
+    if (!client.tinifyActive) {
+      this.logger.error(`[compressImageWithTinify] Tinify not enabled for client - ID: ${client.id}`);
+      throw new BadRequestException('Tinify compression is not enabled for this client');
+    }
+
+    // Get API key from client
+    const tinifyKey = client.tinifyApiKey;
+    if (!tinifyKey || !tinifyKey.trim()) {
+      this.logger.error(`[compressImageWithTinify] Tinify API key not configured for client - ID: ${client.id}`);
+      throw new BadRequestException('Tinify API key not configured for this client');
+    }
+
+    // Check usage limit (configurable per client, default 500)
+    if (client.currentTinifyUsage >= client.currentTinifyLimit) {
+      this.logger.warn(`[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Usage: ${client.currentTinifyUsage}/${client.currentTinifyLimit}`);
+      throw new BadRequestException(`Monthly Tinify compression limit reached (${client.currentTinifyUsage}/${client.currentTinifyLimit}). Limit will reset next month.`);
+    }
+
+    try {
+      const domain = client.domain || image.clientId;
+
+      // Read the current original file
+      const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+      const originalBuffer = await this.storage.readFile(originalPath);
+      const originalSize = originalBuffer.length;
+
+      this.logger.debug(`[compressImageWithTinify] Original size: ${originalSize} bytes - ID: ${imageId}`);
+
+      // Prepare Basic Auth header (api:YOUR_API_KEY)
+      const authString = Buffer.from(`api:${tinifyKey.trim()}`).toString('base64');
+      const headers = {
+        'Authorization': `Basic ${authString}`,
+        'Content-Type': 'application/octet-stream',
+      };
+
+      // Step 1: Upload image to Tinify API
+      this.logger.debug(`[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`);
+      const uploadResponse = await lastValueFrom(
+        this.httpService.post('https://api.tinify.com/shrink', originalBuffer, {
+          headers,
+          responseType: 'json',
+        })
+      );
+
+      // Check for successful upload
+      if (!uploadResponse.data || !uploadResponse.data.output || !uploadResponse.data.output.url) {
+        this.logger.error(
+          `[compressImageWithTinify] Invalid response from Tinify API - ID: ${imageId}`
+        );
+        throw new BadRequestException('Failed to compress image with Tinify');
+      }
+
+      const compressedUrl = uploadResponse.data.output.url;
+      const compressedSize = uploadResponse.data.output.size;
+      const savedBytes = originalSize - compressedSize;
+      const savedPercentage = ((savedBytes / originalSize) * 100).toFixed(2);
+
+      this.logger.debug(
+        `[compressImageWithTinify] Compressed size: ${compressedSize} bytes (saved ${savedBytes} bytes, ${savedPercentage}%) - ID: ${imageId}`
+      );
+
+      // Step 2: Download compressed image
+      this.logger.debug(`[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`);
+      const downloadResponse = await lastValueFrom(
+        this.httpService.get(compressedUrl, {
+          headers: {
+            'Authorization': `Basic ${authString}`,
+          },
+          responseType: 'arraybuffer',
+        })
+      );
+
+      const compressedBuffer = Buffer.from(downloadResponse.data);
+
+      // Save compressed file, replacing the original
+      await this.storage.saveFile(originalPath, compressedBuffer);
+      this.logger.debug(`[compressImageWithTinify] Compressed file saved - ID: ${imageId}`);
+
+      // Regenerate thumbnail from compressed image
+      this.logger.debug(`[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`);
+      const thumbBuffer = await this.storage.createThumbnail(
+        compressedBuffer,
+        this.thumbnailSize,
+        this.thumbnailQuality,
+      );
+      const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      await this.storage.saveFile(thumbnailPath, thumbBuffer);
+      this.logger.debug(`[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`);
+
+      // Update database with new size, mark as Tinify-optimized, and increment usage counter
+      const [updatedImage] = await this.prisma.$transaction([
+        this.prisma.image.update({
+          where: { id: imageId },
+          data: {
+            size: compressedSize,
+            tinifyOptimized: true,
+          },
+          include: {
+            imageTags: {
+              include: {
+                tag: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        }),
+        this.prisma.client.update({
+          where: { id: client.id },
+          data: {
+            currentTinifyUsage: {
+              increment: 1,
+            },
+          },
+        }),
+      ]);
+
+      this.logger.log(
+        `[compressImageWithTinify] Tinify usage updated for client ${client.id}: ${client.currentTinifyUsage + 1}/${client.currentTinifyLimit}`
+      );
+
+      // Send webhook notification (non-blocking)
+      this.webhook.sendWebhook(image.clientId, WebhookEvent.IMAGE_UPLOADED, {
+        imageId: image.id,
+        originalName: image.originalName,
+        action: 'tinify_compressed',
+        originalSize,
+        compressedSize,
+        savedBytes,
+        savedPercentage: `${savedPercentage}%`,
+      }).catch((error) => {
+        this.logger.warn(
+          `[compressImageWithTinify] Failed to send webhook for image ${imageId}:`,
+          error instanceof Error ? error.message : error
+        );
+      });
+
+      this.logger.log(
+        `[compressImageWithTinify] Success - ID: ${imageId}, Saved: ${savedBytes} bytes (${savedPercentage}%)`
+      );
+
+      const imageResponse = this.formatImageResponse(updatedImage);
+
+      return plainToInstance(
+        TinifyCompressionResponseDto,
+        {
+          image: imageResponse,
+          compressionStats: {
+            originalSize,
+            compressedSize,
+            savedBytes,
+            savedPercentage: `${savedPercentage}%`,
+          },
+        },
+        { excludeExtraneousValues: true }
+      );
+    } catch (error) {
+      // Log detailed error information
+      if (error.response) {
+        this.logger.error(
+          `[compressImageWithTinify] Tinify API error - ID: ${imageId}, Status: ${error.response.status}, Message: ${JSON.stringify(error.response.data)}`
+        );
+      } else {
+        this.logger.error(
+          `[compressImageWithTinify] Failed - ID: ${imageId}, Error: ${error.message}`
+        );
+      }
+      throw error;
+    }
   }
 }

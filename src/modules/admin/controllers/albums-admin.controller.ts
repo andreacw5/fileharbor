@@ -121,7 +121,12 @@ export class AlbumsAdminController {
     const { albums, total } = await this.albumService.findAdminAlbums(where, { skip, take });
 
     return {
-      data: albums.map((a) => ({ ...a, totalImages: a._count.albumImages, activeTokens: a._count.albumTokens })),
+      data: albums.map((a) => ({
+        ...a,
+        totalImages: a._count.albumImages,
+        activeTokens: a._count.albumTokens,
+        coverImageUrl: a.coverImageId ? this.buildImageFullPath(a.coverImageId) : undefined,
+      })),
       pagination: { page: pageNum, perPage: take, total, totalPages: Math.ceil(total / take) },
     };
   }
@@ -139,7 +144,12 @@ export class AlbumsAdminController {
 
     return plainToInstance(
       AdminAlbumResponseDto,
-      { ...album, totalImages: album._count.albumImages, activeTokens: album._count.albumTokens },
+      {
+        ...album,
+        totalImages: album._count.albumImages,
+        activeTokens: album._count.albumTokens,
+        coverImageUrl: album.coverImageId ? this.buildImageFullPath(album.coverImageId) : undefined,
+      },
       { excludeExtraneousValues: true },
     );
   }
