@@ -30,7 +30,7 @@ import {
   AdminUserResponseDto,
 } from './dto/admin-response.dto';
 
-@ApiTags('Admin Auth')
+@ApiTags('Admin - Authentication')
 @Controller('admin/auth')
 export class AdminAuthController {
   private readonly REFRESH_COOKIE = 'admin_rt';

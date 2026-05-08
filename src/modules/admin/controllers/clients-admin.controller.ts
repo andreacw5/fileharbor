@@ -57,7 +57,7 @@ export class ClientsAdminController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update client name, status, webhook settings' })
+  @ApiOperation({ summary: 'Update client name, status, webhook and Tinify settings' })
   @ApiResponse({ status: 200, type: AdminClientResponseDto })
   async updateClient(
     @Param('id') id: string,
@@ -74,6 +74,10 @@ export class ClientsAdminController {
     if (dto.active !== undefined) data.active = dto.active;
     if (dto.webhookEnabled !== undefined) data.webhookEnabled = dto.webhookEnabled;
     if ('webhookUrl' in dto) data.webhookUrl = dto.webhookUrl ?? null;
+    if (dto.tinifyActive !== undefined) data.tinifyActive = dto.tinifyActive;
+    if ('tinifyApiKey' in dto) data.tinifyApiKey = dto.tinifyApiKey ?? null;
+    if (dto.currentTinifyUsage !== undefined) data.currentTinifyUsage = dto.currentTinifyUsage;
+    if (dto.currentTinifyLimit !== undefined) data.currentTinifyLimit = dto.currentTinifyLimit;
 
     const updated = await this.clientService.updateClientWithStats(id, data);
     this.logger.log(`[Admin] Client updated: ${id}`);

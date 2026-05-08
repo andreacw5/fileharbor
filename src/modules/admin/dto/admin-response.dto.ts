@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose, Type } from 'class-transformer';
+import { Expose, Type, Transform } from 'class-transformer';
+import { maskApiKey } from '../helpers/mask-api-key.helper';
 
 
 export class AdminClientResponseDto {
@@ -9,6 +10,16 @@ export class AdminClientResponseDto {
   @ApiProperty() @Expose() active: boolean;
   @ApiProperty() @Expose() webhookEnabled: boolean;
   @ApiPropertyOptional() @Expose() webhookUrl?: string;
+  @ApiProperty({ description: 'Whether Tinify compression is enabled for this client' })
+  @Expose() tinifyActive: boolean;
+  @ApiPropertyOptional({ description: 'Tinify API key for this client (masked for security)', example: 'sk_1234****abcd' })
+  @Expose()
+  @Transform(({ value }) => maskApiKey(value))
+  tinifyApiKey?: string;
+  @ApiProperty({ description: 'Current monthly Tinify compression usage' })
+  @Expose() currentTinifyUsage: number;
+  @ApiProperty({ description: 'Monthly Tinify compression limit (default: 500 for free tier)', default: 500 })
+  @Expose() currentTinifyLimit: number;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() totalImages?: number;
@@ -118,6 +129,8 @@ export class AdminImageResponseDto {
   @ApiProperty() @Expose() mimeType: string;
   @ApiProperty() @Expose() isPrivate: boolean;
   @ApiProperty() @Expose() isOptimized: boolean;
+  @ApiProperty({ description: 'Whether image was compressed with Tinify API' })
+  @Expose() tinifyOptimized: boolean;
   @ApiProperty({ type: [String] }) @Expose() tags: string[];
   @ApiPropertyOptional() @Expose() description?: string;
   @ApiProperty() @Expose() views: number;

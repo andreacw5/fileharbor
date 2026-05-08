@@ -57,9 +57,11 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
         AvatarModule,
         AlbumModule,
         JobModule,
+        UserModule,
+
+        // Admin module
         AdminModule,
         StatisticsModule,
-        UserModule,
         TagModule,
     ],
 })

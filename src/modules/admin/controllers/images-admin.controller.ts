@@ -28,7 +28,7 @@ import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator'
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUpdateImageDto } from '../dto/admin-update-image.dto';
 import { AdminUploadImageDto } from '../dto/admin-upload-image.dto';
-import { ImageResponseDto } from '@/modules/image/dto';
+import { ImageResponseDto, TinifyCompressionResponseDto } from '@/modules/image/dto';
 import {
   AdminDeleteResponseDto,
   AdminImageResponseDto,
@@ -97,6 +97,8 @@ export class ImagesAdminController {
   @ApiQuery({ name: 'albumId', required: false })
   @ApiQuery({ name: 'name', required: false, description: 'Search by original filename' })
   @ApiQuery({ name: 'tags', required: false, isArray: true, description: 'Filter by tags' })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'], description: 'Sort field' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Sort order' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   async listImages(
@@ -106,6 +108,8 @@ export class ImagesAdminController {
     @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
@@ -117,6 +121,11 @@ export class ImagesAdminController {
     const take = Math.min(Number(perPage) || 20, 100);
     const skip = (pageNum - 1) * take;
 
+    // Validate and set sort parameters
+    const allowedSortFields = ['createdAt', 'size', 'originalName', 'views', 'downloads'];
+    const validSortBy = sortBy && allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const validSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
+
     const where: any = buildClientWhere(adminUser, clientId);
     if (userId) where.user = { id: userId };
     if (albumId) where.albumImages = { some: { albumId } };
@@ -127,7 +136,11 @@ export class ImagesAdminController {
       };
     }
 
-    return this.imageService.findAdminImages(where, { skip, take, page: pageNum });
+    return this.imageService.findAdminImages(
+      where,
+      { skip, take, page: pageNum },
+      { field: validSortBy, order: validSortOrder },
+    );
   }
 
   @Get(':id')
@@ -203,6 +216,25 @@ export class ImagesAdminController {
       { success: true, message: 'Image deleted successfully' },
       { excludeExtraneousValues: true },
     );
+  }
+
+  @Post(':id/tinify-compress')
+  @ApiOperation({
+    summary: 'Compress image with Tinify (TinyPNG)',
+    description: 'Sends the existing image to Tinify API for additional compression, replaces the original, and regenerates the thumbnail. Returns compression statistics along with the updated image. Requires the client to have Tinify enabled (tinifyActive=true) and a valid API key configured. The compression limit is configurable per client (default: 500/month for free tier).',
+  })
+  @ApiResponse({ status: 200, description: 'Image compressed successfully with compression stats', type: TinifyCompressionResponseDto })
+  @ApiResponse({ status: 400, description: 'Tinify not enabled, API key not configured, monthly limit reached, or image already compressed with Tinify' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Image or client not found' })
+  async compressImageWithTinify(
+    @Param('id') id: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<TinifyCompressionResponseDto> {
+    const image = await this.imageService.getImageById(id);
+    assertClientAccess(adminUser, image.clientId);
+
+    return this.imageService.compressImageWithTinify(id);
   }
 }
 

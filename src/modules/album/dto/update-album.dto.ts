@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsUUID, ValidateIf } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateAlbumDto {
@@ -40,6 +40,7 @@ export class UpdateAlbumDto {
     nullable: true,
   })
   @IsOptional()
+  @ValidateIf((o) => o.coverImageId !== null)
   @IsUUID()
   coverImageId?: string | null;
 }
