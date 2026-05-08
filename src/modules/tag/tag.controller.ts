@@ -12,8 +12,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { TagService } from './tag.service';
-import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin/decorators/admin-user.decorator';
+import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { TagsResponseDto } from './dto/tag-response.dto';
 
 @ApiTags('Admin')

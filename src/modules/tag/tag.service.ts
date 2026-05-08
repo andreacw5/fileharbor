@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
-import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   resolveAllowedClients,
   assertClientAccess,

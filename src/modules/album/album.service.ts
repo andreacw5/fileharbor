@@ -367,6 +367,7 @@ export class AlbumService {
     return this.prisma.album.findUnique({
       where: { id: albumId },
       include: {
+        client: { select: { id: true, name: true, domain: true } },
         user: { select: { externalUserId: true, username: true } },
         _count: {
           select: {
@@ -388,6 +389,7 @@ export class AlbumService {
       where: { id: albumId },
       data,
       include: {
+        client: { select: { id: true, name: true, domain: true } },
         user: { select: { externalUserId: true, username: true } },
         _count: {
           select: {
@@ -482,6 +484,47 @@ export class AlbumService {
 
     this.logger.log(`[forceDeleteAlbum] Success - Album ID: ${albumId}`);
     return { success: true, message: 'Album deleted successfully' };
+  }
+
+  /**
+   * Force-remove images from an album (admin use — bypasses ownership check).
+   * Verifies that the album belongs to the given clientId.
+   */
+  async forceRemoveImagesFromAlbum(
+    albumId: string,
+    clientId: string,
+    imageIds: string[],
+  ): Promise<{ albumId: string; removed: number; success: boolean; message: string }> {
+    this.logger.debug(
+      `[forceRemoveImagesFromAlbum] Start - Album ID: ${albumId}, Client: ${clientId}, Images: ${imageIds.length}`,
+    );
+
+    const album = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+    if (!album) throw new NotFoundException('Album not found');
+
+    const result = await this.prisma.albumImage.deleteMany({
+      where: {
+        albumId,
+        imageId: {
+          in: imageIds,
+        },
+      },
+    });
+
+    imageIds.forEach((imageId) => {
+      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
+        albumId,
+        imageId,
+        timestamp: new Date().toISOString(),
+      }).catch((error) => {
+        this.logger.warn(
+          `[forceRemoveImagesFromAlbum] Webhook failed for image ${imageId} in album ${albumId}: ${error.message}`,
+        );
+      });
+    });
+
+    this.logger.log(`[forceRemoveImagesFromAlbum] Success - Album ID: ${albumId}, Removed: ${result.count}`);
+    return { albumId, removed: result.count, success: true, message: 'Images removed from album' };
   }
 
   /**

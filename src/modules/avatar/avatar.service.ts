@@ -351,7 +351,10 @@ export class AvatarService {
   async getAvatarById(avatarId: string) {
     return this.prisma.avatar.findUnique({
       where: { id: avatarId },
-      include: { user: { select: { externalUserId: true, username: true } } },
+      include: {
+        client: { select: { id: true, name: true, domain: true } },
+        user: { select: { externalUserId: true, username: true } },
+      },
     });
   }
 
