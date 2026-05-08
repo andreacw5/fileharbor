@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TagService } from './tag.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 
 describe('TagService', () => {
   let service: TagService;

@@ -37,6 +37,12 @@ export class AlbumResponseDto {
   })
   isPublic: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Cover image ID',
+    example: 'image-uuid-123',
+  })
+  coverImageId?: string;
+
   @ApiProperty({
     description: 'Album creation timestamp',
     example: '2025-10-29T12:00:00.000Z',

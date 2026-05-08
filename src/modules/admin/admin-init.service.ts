@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
+import { CryptoUtils } from '@/modules/admin-auth/utils/crypto.utils';
 
 @Injectable()
 export class AdminInitService implements OnModuleInit {
@@ -16,6 +16,10 @@ export class AdminInitService implements OnModuleInit {
     await this.initializeDefaultAdminUser();
   }
 
+  /**
+   * Initialize the default admin user on first startup
+   * Creates a SUPER_ADMIN if no admin users exist in the database
+   */
   private async initializeDefaultAdminUser() {
     try {
       const count = await this.prisma.adminUser.count();
@@ -37,7 +41,7 @@ export class AdminInitService implements OnModuleInit {
         return;
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
+      const passwordHash = await CryptoUtils.hashPassword(password);
 
       const adminUser = await this.prisma.adminUser.create({
         data: {

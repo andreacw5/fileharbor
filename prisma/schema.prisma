@@ -78,11 +78,12 @@ model Image {
   updatedAt    DateTime  @updatedAt
 
   // Relations
-  client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  albumImages AlbumImage[]
-  imageTags   ImageTag[]
-  shareLinks  ImageShareLink[]
+  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  albumImages     AlbumImage[]
+  imageTags       ImageTag[]
+  shareLinks      ImageShareLink[]
+  albumCoverImage Album[]          @relation("AlbumCoverImage")
 
   @@index([clientId])
   @@index([userId])
@@ -93,13 +94,13 @@ model Image {
 
 // Client-scoped tag entity
 model Tag {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   clientId  String
   name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   imageTags ImageTag[]
 
   @@unique([clientId, name])
@@ -110,12 +111,12 @@ model Tag {
 
 // Many-to-many relationship between Image and Tag
 model ImageTag {
-  imageId    String
-  tagId      String
-  createdAt  DateTime @default(now())
+  imageId   String
+  tagId     String
+  createdAt DateTime @default(now())
 
-  image      Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([imageId, tagId])
   @@index([tagId])
@@ -157,12 +158,14 @@ model Album {
   name            String
   description     String?
   isPublic        Boolean  @default(false)
+  coverImageId    String? // Reference to the cover image
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   // Relations
   client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coverImage  Image?       @relation("AlbumCoverImage", fields: [coverImageId], references: [id], onDelete: SetNull)
   albumImages AlbumImage[]
   albumTokens AlbumToken[]
 
@@ -170,6 +173,7 @@ model Album {
   @@index([clientId])
   @@index([userId])
   @@index([isPublic])
+  @@index([coverImageId])
   @@map("albums")
 }
 
@@ -209,20 +213,21 @@ model AlbumToken {
 
 // Admin user for the management GUI
 model AdminUser {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  passwordHash      String
-  name              String?
-  role              AdminRole @default(VIEWER)
-  active            Boolean   @default(true)
-  allClientsAccess  Boolean   @default(false) // if true, can access all clients
-  lastLoginAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  name             String?
+  role             AdminRole @default(VIEWER)
+  active           Boolean   @default(true)
+  allClientsAccess Boolean   @default(false) // if true, can access all clients
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  clientAccess    AdminClientAccess[]
-  refreshTokens   AdminRefreshToken[]
+  clientAccess  AdminClientAccess[]
+  refreshTokens AdminRefreshToken[]
 
+  @@index([email])
   @@map("admin_users")
 }
 
@@ -243,6 +248,7 @@ model AdminClientAccess {
 
 enum AdminRole {
   SUPER_ADMIN
+  ADMIN
   VIEWER
 }
 

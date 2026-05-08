@@ -1,50 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
-export class AdminUserResponseDto {
-  @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() email: string;
-  @ApiPropertyOptional() @Expose() name?: string;
-  @ApiProperty() @Expose() role: string;
-  @ApiProperty() @Expose() active: boolean;
-  @ApiProperty({ description: 'If true, has access to all clients' }) @Expose() allClientsAccess: boolean;
-  @ApiPropertyOptional({ description: 'IDs of allowed clients (when allClientsAccess is false)', type: [String] })
-  @Expose() allowedClientIds?: string[];
-  @ApiPropertyOptional() @Expose() lastLoginAt?: Date;
-  @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
-}
-
-export class AdminLoginResponseDto {
-  @ApiProperty({ description: 'Short-lived JWT access token' })
-  @Expose()
-  accessToken: string;
-
-  @ApiProperty({ description: 'Long-lived opaque refresh token' })
-  @Expose()
-  refreshToken: string;
-
-  @ApiProperty({ description: 'Access token expiry in seconds' })
-  @Expose()
-  expiresIn: number;
-
-  @ApiProperty()
-  @Expose()
-  user: AdminUserResponseDto;
-}
-
-export class AdminRefreshResponseDto {
-  @ApiProperty({ description: 'New short-lived JWT access token' })
-  @Expose()
-  accessToken: string;
-
-  @ApiProperty({ description: 'New refresh token (old one is revoked)' })
-  @Expose()
-  refreshToken: string;
-
-  @ApiProperty({ description: 'Access token expiry in seconds' })
-  @Expose()
-  expiresIn: number;
-}
 
 export class AdminClientResponseDto {
   @ApiProperty() @Expose() id: string;
@@ -58,6 +14,7 @@ export class AdminClientResponseDto {
   @ApiPropertyOptional() @Expose() totalImages?: number;
   @ApiPropertyOptional() @Expose() totalAvatars?: number;
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
+  @ApiPropertyOptional() @Expose() totalUsers?: number;
   @ApiPropertyOptional() @Expose() totalStorage?: number;
 }
 
@@ -100,6 +57,12 @@ export class AdminAlbumUserDto {
   @ApiPropertyOptional() @Expose() username?: string;
 }
 
+export class AdminClientUserClientDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() name: string;
+  @ApiPropertyOptional() @Expose() domain?: string;
+}
+
 export class AdminAlbumResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() clientId: string;
@@ -107,8 +70,15 @@ export class AdminAlbumResponseDto {
   @ApiPropertyOptional() @Expose() description?: string;
   @ApiPropertyOptional() @Expose() externalAlbumId?: string;
   @ApiProperty() @Expose() isPublic: boolean;
+  @ApiPropertyOptional() @Expose() coverImageId?: string;
+  @ApiPropertyOptional({ description: 'Full URL to the cover image' }) @Expose() coverImageUrl?: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
+
+  @ApiPropertyOptional({ type: AdminClientUserClientDto })
+  @Expose()
+  @Type(() => AdminClientUserClientDto)
+  client?: AdminClientUserClientDto;
 
   @ApiPropertyOptional({ type: AdminAlbumUserDto })
   @Expose()
@@ -159,6 +129,11 @@ export class AdminImageResponseDto {
 
   @ApiPropertyOptional() @Expose() fullPath?: string;
 
+  @ApiPropertyOptional({ type: AdminClientUserClientDto })
+  @Expose()
+  @Type(() => AdminClientUserClientDto)
+  client?: AdminClientUserClientDto;
+
   @ApiPropertyOptional({ type: AdminImageUserDto })
   @Expose()
   @Type(() => AdminImageUserDto)
@@ -191,17 +166,17 @@ export class AdminAvatarResponseDto {
 
   @ApiPropertyOptional() @Expose() fullPath?: string;
 
+  @ApiPropertyOptional({ type: AdminClientUserClientDto })
+  @Expose()
+  @Type(() => AdminClientUserClientDto)
+  client?: AdminClientUserClientDto;
+
   @ApiPropertyOptional({ type: AdminImageUserDto })
   @Expose()
   @Type(() => AdminImageUserDto)
   user?: AdminImageUserDto;
 }
 
-export class AdminClientUserClientDto {
-  @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() name: string;
-  @ApiPropertyOptional() @Expose() domain?: string;
-}
 
 export class AdminAlbumImageEntryDto {
   @ApiProperty() @Expose() imageId: string;
@@ -215,6 +190,13 @@ export class AdminAddImagesToAlbumResponseDto {
   @Type(() => AdminAlbumImageEntryDto)
   images: AdminAlbumImageEntryDto[];
   @ApiProperty({ description: 'Number of images processed' }) @Expose() count: number;
+}
+
+export class AdminRemoveImagesFromAlbumResponseDto {
+  @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
+  @ApiProperty({ description: 'Number of images removed' }) @Expose() removed: number;
+  @ApiProperty() @Expose() success: boolean;
+  @ApiProperty() @Expose() message: string;
 }
 
 

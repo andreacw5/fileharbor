@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 
 /**
  * Returns the list of allowed clientIds for a given admin payload.

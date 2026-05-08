@@ -6,7 +6,7 @@ import {
   DailyDataPointDto,
   StatsTrendDto,
 } from '@/modules/admin/dto/admin-response.dto';
-import { AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { buildClientWhere } from '@/modules/admin/helpers/admin-access.helper';
 
 @Injectable()

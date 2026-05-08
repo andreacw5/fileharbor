@@ -1,8 +1,8 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { StatisticsService } from './statistics.service';
-import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin/decorators/admin-user.decorator';
+import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminStatsResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
 @ApiTags('Admin')

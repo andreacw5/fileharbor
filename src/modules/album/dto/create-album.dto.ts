@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAlbumDto {
@@ -33,5 +33,13 @@ export class CreateAlbumDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Cover image ID (must be an image already in the album)',
+    example: 'image-uuid-123',
+  })
+  @IsOptional()
+  @IsUUID()
+  coverImageId?: string;
 }
 

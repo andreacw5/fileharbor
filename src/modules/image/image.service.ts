@@ -947,6 +947,7 @@ export class ImageService {
       where: { id: imageId },
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
+        client: { select: { id: true, name: true, domain: true } },
         user: { select: { externalUserId: true, username: true } },
         albumImages: {
           include: {
@@ -973,6 +974,7 @@ export class ImageService {
       data,
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
+        client: { select: { id: true, name: true, domain: true } },
         user: { select: { externalUserId: true, username: true } },
       },
     });
