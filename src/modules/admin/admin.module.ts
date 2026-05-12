@@ -16,6 +16,7 @@ import { ImagesAdminController } from './controllers/images-admin.controller';
 import { AvatarsAdminController } from './controllers/avatars-admin.controller';
 import { AlbumsAdminController } from './controllers/albums-admin.controller';
 import { UsersAdminController } from './controllers/users-admin.controller';
+import { ImageShareLinksAdminController } from './controllers/image-share-links-admin.controller';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UsersAdminController } from './controllers/users-admin.controller';
     AvatarsAdminController,
     AlbumsAdminController,
     UsersAdminController,
+    ImageShareLinksAdminController,
   ],
   providers: [AdminInitService],
   exports: [],

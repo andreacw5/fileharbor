@@ -724,6 +724,7 @@ export class ImageService {
     return this.formatDeleteResponse('Share link deleted successfully');
   }
 
+
   /**
    * Get image by share token
    */

@@ -212,4 +212,35 @@ export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty() @Expose() message: string;
 }
 
+export class AdminImageShareLinkResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() imageId: string;
+  @ApiProperty() @Expose() clientId: string;
+  @ApiProperty() @Expose() readToken: string;
+  @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
+  @ApiPropertyOptional() @Expose() @Type(() => Date) expiresAt?: Date;
+  @ApiProperty({ description: 'True if the link is expired at response time' })
+  @Expose()
+  isExpired: boolean;
+}
+
+export class AdminPaginationResponseDto {
+  @ApiProperty() @Expose() page: number;
+  @ApiProperty() @Expose() perPage: number;
+  @ApiProperty() @Expose() total: number;
+  @ApiProperty() @Expose() totalPages: number;
+}
+
+export class AdminImageShareLinksListResponseDto {
+  @ApiProperty({ type: [AdminImageShareLinkResponseDto] })
+  @Expose()
+  @Type(() => AdminImageShareLinkResponseDto)
+  data: AdminImageShareLinkResponseDto[];
+
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  @Expose()
+  @Type(() => AdminPaginationResponseDto)
+  pagination: AdminPaginationResponseDto;
+}
+
 
