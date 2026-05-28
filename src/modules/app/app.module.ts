@@ -9,7 +9,6 @@ import { ClientModule } from "@/modules/client/client.module";
 import { ImageModule } from "@/modules/image/image.module";
 import { AvatarModule } from "@/modules/avatar/avatar.module";
 import { AlbumModule } from "@/modules/album/album.module";
-import { JobModule } from "@/modules/job/job.module";
 import { AdminModule } from "@/modules/admin/admin.module";
 import { StatisticsModule } from "@/modules/statistics/statistics.module";
 import { UserModule } from "@/modules/user/user.module";
@@ -17,6 +16,7 @@ import { TagModule } from "@/modules/tag/tag.module";
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '@/configs/config.validation';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { RouteHelperModule } from '@/utils/route.utils';
 
 @Module({
     controllers: [StatusController],
@@ -56,8 +56,8 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
         ImageModule,
         AvatarModule,
         AlbumModule,
-        JobModule,
         UserModule,
+        RouteHelperModule,
 
         // Admin module
         AdminModule,

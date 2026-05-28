@@ -36,7 +36,10 @@ async function bootstrap() {
     app.use(json({ limit: '5mb' }));
     app.use(cookieParser());
 
-    const productionPath = process.env.NODE_ENV === 'develop' ? '' : '/v2';
+    const apiPrefix = process.env.API_PREFIX ?? 'v2';
+    if (apiPrefix) {
+      app.setGlobalPrefix(apiPrefix);
+    }
 
     // Swagger documentation
     const config = new DocumentBuilder()
@@ -45,7 +48,7 @@ async function bootstrap() {
       .setVersion(process?.env?.npm_package_version || '2.0.0')
       .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
       .addBearerAuth()
-      .setBasePath(productionPath)
+      .setBasePath(apiPrefix ? `/${apiPrefix}` : '/')
       .setLicense(
         'MIT',
         'https://github.com/heyatomdev/fileharbor/blob/main/README.md',
