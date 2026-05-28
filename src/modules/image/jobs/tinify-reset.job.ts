@@ -3,16 +3,16 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
 @Injectable()
-export class JobService {
-  private readonly logger = new Logger(JobService.name);
+export class TinifyResetJob {
+  private readonly logger = new Logger(TinifyResetJob.name);
 
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Reset Tinify usage counter for all clients on the 1st of every month at midnight
-   * This ensures clients with Tinify enabled get their monthly compression quota refreshed
+   * Reset Tinify usage counter for all clients on the 1st of every month at midnight.
+   * This ensures clients with Tinify enabled get their monthly compression quota refreshed.
    */
-  @Cron('0 0 1 * *') // Run at midnight on the 1st of every month
+  @Cron('0 0 1 * *')
   async resetTinifyUsageCounters() {
     this.logger.log('Starting monthly Tinify usage counter reset job...');
 
@@ -33,6 +33,5 @@ export class JobService {
       this.logger.error('Tinify usage counter reset job failed:', error.message);
     }
   }
-
 }
 

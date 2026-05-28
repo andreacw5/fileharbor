@@ -13,6 +13,7 @@ import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service'
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import { lastValueFrom } from 'rxjs';
+import { RouteHelperService } from '@/utils/route.utils';
 import {
   ImageResponseDto,
   ShareLinkResponseDto,
@@ -22,6 +23,7 @@ import {
   TinifyCompressionResponseDto,
 } from './dto';
 import { buildImageTagCreateInput, extractTagNames } from '@/modules/tag/tag.utils';
+import { UserService } from '@/modules/user/user.service';
 
 
 @Injectable()
@@ -37,6 +39,8 @@ export class ImageService {
     private config: ConfigService,
     private webhook: WebhookService,
     private httpService: HttpService,
+    private userService: UserService,
+    private route: RouteHelperService,
   ) {
     // Original should be high quality to preserve image fidelity
     this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
@@ -85,24 +89,8 @@ export class ImageService {
       // Get or create user
       let user;
       if (externalUserId) {
-        // Upsert user: create if not exists, update username if provided
-        this.logger.debug(`[uploadImage] Upserting user - ID: ${imageId}, External: ${externalUserId}, Username: ${username || 'unchanged'}`);
-        user = await this.prisma.user.upsert({
-          where: {
-            clientId_externalUserId: {
-              clientId,
-              externalUserId,
-            },
-          },
-          update: {
-            ...(username ? { username } : {}),
-          },
-          create: {
-            clientId,
-            externalUserId,
-            ...(username ? { username } : {}),
-          },
-        });
+        this.logger.debug(`[uploadImage] Resolving user - ID: ${imageId}, External: ${externalUserId}, Username: ${username || 'auto'}`);
+        user = await this.userService.resolveUser(clientId, externalUserId, username);
       } else {
         // If no externalUserId, use the system user
         user = await this.prisma.user.findUnique({
@@ -853,11 +841,8 @@ export class ImageService {
    * Format image response using class-transformer
    */
   private formatImageResponse(image: any): ImageResponseDto {
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
-
-    const url = `/${apiPrefix}/images/${image.id}`;
-    const thumbnailUrl = `/${apiPrefix}/images/${image.id}?thumb=true`;
+    const url = this.route.path('images', image.id);
+    const thumbnailUrl = this.route.path('images', image.id) + '?thumb=true';
 
     return plainToInstance(
       ImageResponseDto,
@@ -866,7 +851,7 @@ export class ImageService {
         tags: extractTagNames(image),
         url,
         thumbnailUrl,
-        fullPath: `${baseUrl}${url}`,
+        fullPath: this.route.fullUrl('images', image.id),
       },
       { excludeExtraneousValues: true },
     );
@@ -876,13 +861,11 @@ export class ImageService {
    * Format share link response using class-transformer
    */
   private formatShareLinkResponse(shareLink: any): ShareLinkResponseDto {
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-
     return plainToInstance(
       ShareLinkResponseDto,
       {
         ...shareLink,
-        shareUrl: `/${apiPrefix}/images/shared/${shareLink.readToken}`,
+        shareUrl: this.route.path('images', 'shared', shareLink.readToken),
       },
       { excludeExtraneousValues: true },
     );
@@ -908,6 +891,7 @@ export class ImageService {
     where: any,
     options: { skip: number; take: number; page: number },
     sort?: { field: string; order: 'asc' | 'desc' },
+    adminUserId?: string,
   ) {
     const orderBy: any = sort ? { [sort.field]: sort.order } : { createdAt: 'desc' };
 
@@ -926,13 +910,20 @@ export class ImageService {
       this.prisma.image.count({ where }),
     ]);
 
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
+    let bookmarkedIds = new Set<string>();
+    if (adminUserId && images.length > 0) {
+      const bookmarks = await this.prisma.adminImageBookmark.findMany({
+        where: { adminUserId, imageId: { in: images.map((i) => i.id) } },
+        select: { imageId: true },
+      });
+      bookmarkedIds = new Set(bookmarks.map((b) => b.imageId));
+    }
 
     const data = images.map((image) => ({
       ...image,
       tags: extractTagNames(image),
-      fullPath: `${baseUrl}/${apiPrefix}/images/${image.id}`,
+      fullPath: this.route.fullUrl('images', image.id),
+      isBookmarked: bookmarkedIds.has(image.id),
     }));
 
     return {
@@ -950,9 +941,9 @@ export class ImageService {
    * Admin full image fetch — includes albums, active share-link count, user.
    * Returns null if not found.
    */
-  async findAdminImageById(imageId: string) {
+  async findAdminImageById(imageId: string, adminUserId?: string) {
     const now = new Date();
-    return this.prisma.image.findUnique({
+    const image = await this.prisma.image.findUnique({
       where: { id: imageId },
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
@@ -970,6 +961,19 @@ export class ImageService {
         },
       },
     });
+
+    if (!image) return null;
+
+    let isBookmarked = false;
+    if (adminUserId) {
+      const bookmark = await this.prisma.adminImageBookmark.findUnique({
+        where: { adminUserId_imageId: { adminUserId, imageId } },
+        select: { imageId: true },
+      });
+      isBookmarked = !!bookmark;
+    }
+
+    return { ...image, isBookmarked };
   }
 
   /**

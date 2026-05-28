@@ -16,6 +16,7 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
 import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { generateAnonymousUsername } from '@/utils/username.generator';
 
 @Injectable()
 export class UserService {
@@ -26,6 +27,33 @@ export class UserService {
 
 
   // ─── API-Key scoped methods ───────────────────────────────────────────────
+
+  /**
+   * Finds an existing user or creates a new one for the given client + externalUserId.
+   * - If creating and no username is supplied, an anonymous one is auto-generated
+   *   (e.g. "Witty Raccoon", "Bold Penguin").
+   * - If the user already exists and a username is supplied, it is updated.
+   * Returns the raw Prisma User record (not a response DTO).
+   */
+  async resolveUser(
+    clientId: string,
+    externalUserId: string,
+    username?: string,
+  ) {
+    this.logger.debug(
+      `resolveUser clientId=${clientId} externalUserId=${externalUserId} username=${username ?? '(auto)'}`,
+    );
+
+    return this.prisma.user.upsert({
+      where: { clientId_externalUserId: { clientId, externalUserId } },
+      update: { ...(username ? { username } : {}) },
+      create: {
+        clientId,
+        externalUserId,
+        username: username || generateAnonymousUsername(),
+      },
+    });
+  }
 
   async listUsersForClient(
     clientId: string,
@@ -107,7 +135,7 @@ export class UserService {
       data: {
         clientId,
         externalUserId: dto.externalUserId,
-        ...(dto.username !== undefined ? { username: dto.username } : {}),
+        username: dto.username || generateAnonymousUsername(),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
       },
       include: {
@@ -219,6 +247,18 @@ export class UserService {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  async createUserAdmin(
+    admin: AdminJwtPayload,
+    clientId: string,
+    dto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    this.logger.log(
+      `createUserAdmin called by admin=${admin.sub} clientId=${clientId} externalUserId=${dto.externalUserId}`,
+    );
+    assertClientAccess(admin, clientId);
+    return this.createUserForClient(clientId, dto);
   }
 
   async updateUserAdmin(

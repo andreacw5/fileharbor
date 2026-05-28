@@ -54,7 +54,7 @@ export class ImageCleanupJob {
   }
 
   /**
-   * Clean up expired share links every hour
+   * Clean up expired share links every day at 4am
    */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async cleanExpiredShareLinks() {
@@ -105,3 +105,4 @@ export class ImageCleanupJob {
     await this.storage.saveFile(thumbPath, thumbBuffer);
   }
 }
+
