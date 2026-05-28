@@ -160,6 +160,10 @@ export class AdminImageResponseDto {
   @ApiPropertyOptional({ description: 'Number of active (non-expired) share links for this image' })
   @Expose()
   activeShareLinks?: number;
+
+  @ApiProperty({ description: 'Whether the requesting admin has bookmarked this image' })
+  @Expose()
+  isBookmarked: boolean;
 }
 
 export class AdminAvatarResponseDto {
@@ -236,6 +240,33 @@ export class AdminImageShareLinksListResponseDto {
   @Expose()
   @Type(() => AdminImageShareLinkResponseDto)
   data: AdminImageShareLinkResponseDto[];
+
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  @Expose()
+  @Type(() => AdminPaginationResponseDto)
+  pagination: AdminPaginationResponseDto;
+}
+
+export class AdminBookmarkResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() imageId: string;
+  @ApiProperty({ description: 'When the admin bookmarked the image' })
+  @Expose()
+  @Type(() => Date)
+  bookmarkedAt: Date;
+
+  @ApiProperty({ type: AdminImageResponseDto })
+  @Expose()
+  @Type(() => AdminImageResponseDto)
+  image: AdminImageResponseDto;
+}
+
+export class AdminBookmarkListResponseDto {
+  @ApiProperty({ type: [AdminBookmarkResponseDto] })
+  @Expose()
+  @Type(() => AdminBookmarkResponseDto)
+  data: AdminBookmarkResponseDto[];
 
   @ApiProperty({ type: AdminPaginationResponseDto })
   @Expose()

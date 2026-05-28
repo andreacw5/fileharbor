@@ -11,6 +11,8 @@ import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service'
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
+import { UserService } from '@/modules/user/user.service';
+import { RouteHelperService } from '@/utils/route.utils';
 
 @Injectable()
 export class AvatarService {
@@ -24,6 +26,8 @@ export class AvatarService {
     private storage: StorageService,
     private config: ConfigService,
     private webhook: WebhookService,
+    private userService: UserService,
+    private route: RouteHelperService,
   ) {
     // Original should be high quality to preserve avatar fidelity
     this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
@@ -68,24 +72,8 @@ export class AvatarService {
       const domain = client.domain || clientId;
 
       // Trova o crea lo user associato a questo externalUserId
-      let user = await this.prisma.user.findUnique({
-        where: {
-          clientId_externalUserId: {
-            clientId,
-            externalUserId,
-          },
-        },
-      });
-      if (!user) {
-        this.logger.debug(`[uploadAvatar] Creating new user - Client: ${clientId}, User: ${externalUserId}`);
-        user = await this.prisma.user.create({
-          data: {
-            clientId,
-            externalUserId,
-            username: 'User',
-          },
-        });
-      }
+      this.logger.debug(`[uploadAvatar] Resolving user - Client: ${clientId}, User: ${externalUserId}`);
+      const user = await this.userService.resolveUser(clientId, externalUserId);
       const userId = user.id;
 
       // Check for existing avatar
@@ -434,11 +422,8 @@ export class AvatarService {
    * Format avatar response using class-transformer
    */
   private formatAvatarResponse(avatar: any, externalUserId: string): AvatarResponseDto {
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
-
-    const url = `/${apiPrefix}/avatars/${externalUserId}`;
-    const thumbnailUrl = `/${apiPrefix}/avatars/${externalUserId}?thumb=true`;
+    const url = this.route.path('avatars', externalUserId);
+    const thumbnailUrl = this.route.path('avatars', externalUserId) + '?thumb=true';
 
     return plainToInstance(
       AvatarResponseDto,
@@ -446,7 +431,7 @@ export class AvatarService {
         ...avatar,
         url,
         thumbnailUrl,
-        fullPath: `${baseUrl}${url}`
+        fullPath: this.route.fullUrl('avatars', externalUserId)
       },
       { excludeExtraneousValues: true },
     );

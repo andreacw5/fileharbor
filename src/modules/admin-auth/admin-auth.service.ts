@@ -111,7 +111,7 @@ export class AdminAuthService {
 
     const userDto = this.formatAdminUser(adminUser, allowedClientIds);
 
-    this.logger.log(`[Admin] User logged in: ${email}`);
+    this.logger.log(`[Admin] User logged in: ${adminUser.id}`);
 
     return plainToInstance(
       AdminLoginResponseDto,
@@ -164,7 +164,7 @@ export class AdminAuthService {
     const { token: accessToken, expiresIn } = this.signAccessToken(jwtPayload);
     const newRefreshToken = await this.createRefreshToken(stored.adminUser.id);
 
-    this.logger.log(`[Admin] Token refreshed for user: ${stored.adminUser.email}`);
+    this.logger.log(`[Admin] Token refreshed for user: ${stored.adminUser.id}`);
 
     return plainToInstance(
       AdminRefreshResponseDto,
@@ -238,7 +238,7 @@ export class AdminAuthService {
       include: { clientAccess: { select: { clientId: true } } },
     });
 
-    this.logger.log(`[Admin] Profile updated for user: ${updated.email}`);
+    this.logger.log(`[Admin] Profile updated for user: ${updated.id}`);
 
     return this.formatAdminUser(updated, updated.clientAccess.map((a) => a.clientId));
   }
@@ -266,7 +266,7 @@ export class AdminAuthService {
     const passwordHash = await CryptoUtils.hashPassword(newPassword);
     await this.prisma.adminUser.update({ where: { id: admin.sub }, data: { passwordHash } });
 
-    this.logger.log(`[Admin] Password changed for user: ${adminUser.email}`);
+    this.logger.log(`[Admin] Password changed for user: ${adminUser.id}`);
 
     return { message: 'Password changed successfully' };
   }

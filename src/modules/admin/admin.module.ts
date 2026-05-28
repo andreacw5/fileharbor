@@ -8,6 +8,7 @@ import { AvatarModule } from '@/modules/avatar/avatar.module';
 import { AlbumModule } from '@/modules/album/album.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { UserModule } from '@/modules/user/user.module';
+import { BookmarksModule } from '@/modules/bookmarks/bookmarks.module';
 import { AdminAuthModule } from '@/modules/admin-auth/admin-auth.module';
 
 // Controllers
@@ -17,6 +18,7 @@ import { AvatarsAdminController } from './controllers/avatars-admin.controller';
 import { AlbumsAdminController } from './controllers/albums-admin.controller';
 import { UsersAdminController } from './controllers/users-admin.controller';
 import { ImageShareLinksAdminController } from './controllers/image-share-links-admin.controller';
+import { BookmarksAdminController } from './controllers/bookmarks-admin.controller';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { ImageShareLinksAdminController } from './controllers/image-share-links-
     AlbumModule,
     ClientModule,
     UserModule,
+    BookmarksModule,
     ConfigModule,
     AdminAuthModule,
   ],
@@ -37,6 +40,7 @@ import { ImageShareLinksAdminController } from './controllers/image-share-links-
     AlbumsAdminController,
     UsersAdminController,
     ImageShareLinksAdminController,
+    BookmarksAdminController,
   ],
   providers: [AdminInitService],
   exports: [],

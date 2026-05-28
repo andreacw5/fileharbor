@@ -91,6 +91,7 @@ model Image {
   imageTags       ImageTag[]
   shareLinks      ImageShareLink[]
   albumCoverImage Album[]          @relation("AlbumCoverImage")
+  adminBookmarks  AdminImageBookmark[]
 
   @@index([clientId])
   @@index([userId])
@@ -232,6 +233,7 @@ model AdminUser {
   updatedAt        DateTime  @updatedAt
 
   clientAccess  AdminClientAccess[]
+  bookmarks     AdminImageBookmark[]
   refreshTokens AdminRefreshToken[]
 
   @@index([email])
@@ -251,6 +253,22 @@ model AdminClientAccess {
   @@index([adminUserId])
   @@index([clientId])
   @@map("admin_client_access")
+}
+
+// Admin personal bookmark for an image
+model AdminImageBookmark {
+  id          String   @id @default(uuid())
+  adminUserId String
+  imageId      String
+  createdAt    DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  image     Image     @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, imageId])
+  @@index([adminUserId])
+  @@index([imageId])
+  @@map("admin_image_bookmarks")
 }
 
 enum AdminRole {

@@ -1,11 +1,14 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
   Param,
   UseGuards,
   Patch,
   Body,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +23,7 @@ import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { UserService } from '@/modules/user/user.service';
 import { UserResponseDto } from '@/modules/user/dto/user-response.dto';
 import { UpdateUserAdminDto } from '@/modules/user/dto/update-user-admin.dto';
+import { CreateUserAdminDto } from '@/modules/admin/dto/create-user-admin.dto';
 
 @ApiTags('Admin - Users')
 @Controller('admin/users')
@@ -27,6 +31,20 @@ import { UpdateUserAdminDto } from '@/modules/user/dto/update-user-admin.dto';
 @ApiBearerAuth()
 export class UsersAdminController {
   constructor(private readonly userService: UserService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new user for a client' })
+  @ApiResponse({ status: 201, type: UserResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid data or reserved externalUserId' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 409, description: 'User already exists for this client' })
+  createUser(
+    @AdminUser() adminUser: AdminJwtPayload,
+    @Body() dto: CreateUserAdminDto,
+  ): Promise<UserResponseDto> {
+    return this.userService.createUserAdmin(adminUser, dto.clientId, dto);
+  }
 
   @Get()
   @ApiOperation({ summary: 'List users (scoped to accessible clients, system user excluded)' })
