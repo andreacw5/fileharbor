@@ -37,9 +37,6 @@ async function bootstrap() {
     app.use(cookieParser());
 
     const apiPrefix = process.env.API_PREFIX ?? 'v2';
-    if (apiPrefix) {
-      app.setGlobalPrefix(apiPrefix);
-    }
 
     // Swagger documentation
     const config = new DocumentBuilder()
