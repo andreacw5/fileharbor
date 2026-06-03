@@ -5,11 +5,10 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '@/modules/prisma/prisma.service';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import { PrismaService } from '@/modules/prisma/prisma.service';import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
+import { RouteHelperService } from '@/utils/route.utils';
 
 @Injectable()
 export class AlbumService {
@@ -18,7 +17,7 @@ export class AlbumService {
   constructor(
     private prisma: PrismaService,
     private webhook: WebhookService,
-    private config: ConfigService,
+    private route: RouteHelperService,
   ) {}
 
   /**
@@ -1210,9 +1209,7 @@ export class AlbumService {
    * Build full path URL for image
    */
   private buildImageFullPath(imageId: string): string {
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
-    return `${baseUrl}/${apiPrefix}/images/${imageId}`;
+    return this.route.fullUrl('images', imageId);
   }
 
   /**

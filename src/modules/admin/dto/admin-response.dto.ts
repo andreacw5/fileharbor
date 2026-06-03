@@ -160,6 +160,10 @@ export class AdminImageResponseDto {
   @ApiPropertyOptional({ description: 'Number of active (non-expired) share links for this image' })
   @Expose()
   activeShareLinks?: number;
+
+  @ApiProperty({ description: 'Whether the requesting admin has bookmarked this image' })
+  @Expose()
+  isBookmarked: boolean;
 }
 
 export class AdminAvatarResponseDto {
@@ -210,6 +214,64 @@ export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty({ description: 'Number of images removed' }) @Expose() removed: number;
   @ApiProperty() @Expose() success: boolean;
   @ApiProperty() @Expose() message: string;
+}
+
+export class AdminImageShareLinkResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() imageId: string;
+  @ApiProperty() @Expose() clientId: string;
+  @ApiProperty() @Expose() readToken: string;
+  @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
+  @ApiPropertyOptional() @Expose() @Type(() => Date) expiresAt?: Date;
+  @ApiProperty({ description: 'True if the link is expired at response time' })
+  @Expose()
+  isExpired: boolean;
+}
+
+export class AdminPaginationResponseDto {
+  @ApiProperty() @Expose() page: number;
+  @ApiProperty() @Expose() perPage: number;
+  @ApiProperty() @Expose() total: number;
+  @ApiProperty() @Expose() totalPages: number;
+}
+
+export class AdminImageShareLinksListResponseDto {
+  @ApiProperty({ type: [AdminImageShareLinkResponseDto] })
+  @Expose()
+  @Type(() => AdminImageShareLinkResponseDto)
+  data: AdminImageShareLinkResponseDto[];
+
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  @Expose()
+  @Type(() => AdminPaginationResponseDto)
+  pagination: AdminPaginationResponseDto;
+}
+
+export class AdminBookmarkResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() imageId: string;
+  @ApiProperty({ description: 'When the admin bookmarked the image' })
+  @Expose()
+  @Type(() => Date)
+  bookmarkedAt: Date;
+
+  @ApiProperty({ type: AdminImageResponseDto })
+  @Expose()
+  @Type(() => AdminImageResponseDto)
+  image: AdminImageResponseDto;
+}
+
+export class AdminBookmarkListResponseDto {
+  @ApiProperty({ type: [AdminBookmarkResponseDto] })
+  @Expose()
+  @Type(() => AdminBookmarkResponseDto)
+  data: AdminBookmarkResponseDto[];
+
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  @Expose()
+  @Type(() => AdminPaginationResponseDto)
+  pagination: AdminPaginationResponseDto;
 }
 
 

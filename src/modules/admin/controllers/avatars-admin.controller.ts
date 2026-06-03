@@ -14,9 +14,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   AdminDeleteResponseDto,
@@ -25,6 +23,7 @@ import {
 import { AvatarService } from '@/modules/avatar/avatar.service';
 import { plainToInstance } from 'class-transformer';
 import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
+import { RouteHelperService } from '@/utils/route.utils';
 
 @ApiTags('Admin - Avatars')
 @Controller('admin/avatars')
@@ -33,7 +32,7 @@ import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.he
 export class AvatarsAdminController {
   constructor(
     private readonly avatarService: AvatarService,
-    private readonly config: ConfigService,
+    private readonly route: RouteHelperService,
   ) {}
 
   @Get()
@@ -58,12 +57,9 @@ export class AvatarsAdminController {
 
     const { avatars, total } = await this.avatarService.findAdminAvatars(where, { skip, take });
 
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
-
     const data = avatars.map((avatar) => {
       const externalUserId = avatar.user?.externalUserId;
-      const fullPath = externalUserId ? `${baseUrl}/${apiPrefix}/avatars/${externalUserId}` : null;
+      const fullPath = externalUserId ? this.route.fullUrl('avatars', externalUserId) : null;
       return { ...avatar, fullPath };
     });
 
@@ -84,10 +80,8 @@ export class AvatarsAdminController {
     if (!avatar) throw new NotFoundException('Avatar not found');
     assertClientAccess(adminUser, avatar.clientId);
 
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
     const externalUserId = avatar.user?.externalUserId;
-    const fullPath = externalUserId ? `${baseUrl}/${apiPrefix}/avatars/${externalUserId}` : null;
+    const fullPath = externalUserId ? this.route.fullUrl('avatars', externalUserId) : null;
 
     return plainToInstance(AdminAvatarResponseDto, { ...avatar, fullPath }, { excludeExtraneousValues: true });
   }

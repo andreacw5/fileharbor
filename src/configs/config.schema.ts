@@ -6,7 +6,7 @@ export default () => ({
 
   // Server
   port: parseInt(process.env.PORT, 10) || 3000,
-  apiPrefix: process.env.API_PREFIX || 'v2',
+  apiPrefix: process.env.API_PREFIX ?? 'v2',
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
 
   // Database

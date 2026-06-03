@@ -53,7 +53,7 @@ export class AdminInitService implements OnModuleInit {
         },
       });
 
-      this.logger.log(`Default SUPER_ADMIN created: ${adminUser.email} (ID: ${adminUser.id})`);
+      this.logger.log(`Default SUPER_ADMIN created (ID: ${adminUser.id})`);
       this.logger.warn(
         'Remember to change the default admin password after first login!',
       );

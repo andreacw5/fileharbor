@@ -7,12 +7,14 @@ import {
   Param,
   Query,
   Body,
+  Res,
   UseGuards,
   UseInterceptors,
-  UploadedFile,
+  UploadedFiles,
   BadRequestException,
+  StreamableFile,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -22,7 +24,8 @@ import {
   ApiConsumes,
   ApiBody,
 } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
+import { Readable } from 'stream';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
@@ -37,6 +40,7 @@ import { ImageService } from '@/modules/image/image.service';
 import { plainToInstance } from 'class-transformer';
 import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
 import { buildImageTagCreateInput, extractTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
+import { RouteHelperService } from '@/utils/route.utils';
 
 @ApiTags('Admin - Images')
 @Controller('admin/images')
@@ -45,21 +49,25 @@ import { buildImageTagCreateInput, extractTagNames, normalizeTagNames } from '@/
 export class ImagesAdminController {
   constructor(
     private readonly imageService: ImageService,
-    private readonly config: ConfigService,
+    private readonly route: RouteHelperService,
   ) {}
 
   @Post()
   @ApiOperation({
-    summary: 'Upload an image on behalf of a client',
-    description: 'Admin-only upload. Specify the target clientId in the form body. Admin JWT replaces the API key.',
+    summary: 'Upload one or more images on behalf of a client',
+    description: 'Admin-only upload. Specify the target clientId in the form body. Admin JWT replaces the API key. All uploaded files share the same metadata (tags, description, isPrivate, etc.).',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['file', 'clientId'],
+      required: ['files', 'clientId'],
       properties: {
-        file: { type: 'string', format: 'binary', description: 'Image file' },
+        files: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'One or more image files',
+        },
         clientId: { type: 'string', format: 'uuid', description: 'Target client ID' },
         externalUserId: { type: 'string', description: 'External user ID (defaults to system)' },
         albumId: { type: 'string', description: 'Album UUID' },
@@ -69,25 +77,35 @@ export class ImagesAdminController {
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Uploaded successfully', type: ImageResponseDto })
+  @ApiResponse({ status: 201, description: 'Uploaded successfully', type: [ImageResponseDto] })
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 403, description: 'Admin has no access to the given client' })
-  @UseInterceptors(FileInterceptor('file'))
-  uploadImage(
-    @UploadedFile() file: Express.Multer.File,
+  @UseInterceptors(FilesInterceptor('files'))
+  async uploadImage(
+    @UploadedFiles() files: Express.Multer.File[],
     @Body() dto: AdminUploadImageDto,
     @AdminUser() adminUser: AdminJwtPayload,
-  ): Promise<ImageResponseDto> {
+  ): Promise<ImageResponseDto[]> {
     assertClientAccess(adminUser, dto.clientId);
-    return this.imageService.uploadImage(
-      dto.clientId,
-      dto.externalUserId,
-      file,
-      dto.albumId,
-      dto.tags,
-      dto.description,
-      dto.isPrivate,
-    );
+
+    if (!files || files.length === 0) {
+      throw new BadRequestException('At least one file must be provided');
+    }
+
+    const results: ImageResponseDto[] = [];
+    for (const file of files) {
+      const result = await this.imageService.uploadImage(
+        dto.clientId,
+        dto.externalUserId,
+        file,
+        dto.albumId,
+        dto.tags,
+        dto.description,
+        dto.isPrivate,
+      );
+      results.push(result);
+    }
+    return results;
   }
 
   @Get()
@@ -140,6 +158,7 @@ export class ImagesAdminController {
       where,
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
+      adminUser.sub,
     );
   }
 
@@ -150,13 +169,11 @@ export class ImagesAdminController {
     @Param('id') id: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminImageResponseDto> {
-    const image = await this.imageService.findAdminImageById(id);
+    const image = await this.imageService.findAdminImageById(id, adminUser.sub);
     if (!image) throw new BadRequestException('Image not found');
     assertClientAccess(adminUser, image.clientId);
 
-    const apiPrefix = this.config.get('API_PREFIX') || 'v2';
-    const baseUrl = this.config.get('BASE_URL') || 'http://localhost:3000';
-    const fullPath = `${baseUrl}/${apiPrefix}/images/${image.id}`;
+    const fullPath = this.route.fullUrl('images', image.id);
 
     const albums = image.albumImages.map((ai) => ai.album);
     const activeShareLinks = image._count.shareLinks;
@@ -216,6 +233,52 @@ export class ImagesAdminController {
       { success: true, message: 'Image deleted successfully' },
       { excludeExtraneousValues: true },
     );
+  }
+
+  @Get(':id/download')
+  @ApiOperation({
+    summary: 'Download image file (admin)',
+    description: 'Download the original image file for any image. Admin JWT replaces the API key. Increments the download counter.',
+  })
+  @ApiQuery({ name: 'thumb', required: false, type: Boolean, description: 'Download thumbnail instead of original' })
+  @ApiResponse({ status: 200, description: 'Image file returned as attachment' })
+  @ApiResponse({ status: 400, description: 'Image not found' })
+  @ApiResponse({ status: 403, description: 'Admin has no access to the given client' })
+  async downloadImage(
+    @Param('id') id: string,
+    @Query('thumb') thumb: boolean,
+    @Res({ passthrough: true }) res: Response,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<StreamableFile> {
+    const image = await this.imageService.getImageById(id);
+    assertClientAccess(adminUser, image.clientId);
+
+    const { buffer, mimeType } = await this.imageService.getImageFile(
+      id,
+      undefined,
+      undefined,
+      'webp',
+      85,
+      !!thumb,
+    );
+
+    // Fire-and-forget download counter increment
+    this.imageService.incrementDownloads(id, image.clientId).catch(() => undefined);
+
+    const filename = thumb
+      ? `${image.originalName.replace(/\.[^.]+$/, '')}_thumb.webp`
+      : image.originalName;
+
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length.toString(),
+    });
+
+    return new StreamableFile(Readable.from(buffer), {
+      type: mimeType,
+      length: buffer.length,
+    });
   }
 
   @Post(':id/tinify-compress')

@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { StorageService } from '@/modules/storage/storage.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { StorageService } from '@/modules/storage/storage.service';
 
 @Injectable()
-export class JobService {
-  private readonly logger = new Logger(JobService.name);
+export class StorageCleanupJob {
+  private readonly logger = new Logger(StorageCleanupJob.name);
 
   constructor(
     private storage: StorageService,
@@ -13,36 +13,10 @@ export class JobService {
   ) {}
 
   /**
-   * Reset Tinify usage counter for all clients on the 1st of every month at midnight
-   * This ensures clients with Tinify enabled get their monthly compression quota refreshed
+   * Clean up orphaned files from disk every night at 2 AM.
+   * Removes image and avatar files that do not have a corresponding database record.
    */
-  @Cron('0 0 1 * *') // Run at midnight on the 1st of every month
-  async resetTinifyUsageCounters() {
-    this.logger.log('Starting monthly Tinify usage counter reset job...');
-
-    try {
-      const result = await this.prisma.client.updateMany({
-        where: {
-          tinifyActive: true,
-        },
-        data: {
-          currentTinifyUsage: 0,
-        },
-      });
-
-      this.logger.log(
-        `Tinify usage counter reset completed - ${result.count} clients updated`
-      );
-    } catch (error) {
-      this.logger.error('Tinify usage counter reset job failed:', error.message);
-    }
-  }
-
-  /**
-   * Clean up orphaned files from disk every night at 2 AM
-   * Removes image and avatar files that don't have a corresponding database record
-   */
-  //@Cron('0 2 * * *')
+  @Cron('0 2 * * *')
   async cleanOrphanedFiles() {
     this.logger.log('Starting orphaned files cleanup job...');
 
@@ -108,12 +82,15 @@ export class JobService {
             }
           }
         } catch (error) {
-          this.logger.error(`Failed to clean orphaned files for domain ${domain}:`, error.message);
+          this.logger.error(
+            `Failed to clean orphaned files for domain ${domain}:`,
+            error.message,
+          );
         }
       }
 
       this.logger.log(
-        `Orphaned files cleanup completed - Images: ${orphanedImagesCount}, Avatars: ${orphanedAvatarsCount}`
+        `Orphaned files cleanup completed - Images: ${orphanedImagesCount}, Avatars: ${orphanedAvatarsCount}`,
       );
     } catch (error) {
       this.logger.error('Orphaned files cleanup job failed:', error.message);
