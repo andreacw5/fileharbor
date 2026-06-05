@@ -274,4 +274,49 @@ export class AdminBookmarkListResponseDto {
   pagination: AdminPaginationResponseDto;
 }
 
+export class AdminBookmarkedUserDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() clientId: string;
+  @ApiProperty() @Expose() externalUserId: string;
+  @ApiPropertyOptional() @Expose() username?: string;
+  @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
+  @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
+
+  @ApiPropertyOptional({ type: AdminClientUserClientDto })
+  @Expose()
+  @Type(() => AdminClientUserClientDto)
+  client?: AdminClientUserClientDto;
+
+  @ApiPropertyOptional() @Expose() totalImages?: number;
+  @ApiPropertyOptional() @Expose() totalAvatars?: number;
+  @ApiPropertyOptional() @Expose() totalAlbums?: number;
+}
+
+export class AdminUserBookmarkResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() userId: string;
+  @ApiProperty({ description: 'When the admin bookmarked the user' })
+  @Expose()
+  @Type(() => Date)
+  bookmarkedAt: Date;
+
+  @ApiProperty({ type: AdminBookmarkedUserDto })
+  @Expose()
+  @Type(() => AdminBookmarkedUserDto)
+  user: AdminBookmarkedUserDto;
+}
+
+export class AdminUserBookmarkListResponseDto {
+  @ApiProperty({ type: [AdminUserBookmarkResponseDto] })
+  @Expose()
+  @Type(() => AdminUserBookmarkResponseDto)
+  data: AdminUserBookmarkResponseDto[];
+
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  @Expose()
+  @Type(() => AdminPaginationResponseDto)
+  pagination: AdminPaginationResponseDto;
+}
+
 

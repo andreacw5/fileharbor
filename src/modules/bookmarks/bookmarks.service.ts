@@ -13,6 +13,13 @@ export type AdminBookmarksListParams = {
   perPage?: number;
 };
 
+export type AdminUserBookmarksListParams = {
+  clientId?: string;
+  search?: string;
+  page?: number;
+  perPage?: number;
+};
+
 @Injectable()
 export class BookmarksService {
   constructor(
@@ -100,6 +107,37 @@ export class BookmarksService {
     return this.getBookmarkByAdminAndImage(adminUser.sub, imageId);
   }
 
+  async bookmarkUser(adminUser: AdminJwtPayload, userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, clientId: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    assertClientAccess(adminUser, user.clientId);
+
+    const prisma = this.prisma as any;
+
+    await prisma.adminUserBookmark.upsert({
+      where: {
+        adminUserId_userId: {
+          adminUserId: adminUser.sub,
+          userId,
+        },
+      },
+      create: {
+        adminUserId: adminUser.sub,
+        userId,
+      },
+      update: {},
+    });
+
+    return this.getBookmarkByAdminAndUser(adminUser.sub, userId);
+  }
+
   async removeBookmark(adminUser: AdminJwtPayload, imageId: string): Promise<{ removed: number }> {
     const image = await this.prisma.image.findUnique({
       where: { id: imageId },
@@ -124,6 +162,30 @@ export class BookmarksService {
     return { removed: result.count };
   }
 
+  async removeUserBookmark(adminUser: AdminJwtPayload, userId: string): Promise<{ removed: number }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, clientId: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    assertClientAccess(adminUser, user.clientId);
+
+    const prisma = this.prisma as any;
+
+    const result = await prisma.adminUserBookmark.deleteMany({
+      where: {
+        adminUserId: adminUser.sub,
+        userId,
+      },
+    });
+
+    return { removed: result.count };
+  }
+
   private async getBookmarkByAdminAndImage(adminUserId: string, imageId: string) {
     const prisma = this.prisma as any;
 
@@ -142,6 +204,26 @@ export class BookmarksService {
     }
 
     return this.mapBookmark(bookmark);
+  }
+
+  private async getBookmarkByAdminAndUser(adminUserId: string, userId: string) {
+    const prisma = this.prisma as any;
+
+    const bookmark = await prisma.adminUserBookmark.findUnique({
+      where: {
+        adminUserId_userId: {
+          adminUserId,
+          userId,
+        },
+      },
+      include: this.buildUserBookmarkInclude(),
+    });
+
+    if (!bookmark) {
+      throw new BadRequestException('Bookmark could not be created');
+    }
+
+    return this.mapUserBookmark(bookmark);
   }
 
   private buildBookmarkInclude(now: Date) {
@@ -172,6 +254,23 @@ export class BookmarksService {
     };
   }
 
+  private buildUserBookmarkInclude() {
+    return {
+      user: {
+        include: {
+          client: { select: { id: true, name: true, domain: true } },
+          _count: {
+            select: {
+              images: true,
+              avatars: true,
+              albums: true,
+            },
+          },
+        },
+      },
+    };
+  }
+
   private mapBookmark(bookmark: any) {
     const image = bookmark.image;
 
@@ -186,6 +285,23 @@ export class BookmarksService {
         fullPath: this.route.fullUrl('images', image.id),
         albums: (image.albumImages ?? []).map((albumImage: any) => albumImage.album),
         activeShareLinks: image._count?.shareLinks ?? 0,
+      },
+    };
+  }
+
+  private mapUserBookmark(bookmark: any) {
+    const user = bookmark.user;
+
+    return {
+      id: bookmark.id,
+      adminUserId: bookmark.adminUserId,
+      userId: bookmark.userId,
+      bookmarkedAt: bookmark.createdAt,
+      user: {
+        ...user,
+        totalImages: user._count?.images ?? 0,
+        totalAvatars: user._count?.avatars ?? 0,
+        totalAlbums: user._count?.albums ?? 0,
       },
     };
   }

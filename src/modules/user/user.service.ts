@@ -17,13 +17,17 @@ import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto'
 import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { generateAnonymousUsername } from '@/utils/username.generator';
+import { RouteHelperService } from '@/utils/route.utils';
 
 @Injectable()
 export class UserService {
 
   private readonly logger = new Logger(UserService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly route: RouteHelperService,
+  ) {}
 
 
   // ─── API-Key scoped methods ───────────────────────────────────────────────
@@ -90,15 +94,19 @@ export class UserService {
       this.prisma.user.count({ where }),
     ]);
 
+
     this.logger.debug(`listUsersForClient returned ${users.length}/${total} users`);
 
-    const data = users.map((u) =>
-      plainToInstance(
+    const data = users.map((u) => {
+      const payload = { ...u, totalImages: u._count.images, totalAvatars: u._count.avatars };
+      delete payload.bio;
+
+      return plainToInstance(
         UserResponseDto,
-        { ...u, totalImages: u._count.images, totalAvatars: u._count.avatars },
+        payload,
         { excludeExtraneousValues: true },
-      ),
-    );
+      );
+    });
 
     return {
       data,
@@ -137,6 +145,8 @@ export class UserService {
         externalUserId: dto.externalUserId,
         username: dto.username || generateAnonymousUsername(),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.website !== undefined ? { website: dto.website } : {}),
+        ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       },
       include: {
         _count: { select: { images: true, avatars: true } },
@@ -159,12 +169,13 @@ export class UserService {
     filters: {
       clientId?: string;
       search?: string;
+      isBookmarked?: boolean;
       page?: number;
       perPage?: number;
     } = {},
   ) {
     this.logger.log(
-      `listUsers called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
+      `listUsers called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${filters.page ?? 1}`,
     );
 
     const page = filters.page || 1;
@@ -183,6 +194,12 @@ export class UserService {
     // Exclude system user
     where.externalUserId = { ...(where.externalUserId || {}), not: 'system' };
 
+    if (filters.isBookmarked === true) {
+      where.adminBookmarks = {
+        some: { adminUserId: admin.sub },
+      };
+    }
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
@@ -192,24 +209,50 @@ export class UserService {
         include: {
           _count: { select: { images: true, avatars: true } },
           client: { select: { id: true, name: true, domain: true } },
+          avatars: {
+            select: { id: true, userId: true },
+            take: 1,
+          },
         },
       }),
       this.prisma.user.count({ where }),
     ]);
 
+    let bookmarkedUserIds = new Set<string>();
+    if (users.length > 0) {
+      if (filters.isBookmarked === true) {
+        bookmarkedUserIds = new Set(users.map((u) => u.id));
+      } else {
+        const bookmarks = await this.prisma.adminUserBookmark.findMany({
+          where: {
+            adminUserId: admin.sub,
+            userId: { in: users.map((u) => u.id) },
+          },
+          select: { userId: true },
+        });
+        bookmarkedUserIds = new Set(bookmarks.map((b) => b.userId));
+      }
+    }
+
     this.logger.debug(`listUsers returned ${users.length}/${total} users`);
 
-    const data = users.map((u) =>
-      plainToInstance(
+    const data = users.map((u) => {
+      const avatarUrl = u.avatars.length > 0 ? this.route.fullUrl('avatars', u.externalUserId) : undefined;
+      const payload = {
+        ...u,
+        totalImages: u._count.images,
+        totalAvatars: u._count.avatars,
+        isBookmarked: bookmarkedUserIds.has(u.id),
+        avatarUrl,
+      };
+      delete payload.bio;
+
+      return plainToInstance(
         UserResponseDto,
-        {
-          ...u,
-          totalImages: u._count.images,
-          totalAvatars: u._count.avatars,
-        },
+        payload,
         { excludeExtraneousValues: true },
-      ),
-    );
+      );
+    });
 
     return {
       data,
@@ -225,6 +268,10 @@ export class UserService {
       include: {
         _count: { select: { images: true, avatars: true, albums: true } },
         client: { select: { id: true, name: true, domain: true } },
+        avatars: {
+          select: { id: true, userId: true },
+          take: 1,
+        },
       },
     });
 
@@ -235,7 +282,19 @@ export class UserService {
 
     assertClientAccess(admin, user.clientId);
 
+    const bookmark = await this.prisma.adminUserBookmark.findUnique({
+      where: {
+        adminUserId_userId: {
+          adminUserId: admin.sub,
+          userId: user.id,
+        },
+      },
+      select: { id: true },
+    });
+
     this.logger.debug(`getUser: found user=${userId} clientId=${user.clientId}`);
+
+    const avatarUrl = user.avatars.length > 0 ? this.route.fullUrl('avatars', user.externalUserId) : undefined;
 
     return plainToInstance(
       UserResponseDto,
@@ -244,6 +303,8 @@ export class UserService {
         totalImages: user._count.images,
         totalAvatars: user._count.avatars,
         totalAlbums: user._count.albums,
+        isBookmarked: !!bookmark,
+        avatarUrl,
       },
       { excludeExtraneousValues: true },
     );
@@ -268,9 +329,9 @@ export class UserService {
   ): Promise<UserResponseDto> {
     this.logger.log(`updateUserAdmin called by admin=${admin.sub} userId=${userId}`);
 
-    if (!dto.externalUserId && !dto.username && !dto.email) {
+    if (!dto.externalUserId && !dto.username && !dto.email && !dto.website && !dto.bio) {
       throw new BadRequestException(
-        'At least one field between externalUserId, username, and email must be provided',
+        'At least one field between externalUserId, username, email, website, and bio must be provided',
       );
     }
 
@@ -315,6 +376,8 @@ export class UserService {
         ...(dto.externalUserId !== undefined ? { externalUserId: dto.externalUserId } : {}),
         ...(dto.username !== undefined ? { username: dto.username } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.website !== undefined ? { website: dto.website } : {}),
+        ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       },
       include: {
         _count: { select: { images: true, avatars: true, albums: true } },
@@ -347,8 +410,10 @@ export class UserService {
       `updateUserByExternalUserId called for clientId=${clientId} externalUserId=${externalUserId}`,
     );
 
-    if (!dto.username && !dto.email) {
-      throw new BadRequestException('At least one field between username and email must be provided');
+    if (!dto.username && !dto.email && !dto.website && !dto.bio) {
+      throw new BadRequestException(
+        'At least one field between username, email, website, and bio must be provided',
+      );
     }
 
     if (externalUserId === 'system') {
@@ -374,6 +439,8 @@ export class UserService {
       data: {
         ...(dto.username !== undefined ? { username: dto.username } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.website !== undefined ? { website: dto.website } : {}),
+        ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       },
       include: {
         _count: { select: { images: true, avatars: true, albums: true } },

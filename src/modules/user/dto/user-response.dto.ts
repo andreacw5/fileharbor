@@ -11,12 +11,16 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Internal user UUID' }) @Expose() id: string;
   @ApiProperty({ description: 'External user ID from the client system' }) @Expose() externalUserId: string;
   @ApiPropertyOptional() @Expose() username?: string;
+  @ApiPropertyOptional() @Expose() website?: string;
+  @ApiPropertyOptional() @Expose() bio?: string;
   @ApiProperty() @Expose() clientId: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() totalImages?: number;
   @ApiPropertyOptional() @Expose() totalAvatars?: number;
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
+  @ApiPropertyOptional({ description: 'Whether the requesting admin has bookmarked this user' }) @Expose() isBookmarked?: boolean;
+  @ApiPropertyOptional() @Expose() avatarUrl?: string;
 
   @ApiPropertyOptional({ type: UserClientDto })
   @Expose()

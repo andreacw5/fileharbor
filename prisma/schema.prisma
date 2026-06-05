@@ -42,19 +42,24 @@ model Client {
 
 // User within a client
 model User {
-  id             String   @id @default(uuid())
+  id             String  @id @default(uuid())
   clientId       String
   externalUserId String // ID from client's application
   email          String?
   username       String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+
+  website String?
+  bio     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  images  Image[]
-  avatars Avatar[]
-  albums  Album[]
+  client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  images         Image[]
+  avatars        Avatar[]
+  albums         Album[]
+  adminBookmarks AdminUserBookmark[]
 
   @@unique([clientId, externalUserId])
   @@index([clientId])
@@ -64,33 +69,33 @@ model User {
 
 // Image entity
 model Image {
-  id           String    @id @default(uuid())
-  clientId     String
-  userId       String
-  originalName String
-  storagePath  String // e.g., storage/domain/images/{imageId}
-  format       String // webp, jpeg, png
-  width        Int
-  height       Int
-  size         Int // bytes
-  mimeType     String
-  isOptimized  Boolean   @default(false)
-  optimizedAt  DateTime?
-  tinifyOptimized Boolean @default(false) // Track if image was compressed with Tinify to avoid reprocessing
-  isPrivate    Boolean   @default(false)
-  views        Int       @default(0)
-  downloads    Int       @default(0)
-  description  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  clientId        String
+  userId          String
+  originalName    String
+  storagePath     String // e.g., storage/domain/images/{imageId}
+  format          String // webp, jpeg, png
+  width           Int
+  height          Int
+  size            Int // bytes
+  mimeType        String
+  isOptimized     Boolean   @default(false)
+  optimizedAt     DateTime?
+  tinifyOptimized Boolean   @default(false) // Track if image was compressed with Tinify to avoid reprocessing
+  isPrivate       Boolean   @default(false)
+  views           Int       @default(0)
+  downloads       Int       @default(0)
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
-  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client          Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   albumImages     AlbumImage[]
   imageTags       ImageTag[]
   shareLinks      ImageShareLink[]
-  albumCoverImage Album[]          @relation("AlbumCoverImage")
+  albumCoverImage Album[]              @relation("AlbumCoverImage")
   adminBookmarks  AdminImageBookmark[]
 
   @@index([clientId])
@@ -234,6 +239,7 @@ model AdminUser {
 
   clientAccess  AdminClientAccess[]
   bookmarks     AdminImageBookmark[]
+  userBookmarks AdminUserBookmark[]
   refreshTokens AdminRefreshToken[]
 
   @@index([email])
@@ -259,8 +265,8 @@ model AdminClientAccess {
 model AdminImageBookmark {
   id          String   @id @default(uuid())
   adminUserId String
-  imageId      String
-  createdAt    DateTime @default(now())
+  imageId     String
+  createdAt   DateTime @default(now())
 
   adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   image     Image     @relation(fields: [imageId], references: [id], onDelete: Cascade)
@@ -269,6 +275,22 @@ model AdminImageBookmark {
   @@index([adminUserId])
   @@index([imageId])
   @@map("admin_image_bookmarks")
+}
+
+// Admin personal bookmark for a user
+model AdminUserBookmark {
+  id          String   @id @default(uuid())
+  adminUserId String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, userId])
+  @@index([adminUserId])
+  @@index([userId])
+  @@map("admin_user_bookmarks")
 }
 
 enum AdminRole {
