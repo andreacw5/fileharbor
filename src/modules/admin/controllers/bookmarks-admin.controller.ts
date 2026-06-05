@@ -23,6 +23,8 @@ import {
   AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
   AdminDeleteResponseDto,
+  AdminUserBookmarkListResponseDto,
+  AdminUserBookmarkResponseDto,
 } from '../dto/admin-response.dto';
 import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
 
@@ -90,6 +92,43 @@ export class BookmarksAdminController {
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const result = await this.bookmarksService.removeBookmark(adminUser, imageId);
+
+    return plainToInstance(
+      AdminDeleteResponseDto,
+      {
+        success: true,
+        message: result.removed > 0 ? 'Bookmark removed successfully' : 'Bookmark not found',
+      },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  @Post('users/:userId')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Bookmark a user for the current admin' })
+  @ApiResponse({ status: 201, type: AdminUserBookmarkResponseDto })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  async bookmarkUser(
+    @Param('userId') userId: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminUserBookmarkResponseDto> {
+    const bookmark = await this.bookmarksService.bookmarkUser(adminUser, userId);
+
+    return plainToInstance(AdminUserBookmarkResponseDto, bookmark, { excludeExtraneousValues: true });
+  }
+
+  @Delete('users/:userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a user from admin bookmarks' })
+  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  async removeUserBookmark(
+    @Param('userId') userId: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminDeleteResponseDto> {
+    const result = await this.bookmarksService.removeUserBookmark(adminUser, userId);
 
     return plainToInstance(
       AdminDeleteResponseDto,

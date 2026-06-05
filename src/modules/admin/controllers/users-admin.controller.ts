@@ -50,23 +50,34 @@ export class UsersAdminController {
   @ApiOperation({ summary: 'List users (scoped to accessible clients, system user excluded)' })
   @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
   @ApiQuery({ name: 'search', required: false, description: 'Search by externalUserId or username' })
+  @ApiQuery({
+    name: 'isBookmarked',
+    required: false,
+    type: Boolean,
+    description: 'If true, returns only users bookmarked by the current admin',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Paginated user list (email is never returned)' })
-  listUsers(
-    @AdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ) {
-    return this.userService.listUsers(adminUser, {
-      clientId,
-      search,
-      page: Number(page) || 1,
-      perPage: Number(perPage) || 20,
-    });
-  }
+   listUsers(
+     @AdminUser() adminUser: AdminJwtPayload,
+     @Query('clientId') clientId?: string,
+     @Query('search') search?: string,
+     @Query('isBookmarked') isBookmarked?: string,
+     @Query('page') page?: string,
+     @Query('perPage') perPage?: string,
+   ) {
+     const bookmarkedOnly =
+       isBookmarked !== undefined && ['true', '1'].includes(isBookmarked.toLowerCase());
+
+     return this.userService.listUsers(adminUser, {
+       clientId,
+       search,
+       ...(bookmarkedOnly && { isBookmarked: true }),
+       page: Number(page) || 1,
+       perPage: Number(perPage) || 20,
+     });
+   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get user details by internal UUID (email and sensitive data excluded)' })
