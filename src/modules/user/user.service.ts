@@ -7,17 +7,21 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
+import { Prisma, User } from '@prisma/client';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   assertClientAccess,
   buildClientWhere,
 } from '@/modules/admin/helpers/admin-access.helper';
-import { UserResponseDto } from './dto/user-response.dto';
+import { UserListResponseDto, UserResponseDto } from './dto/user-response.dto';
 import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
 import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { generateAnonymousUsername } from '@/utils/username.generator';
 import { RouteHelperService } from '@/utils/route.utils';
+
+/** Reserved external user ID — never expose or mutate this user via API endpoints. */
+const SYSTEM_USER_ID = 'system';
 
 @Injectable()
 export class UserService {
@@ -29,6 +33,36 @@ export class UserService {
     private readonly route: RouteHelperService,
   ) {}
 
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  /** Normalises page/perPage into skip/take with a hard cap of 100 per page. */
+  private buildPagination(page?: number, perPage?: number) {
+    const p = page || 1;
+    const take = Math.min(perPage || 20, 100);
+    return { page: p, take, skip: (p - 1) * take };
+  }
+
+  /**
+   * Flattens Prisma `_count` relations and any extra fields onto the raw record,
+   * then transforms the result into the given response DTO class.
+   */
+  private mapUser<T extends object>(
+    ctor: new (...args: any[]) => T,
+    user: any,
+    extra: Record<string, unknown> = {},
+  ): T {
+    return plainToInstance(
+      ctor,
+      {
+        ...user,
+        totalImages: user._count?.images,
+        totalAvatars: user._count?.avatars,
+        totalAlbums: user._count?.albums,
+        ...extra,
+      },
+      { excludeExtraneousValues: true },
+    );
+  }
 
   // ─── API-Key scoped methods ───────────────────────────────────────────────
 
@@ -43,7 +77,7 @@ export class UserService {
     clientId: string,
     externalUserId: string,
     username?: string,
-  ) {
+  ): Promise<User> {
     this.logger.debug(
       `resolveUser clientId=${clientId} externalUserId=${externalUserId} username=${username ?? '(auto)'}`,
     );
@@ -67,12 +101,9 @@ export class UserService {
       `listUsersForClient clientId=${clientId} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
     );
 
-    const page = filters.page || 1;
-    const perPage = filters.perPage || 20;
-    const take = Math.min(perPage, 100);
-    const skip = (page - 1) * take;
+    const { page, take, skip } = this.buildPagination(filters.page, filters.perPage);
 
-    const where: any = { clientId, externalUserId: { not: 'system' } };
+    const where: any = { clientId, externalUserId: { not: SYSTEM_USER_ID } };
 
     if (filters.search) {
       where.OR = [
@@ -88,25 +119,15 @@ export class UserService {
         skip,
         take,
         include: {
-          _count: { select: { images: true, avatars: true } },
+          _count: { select: { images: true, albums: true } },
         },
       }),
       this.prisma.user.count({ where }),
     ]);
 
-
     this.logger.debug(`listUsersForClient returned ${users.length}/${total} users`);
 
-    const data = users.map((u) => {
-      const payload = { ...u, totalImages: u._count.images, totalAvatars: u._count.avatars };
-      delete payload.bio;
-
-      return plainToInstance(
-        UserResponseDto,
-        payload,
-        { excludeExtraneousValues: true },
-      );
-    });
+    const data = users.map((u) => this.mapUser(UserListResponseDto, u));
 
     return {
       data,
@@ -122,7 +143,7 @@ export class UserService {
       `createUserForClient clientId=${clientId} externalUserId=${dto.externalUserId}`,
     );
 
-    if (dto.externalUserId === 'system') {
+    if (dto.externalUserId === SYSTEM_USER_ID) {
       throw new BadRequestException('externalUserId "system" is reserved');
     }
 
@@ -155,11 +176,7 @@ export class UserService {
 
     this.logger.log(`createUserForClient created user=${user.id} clientId=${clientId}`);
 
-    return plainToInstance(
-      UserResponseDto,
-      { ...user, totalImages: user._count.images, totalAvatars: user._count.avatars },
-      { excludeExtraneousValues: true },
-    );
+    return this.mapUser(UserResponseDto, user);
   }
 
   // ─── Users ────────────────────────────────────────────────────────────────
@@ -178,10 +195,7 @@ export class UserService {
       `listUsers called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${filters.page ?? 1}`,
     );
 
-    const page = filters.page || 1;
-    const perPage = filters.perPage || 20;
-    const take = Math.min(perPage, 100);
-    const skip = (page - 1) * take;
+    const { page, take, skip } = this.buildPagination(filters.page, filters.perPage);
     const where: any = buildClientWhere(admin, filters.clientId);
 
     if (filters.search) {
@@ -192,7 +206,7 @@ export class UserService {
     }
 
     // Exclude system user
-    where.externalUserId = { ...(where.externalUserId || {}), not: 'system' };
+    where.externalUserId = { ...(where.externalUserId || {}), not: SYSTEM_USER_ID };
 
     if (filters.isBookmarked === true) {
       where.adminBookmarks = {
@@ -238,20 +252,10 @@ export class UserService {
 
     const data = users.map((u) => {
       const avatarUrl = u.avatars.length > 0 ? this.route.fullUrl('avatars', u.externalUserId) : undefined;
-      const payload = {
-        ...u,
-        totalImages: u._count.images,
-        totalAvatars: u._count.avatars,
+      return this.mapUser(UserListResponseDto, u, {
         isBookmarked: bookmarkedUserIds.has(u.id),
         avatarUrl,
-      };
-      delete payload.bio;
-
-      return plainToInstance(
-        UserResponseDto,
-        payload,
-        { excludeExtraneousValues: true },
-      );
+      });
     });
 
     return {
@@ -296,18 +300,10 @@ export class UserService {
 
     const avatarUrl = user.avatars.length > 0 ? this.route.fullUrl('avatars', user.externalUserId) : undefined;
 
-    return plainToInstance(
-      UserResponseDto,
-      {
-        ...user,
-        totalImages: user._count.images,
-        totalAvatars: user._count.avatars,
-        totalAlbums: user._count.albums,
-        isBookmarked: !!bookmark,
-        avatarUrl,
-      },
-      { excludeExtraneousValues: true },
-    );
+    return this.mapUser(UserResponseDto, user, {
+      isBookmarked: !!bookmark,
+      avatarUrl,
+    });
   }
 
   async createUserAdmin(
@@ -347,7 +343,7 @@ export class UserService {
 
     assertClientAccess(admin, user.clientId);
 
-    if (user.externalUserId === 'system') {
+    if (user.externalUserId === SYSTEM_USER_ID) {
       throw new BadRequestException('System user cannot be updated');
     }
 
@@ -389,16 +385,7 @@ export class UserService {
       `updateUserAdmin: updated user=${updated.id} clientId=${updated.clientId}`,
     );
 
-    return plainToInstance(
-      UserResponseDto,
-      {
-        ...updated,
-        totalImages: updated._count.images,
-        totalAvatars: updated._count.avatars,
-        totalAlbums: updated._count.albums,
-      },
-      { excludeExtraneousValues: true },
-    );
+    return this.mapUser(UserResponseDto, updated);
   }
 
   async updateUserByExternalUserId(
@@ -416,50 +403,33 @@ export class UserService {
       );
     }
 
-    if (externalUserId === 'system') {
+    if (externalUserId === SYSTEM_USER_ID) {
       throw new BadRequestException('System user cannot be updated with this endpoint');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        clientId_externalUserId: {
-          clientId,
-          externalUserId,
+    try {
+      const updated = await this.prisma.user.update({
+        where: { clientId_externalUserId: { clientId, externalUserId } },
+        data: {
+          ...(dto.username !== undefined ? { username: dto.username } : {}),
+          ...(dto.email !== undefined ? { email: dto.email } : {}),
+          ...(dto.website !== undefined ? { website: dto.website } : {}),
+          ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
         },
-      },
-      select: { id: true },
-    });
+        include: {
+          _count: { select: { images: true, avatars: true, albums: true } },
+          client: { select: { id: true, name: true, domain: true } },
+        },
+      });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+      this.logger.log(`updateUserByExternalUserId updated user=${updated.id} clientId=${updated.clientId}`);
+
+      return this.mapUser(UserResponseDto, updated);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException('User not found');
+      }
+      throw e;
     }
-
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        ...(dto.username !== undefined ? { username: dto.username } : {}),
-        ...(dto.email !== undefined ? { email: dto.email } : {}),
-        ...(dto.website !== undefined ? { website: dto.website } : {}),
-        ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
-      },
-      include: {
-        _count: { select: { images: true, avatars: true, albums: true } },
-        client: { select: { id: true, name: true, domain: true } },
-      },
-    });
-
-    this.logger.log(`updateUserByExternalUserId updated user=${updated.id} clientId=${updated.clientId}`);
-
-    return plainToInstance(
-      UserResponseDto,
-      {
-        ...updated,
-        totalImages: updated._count.images,
-        totalAvatars: updated._count.avatars,
-        totalAlbums: updated._count.albums,
-      },
-      { excludeExtraneousValues: true },
-    );
   }
 }
-
