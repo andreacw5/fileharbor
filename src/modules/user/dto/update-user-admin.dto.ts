@@ -28,6 +28,20 @@ export class UpdateUserAdminDto {
   @Transform(trimOrUndefined)
   @IsEmail()
   email?: string;
+
+  @ApiPropertyOptional({ description: 'Updated website URL or label', maxLength: 255 })
+  @IsOptional()
+  @Transform(trimOrUndefined)
+  @IsString()
+  @MaxLength(255)
+  website?: string;
+
+  @ApiPropertyOptional({ description: 'Updated biography', maxLength: 1000 })
+  @IsOptional()
+  @Transform(trimOrUndefined)
+  @IsString()
+  @MaxLength(1000)
+  bio?: string;
 }
 
 

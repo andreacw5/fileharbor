@@ -19,5 +19,17 @@ export class CreateUserDto {
   @IsEmail()
   @MaxLength(255)
   email?: string;
+
+  @ApiPropertyOptional({ description: 'Website URL or label' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  website?: string;
+
+  @ApiPropertyOptional({ description: 'User biography' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  bio?: string;
 }
 

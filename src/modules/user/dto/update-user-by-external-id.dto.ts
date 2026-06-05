@@ -21,5 +21,19 @@ export class UpdateUserByExternalIdDto {
   @Transform(trimOrUndefined)
   @IsEmail()
   email?: string;
+
+  @ApiPropertyOptional({ description: 'Updated website URL or label from external system', maxLength: 255 })
+  @IsOptional()
+  @Transform(trimOrUndefined)
+  @IsString()
+  @MaxLength(255)
+  website?: string;
+
+  @ApiPropertyOptional({ description: 'Updated biography from external system', maxLength: 1000 })
+  @IsOptional()
+  @Transform(trimOrUndefined)
+  @IsString()
+  @MaxLength(1000)
+  bio?: string;
 }
 
