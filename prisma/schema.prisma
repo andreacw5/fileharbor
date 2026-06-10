@@ -5,7 +5,8 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -227,10 +228,9 @@ model AlbumToken {
 // Admin user for the management GUI
 model AdminUser {
   id               String    @id @default(uuid())
+  bastionUserId    String    @unique // ID from Bastion's authentication system
   email            String    @unique
-  passwordHash     String
   name             String?
-  role             AdminRole @default(VIEWER)
   active           Boolean   @default(true)
   allClientsAccess Boolean   @default(false) // if true, can access all clients
   lastLoginAt      DateTime?
@@ -240,7 +240,6 @@ model AdminUser {
   clientAccess  AdminClientAccess[]
   bookmarks     AdminImageBookmark[]
   userBookmarks AdminUserBookmark[]
-  refreshTokens AdminRefreshToken[]
 
   @@index([email])
   @@map("admin_users")
@@ -293,25 +292,15 @@ model AdminUserBookmark {
   @@map("admin_user_bookmarks")
 }
 
-enum AdminRole {
-  SUPER_ADMIN
-  ADMIN
-  VIEWER
-}
+// Cache of Bastion user profile data, keyed by JWT sub
+model UserCache {
+  id        String   @id // = sub from Bastion JWT, set explicitly
+  username  String?
+  email     String?
+  image     String?
+  updatedAt DateTime @updatedAt
 
-// Refresh tokens for admin sessions
-model AdminRefreshToken {
-  id          String    @id @default(uuid())
-  adminUserId String
-  tokenHash   String    @unique // SHA-256 hash of the raw token
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-
-  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-
-  @@index([adminUserId])
-  @@map("admin_refresh_tokens")
+  @@map("user_cache")
 }
 
 // Token for private image sharing
