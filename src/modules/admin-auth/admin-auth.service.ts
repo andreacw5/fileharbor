@@ -2,22 +2,27 @@ import {
   Injectable,
   UnauthorizedException,
   NotFoundException,
-  BadRequestException,
   ConflictException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
+import { firstValueFrom } from 'rxjs';
 import {
   AdminLoginResponseDto,
   AdminRefreshResponseDto,
   AdminUserResponseDto,
 } from './dto/admin-response.dto';
-import { AdminJwtPayload } from './guards/admin-jwt.guard';
-import { CryptoUtils } from './utils/crypto.utils';
-import { parseExpiresInToSeconds, parseDays } from './utils/token.utils';
+import { AdminJwtPayload, BastionJwtPayload } from './guards/admin-jwt.guard';
+
+interface BastionTokenResponse {
+  accessToken: string;
+  refreshToken: string;
+}
 
 @Injectable()
 export class AdminAuthService {
@@ -25,269 +30,189 @@ export class AdminAuthService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly httpService: HttpService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
   ) {}
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
 
-  /**
-   * Generate a signed JWT access token for admin user
-   * @param payload The JWT payload
-   * @returns Object containing the token and expiration time in seconds
-   */
-  private signAccessToken(payload: Omit<AdminJwtPayload, never>): { token: string; expiresIn: number } {
-    const expiresIn = this.config.get<string>('jwtAdminExpiresIn') || '15m';
-    const token = this.jwtService.sign(payload, {
-      secret: this.config.get<string>('jwtAdminSecret'),
-      expiresIn: expiresIn as any,
-    });
-    const seconds = parseExpiresInToSeconds(expiresIn);
-    return { token, expiresIn: seconds };
-  }
-
-  /**
-   * Create and persist a refresh token
-   * The raw token is returned to the client, while only its hash is stored in the database
-   * @param adminUserId The admin user ID
-   * @returns The raw (unhashed) refresh token to be sent to the client
-   */
-  private async createRefreshToken(adminUserId: string): Promise<string> {
-    const rawToken = CryptoUtils.generateSecureToken();
-    const tokenHash = CryptoUtils.hashToken(rawToken);
-
-    const refreshExpiresIn = this.config.get<string | number>('jwtAdminRefreshExpiresInDays') || 7;
-    const days = parseDays(refreshExpiresIn);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + days);
-
-    await this.prisma.adminRefreshToken.create({
-      data: { adminUserId, tokenHash, expiresAt },
-    });
-
-    return rawToken;
-  }
-
-
-  /**
-   * Authenticate an admin user and generate access/refresh tokens
-   * @param email Admin user email
-   * @param password Admin user password
-   * @returns Login response with tokens and user info
-   * @throws UnauthorizedException if credentials are invalid
-   */
   async login(email: string, password: string): Promise<AdminLoginResponseDto> {
-    const adminUser = await this.prisma.adminUser.findUnique({
-      where: { email },
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    const appSlug = this.config.get<string>('bastionAppSlug');
+
+    const tokens = await this.callBastion<BastionTokenResponse>(
+      'POST',
+      `${bastionUrl}/auth/login`,
+      { email, password, appSlug },
+    );
+
+    const decoded = this.jwtService.decode<BastionJwtPayload>(tokens.accessToken);
+    if (!decoded?.sub) {
+      throw new ServiceUnavailableException('Malformed token from auth service');
+    }
+
+    const isSuperAdmin = decoded.role === 'SUPER_ADMIN';
+    const adminUser = await this.prisma.adminUser.upsert({
+      where: { bastionUserId: decoded.sub },
+      create: {
+        bastionUserId: decoded.sub,
+        email: decoded.email,
+        name: decoded.username ?? null,
+        active: true,
+        allClientsAccess: isSuperAdmin,
+        lastLoginAt: new Date(),
+      },
+      update: {
+        email: decoded.email,
+        ...(decoded.username && { name: decoded.username }),
+        lastLoginAt: new Date(),
+      },
       include: { clientAccess: { select: { clientId: true } } },
     });
 
-    if (!adminUser || !adminUser.active) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    this.logger.log(`[Admin] Login: bastionUserId=${decoded.sub}`);
 
-    const isValid = await CryptoUtils.verifyPassword(password, adminUser.passwordHash);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    await this.prisma.adminUser.update({
-      where: { id: adminUser.id },
-      data: { lastLoginAt: new Date() },
-    });
-
+    const expiresIn = decoded.exp - decoded.iat;
     const allowedClientIds = adminUser.clientAccess.map((a) => a.clientId);
-
-    const jwtPayload: Omit<AdminJwtPayload, never> = {
-      sub: adminUser.id,
-      email: adminUser.email,
-      role: adminUser.role,
-      allClientsAccess: adminUser.allClientsAccess,
-      allowedClientIds,
-    };
-
-    const { token: accessToken, expiresIn } = this.signAccessToken(jwtPayload);
-    const refreshToken = await this.createRefreshToken(adminUser.id);
-
-    const userDto = this.formatAdminUser(adminUser, allowedClientIds);
-
-    this.logger.log(`[Admin] User logged in: ${adminUser.id}`);
+    const user = this.formatAdminUser(adminUser, decoded.role, allowedClientIds);
 
     return plainToInstance(
       AdminLoginResponseDto,
-      { accessToken, refreshToken, expiresIn, user: userDto },
+      { ...tokens, expiresIn, user },
       { excludeExtraneousValues: true },
     );
   }
 
-  /**
-   * Refresh access token using a valid refresh token
-   * Implements token rotation: old refresh token is revoked and a new one is issued
-   * @param rawRefreshToken The raw refresh token from the client
-   * @returns New access and refresh tokens
-   * @throws UnauthorizedException if refresh token is invalid or expired
-   */
-  async refresh(rawRefreshToken: string): Promise<AdminRefreshResponseDto> {
-    const tokenHash = CryptoUtils.hashToken(rawRefreshToken);
+  async refresh(refreshToken: string): Promise<AdminRefreshResponseDto> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    const appSlug = this.config.get<string>('bastionAppSlug');
 
-    const stored = await this.prisma.adminRefreshToken.findUnique({
-      where: { tokenHash },
-      include: {
-        adminUser: { include: { clientAccess: { select: { clientId: true } } } },
-      },
-    });
+    const tokens = await this.callBastion<BastionTokenResponse>(
+      'POST',
+      `${bastionUrl}/auth/refresh`,
+      { refreshToken, appSlug },
+    );
 
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    if (!stored.adminUser.active) {
-      throw new UnauthorizedException('Admin account is disabled');
-    }
-
-    // Revoke old token (rotation)
-    await this.prisma.adminRefreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
-
-    const allowedClientIds = stored.adminUser.clientAccess.map((a) => a.clientId);
-
-    const jwtPayload: Omit<AdminJwtPayload, never> = {
-      sub: stored.adminUser.id,
-      email: stored.adminUser.email,
-      role: stored.adminUser.role,
-      allClientsAccess: stored.adminUser.allClientsAccess,
-      allowedClientIds,
-    };
-
-    const { token: accessToken, expiresIn } = this.signAccessToken(jwtPayload);
-    const newRefreshToken = await this.createRefreshToken(stored.adminUser.id);
-
-    this.logger.log(`[Admin] Token refreshed for user: ${stored.adminUser.id}`);
+    const decoded = this.jwtService.decode<BastionJwtPayload>(tokens.accessToken);
+    const expiresIn = decoded ? decoded.exp - decoded.iat : 900;
 
     return plainToInstance(
       AdminRefreshResponseDto,
-      { accessToken, refreshToken: newRefreshToken, expiresIn },
+      { ...tokens, expiresIn },
       { excludeExtraneousValues: true },
     );
   }
 
-  /**
-   * Logout an admin user by revoking their refresh token
-   * @param rawRefreshToken The raw refresh token to revoke
-   * @returns Success message
-   */
-  async logout(rawRefreshToken: string): Promise<{ message: string }> {
-    const tokenHash = CryptoUtils.hashToken(rawRefreshToken);
-
-    const stored = await this.prisma.adminRefreshToken.findUnique({ where: { tokenHash } });
-
-    if (!stored || stored.revokedAt) {
-      // Silently succeed — token already invalid
-      return { message: 'Logged out successfully' };
+  async logout(refreshToken: string): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    try {
+      await this.callBastion('POST', `${bastionUrl}/auth/logout`, { refreshToken });
+    } catch {
+      // Silently succeed — token may already be revoked
     }
-
-    await this.prisma.adminRefreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
-
-    this.logger.log(`[Admin] Logout for adminUserId: ${stored.adminUserId}`);
-    return { message: 'Logged out successfully' };
   }
 
   // ─── Profile ────────────────────────────────────────────────────────────────
 
-  /**
-   * Get the current admin user's profile
-   * @param admin The authenticated admin JWT payload
-   * @returns Admin user profile
-   * @throws NotFoundException if admin user not found
-   */
   async getProfile(admin: AdminJwtPayload): Promise<AdminUserResponseDto> {
     const adminUser = await this.prisma.adminUser.findUnique({
-      where: { id: admin.sub },
+      where: { bastionUserId: admin.sub },
       include: { clientAccess: { select: { clientId: true } } },
     });
     if (!adminUser) throw new NotFoundException('Admin user not found');
-    return this.formatAdminUser(adminUser, adminUser.clientAccess.map((a) => a.clientId));
+    return this.formatAdminUser(adminUser, admin.role, adminUser.clientAccess.map((a) => a.clientId));
   }
 
-  /**
-   * Update the current admin user's profile (name and/or email)
-   * @param admin The authenticated admin JWT payload
-   * @param data Profile update data
-   * @returns Updated admin user profile
-   * @throws ConflictException if email is already in use
-   */
   async updateProfile(
     admin: AdminJwtPayload,
-    data: { name?: string; email?: string },
+    data: { name?: string },
   ): Promise<AdminUserResponseDto> {
-    if (data.email) {
-      const existing = await this.prisma.adminUser.findUnique({ where: { email: data.email } });
-      if (existing && existing.id !== admin.sub) {
-        throw new ConflictException('Email already in use');
-      }
-    }
-
     const updated = await this.prisma.adminUser.update({
-      where: { id: admin.sub },
-      data: { ...(data.name !== undefined && { name: data.name }), ...(data.email && { email: data.email }) },
+      where: { bastionUserId: admin.sub },
+      data: { ...(data.name !== undefined && { name: data.name }) },
       include: { clientAccess: { select: { clientId: true } } },
     });
 
-    this.logger.log(`[Admin] Profile updated for user: ${updated.id}`);
-
-    return this.formatAdminUser(updated, updated.clientAccess.map((a) => a.clientId));
+    this.logger.log(`[Admin] Profile updated: bastionUserId=${admin.sub}`);
+    return this.formatAdminUser(updated, admin.role, updated.clientAccess.map((a) => a.clientId));
   }
 
-  /**
-   * Change the current admin user's password
-   * @param admin The authenticated admin JWT payload
-   * @param currentPassword The current password for verification
-   * @param newPassword The new password to set
-   * @returns Success message
-   * @throws NotFoundException if admin user not found
-   * @throws BadRequestException if current password is incorrect
-   */
-  async changePassword(
-    admin: AdminJwtPayload,
-    currentPassword: string,
-    newPassword: string,
-  ): Promise<{ message: string }> {
-    const adminUser = await this.prisma.adminUser.findUnique({ where: { id: admin.sub } });
-    if (!adminUser) throw new NotFoundException('Admin user not found');
+  // ─── Admin User Management ──────────────────────────────────────────────────
 
-    const isValid = await CryptoUtils.verifyPassword(currentPassword, adminUser.passwordHash);
-    if (!isValid) throw new BadRequestException('Current password is incorrect');
+  async createAdminUser(
+    bastionUserId: string,
+    email: string,
+    name?: string,
+    allClientsAccess = false,
+    clientIds: string[] = [],
+  ): Promise<AdminUserResponseDto> {
+    const existing = await this.prisma.adminUser.findUnique({ where: { bastionUserId } });
+    if (existing) throw new ConflictException('Admin user already exists for this Bastion user');
 
-    const passwordHash = await CryptoUtils.hashPassword(newPassword);
-    await this.prisma.adminUser.update({ where: { id: admin.sub }, data: { passwordHash } });
+    const adminUser = await this.prisma.adminUser.create({
+      data: {
+        bastionUserId,
+        email,
+        name: name ?? null,
+        allClientsAccess,
+        clientAccess: clientIds.length
+          ? { createMany: { data: clientIds.map((clientId) => ({ clientId })) } }
+          : undefined,
+      },
+      include: { clientAccess: { select: { clientId: true } } },
+    });
 
-    this.logger.log(`[Admin] Password changed for user: ${adminUser.id}`);
-
-    return { message: 'Password changed successfully' };
+    this.logger.log(`[Admin] Created AdminUser: bastionUserId=${bastionUserId}`);
+    return this.formatAdminUser(adminUser, 'VIEWER', adminUser.clientAccess.map((a) => a.clientId));
   }
 
-  // ─── Formatter ────────────────────────────────────────────────────────────
+  async setClientAccess(
+    adminUserId: string,
+    allClientsAccess: boolean,
+    clientIds: string[] = [],
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.adminClientAccess.deleteMany({ where: { adminUserId } }),
+      this.prisma.adminUser.update({
+        where: { id: adminUserId },
+        data: {
+          allClientsAccess,
+          clientAccess: clientIds.length
+            ? { createMany: { data: clientIds.map((clientId) => ({ clientId })) } }
+            : undefined,
+        },
+      }),
+    ]);
+  }
 
-  /**
-   * Format admin user for response
-   * @param user The admin user from database
-   * @param allowedClientIds List of allowed client IDs
-   * @returns Formatted admin user response DTO
-   */
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
   private formatAdminUser(
     user: any,
+    role: string,
     allowedClientIds: string[],
   ): AdminUserResponseDto {
     return plainToInstance(
       AdminUserResponseDto,
-      { ...user, allowedClientIds },
+      { ...user, role, allowedClientIds },
       { excludeExtraneousValues: true },
     );
   }
-}
 
+  private async callBastion<T>(method: 'POST', url: string, body: object): Promise<T> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.request<T>({ method, url, data: body }),
+      );
+      return response.data;
+    } catch (error: any) {
+      const status = error.response?.status;
+      if (status === 401 || status === 403) {
+        throw new UnauthorizedException(error.response?.data?.message ?? 'Invalid credentials');
+      }
+      this.logger.error(`Bastion call failed: ${method} ${url} → ${status ?? 'network error'}`);
+      throw new ServiceUnavailableException('Authentication service unavailable');
+    }
+  }
+}

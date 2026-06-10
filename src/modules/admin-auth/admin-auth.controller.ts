@@ -18,50 +18,44 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminJwtGuard, AdminJwtPayload } from './guards/admin-jwt.guard';
 import { AdminUser } from './decorators/admin-user.decorator';
 import { AdminLoginDto } from './dto/admin-login.dto';
-import { AdminUpdateProfileDto, AdminChangePasswordDto } from './dto/admin-update-profile.dto';
+import { AdminUpdateProfileDto } from './dto/admin-update-profile.dto';
 import {
   AdminLoginResponseDto,
   AdminRefreshResponseDto,
   AdminUserResponseDto,
 } from './dto/admin-response.dto';
 
+const REFRESH_COOKIE = 'admin_rt';
+const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (matches Bastion TTL)
+
 @ApiTags('Admin - Authentication')
 @Controller('admin/auth')
 export class AdminAuthController {
-  private readonly REFRESH_COOKIE = 'admin_rt';
+  constructor(private readonly adminAuthService: AdminAuthService) {}
 
-  constructor(
-    private readonly adminAuthService: AdminAuthService,
-    private readonly config: ConfigService,
-  ) {}
-
-  /** Scrive il refresh token come cookie httpOnly sul response */
   private setRefreshCookie(res: Response, token: string): void {
-    const days = this.config.get<number>('jwtAdminRefreshExpiresInDays') || 7;
-    res.cookie(this.REFRESH_COOKIE, token, {
+    res.cookie(REFRESH_COOKIE, token, {
       httpOnly: true,
-      secure: this.config.get('environment') !== 'development',
+      secure: process.env.NODE_ENV !== 'development',
       sameSite: 'strict',
-      maxAge: days * 24 * 60 * 60 * 1000,
+      maxAge: REFRESH_COOKIE_MAX_AGE_MS,
       path: '/',
     });
   }
 
-  /** Cancella il refresh cookie */
   private clearRefreshCookie(res: Response): void {
-    res.clearCookie(this.REFRESH_COOKIE, { httpOnly: true, sameSite: 'strict', path: '/' });
+    res.clearCookie(REFRESH_COOKIE, { httpOnly: true, sameSite: 'strict', path: '/' });
   }
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login as admin user' })
+  @ApiOperation({ summary: 'Login via Bastion IdP' })
   @ApiResponse({ status: 200, type: AdminLoginResponseDto, description: 'Sets httpOnly refresh token cookie' })
   async login(
     @Body() dto: AdminLoginDto,
@@ -75,14 +69,14 @@ export class AdminAuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token using the httpOnly cookie' })
+  @ApiOperation({ summary: 'Rotate refresh token via Bastion IdP' })
   @ApiResponse({ status: 200, type: AdminRefreshResponseDto, description: 'Issues new access token and rotates cookie' })
   @ApiResponse({ status: 401, description: 'Missing or invalid refresh token cookie' })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Omit<AdminRefreshResponseDto, 'refreshToken'>> {
-    const rawToken = req.cookies?.[this.REFRESH_COOKIE];
+    const rawToken = req.cookies?.[REFRESH_COOKIE];
     if (!rawToken) throw new UnauthorizedException('Missing refresh token');
     const result = await this.adminAuthService.refresh(rawToken);
     this.setRefreshCookie(res, result.refreshToken);
@@ -92,13 +86,13 @@ export class AdminAuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Revoke session and clear refresh token cookie' })
+  @ApiOperation({ summary: 'Revoke session via Bastion IdP and clear refresh cookie' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ message: string }> {
-    const rawToken = req.cookies?.[this.REFRESH_COOKIE];
+    const rawToken = req.cookies?.[REFRESH_COOKIE];
     if (rawToken) await this.adminAuthService.logout(rawToken);
     this.clearRefreshCookie(res);
     return { message: 'Logged out successfully' };
@@ -118,7 +112,7 @@ export class AdminAuthController {
   @Patch('me')
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update current admin profile (name, email)' })
+  @ApiOperation({ summary: 'Update current admin display name' })
   @ApiResponse({ status: 200, type: AdminUserResponseDto })
   updateProfile(
     @AdminUser() adminUser: AdminJwtPayload,
@@ -126,19 +120,4 @@ export class AdminAuthController {
   ): Promise<AdminUserResponseDto> {
     return this.adminAuthService.updateProfile(adminUser, dto);
   }
-
-  @Post('me/change-password')
-  @UseGuards(AdminJwtGuard)
-  @ApiBearerAuth()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Change current admin password' })
-  @ApiResponse({ status: 200, description: 'Password changed successfully' })
-  @ApiResponse({ status: 400, description: 'Current password is incorrect or passwords do not match' })
-  changePassword(
-    @AdminUser() adminUser: AdminJwtPayload,
-    @Body() dto: AdminChangePasswordDto,
-  ): Promise<{ message: string }> {
-    return this.adminAuthService.changePassword(adminUser, dto.currentPassword, dto.newPassword);
-  }
 }
-

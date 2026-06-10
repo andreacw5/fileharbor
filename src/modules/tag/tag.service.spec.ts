@@ -16,6 +16,9 @@ describe('TagService', () => {
     sub: 'admin-1',
     email: 'admin@example.com',
     role: 'SUPER_ADMIN',
+    appSlug: 'fileharbor',
+    permissions: [],
+    adminUserId: 'local-admin-1',
     allClientsAccess: true,
     allowedClientIds: [],
   };

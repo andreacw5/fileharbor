@@ -3,6 +3,7 @@ import { Expose, Type } from 'class-transformer';
 
 export class AdminUserResponseDto {
   @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() bastionUserId: string;
   @ApiProperty() @Expose() email: string;
   @ApiPropertyOptional() @Expose() name?: string;
   @ApiProperty() @Expose() role: string;
@@ -15,11 +16,11 @@ export class AdminUserResponseDto {
 }
 
 export class AdminLoginResponseDto {
-  @ApiProperty({ description: 'Short-lived JWT access token' })
+  @ApiProperty({ description: 'Short-lived JWT access token (RS256, issued by Bastion)' })
   @Expose()
   accessToken: string;
 
-  @ApiProperty({ description: 'Long-lived opaque refresh token' })
+  @ApiProperty({ description: 'Opaque refresh token (managed by Bastion)' })
   @Expose()
   refreshToken: string;
 
@@ -37,7 +38,7 @@ export class AdminRefreshResponseDto {
   @Expose()
   accessToken: string;
 
-  @ApiProperty({ description: 'New refresh token (old one is revoked)' })
+  @ApiProperty({ description: 'New refresh token (old one is revoked by Bastion)' })
   @Expose()
   refreshToken: string;
 
@@ -45,4 +46,3 @@ export class AdminRefreshResponseDto {
   @Expose()
   expiresIn: number;
 }
-
