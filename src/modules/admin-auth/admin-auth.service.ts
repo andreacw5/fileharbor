@@ -114,6 +114,14 @@ export class AdminAuthService {
 
   // ─── Identity (proxied to Bastion) ──────────────────────────────────────────
 
+  async updateGlobalProfile(
+    accessToken: string,
+    data: { username?: string; image?: string },
+  ): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    await this.callBastion('PATCH', `${bastionUrl}/auth/me`, data, accessToken);
+  }
+
   async requestEmailChange(accessToken: string, email: string): Promise<void> {
     const bastionUrl = this.config.get<string>('bastionUrl');
     const frontendUrl = this.config.get<string>('frontendUrl');

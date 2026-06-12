@@ -142,6 +142,22 @@ export class AdminAuthController {
     return this.adminAuthService.updateProfile(adminUser, { username: dto.username, image: dto.image });
   }
 
+  @Patch('me/global')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update global Bastion identity (username / image)' })
+  @ApiResponse({ status: 200, description: 'Global profile updated — takes effect on next token refresh' })
+  async updateGlobalProfile(
+    @AdminUser() _adminUser: AdminJwtPayload,
+    @Req() req: Request,
+    @Body() dto: AdminUpdateProfileDto,
+  ): Promise<{ message: string }> {
+    const accessToken = req.headers['authorization']!.substring(7);
+    await this.adminAuthService.updateGlobalProfile(accessToken, { username: dto.username, image: dto.image });
+    return { message: 'Global profile updated. Changes reflect on next login or token refresh.' };
+  }
+
   // ─── Identity (Bastion proxied) ───────────────────────────────────────────
 
   @Patch('me/email')

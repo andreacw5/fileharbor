@@ -10,8 +10,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1780677239.259695,
-    "ast_hash": "f65099827bf69912bb2b5fd49d7f7e89",
+    "mtime": 1781213318.9686174,
+    "ast_hash": "42a5c61679ad8f430e9214e829836f9c",
     "semantic_hash": ""
   },
   "prisma.config.ts": {
@@ -80,13 +80,13 @@
     "semantic_hash": ""
   },
   "src/configs/config.schema.ts": {
-    "mtime": 1781128587.9830425,
-    "ast_hash": "30ffee4301c8dedf17551c7f2300c3ac",
+    "mtime": 1781279019.3486612,
+    "ast_hash": "65ff136cca0c552e17783d97bb0ae366",
     "semantic_hash": ""
   },
   "src/configs/config.validation.ts": {
-    "mtime": 1781128591.8381467,
-    "ast_hash": "c84cc8fad33942a22ed2fc1c6d1e9ca2",
+    "mtime": 1781279023.7960541,
+    "ast_hash": "59f4699d1ddfff8c04bd9b0b0e6dd7ec",
     "semantic_hash": ""
   },
   "src/filters/http-exception.filter.ts": {
@@ -100,8 +100,8 @@
     "semantic_hash": ""
   },
   "src/modules/admin-auth/admin-auth.controller.ts": {
-    "mtime": 1781128659.9142337,
-    "ast_hash": "26b11568560a946c8824bdc4f656dd32",
+    "mtime": 1781279567.2881732,
+    "ast_hash": "94e42b93c25aac2692b9ede832b9282a",
     "semantic_hash": ""
   },
   "src/modules/admin-auth/admin-auth.module.ts": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/modules/admin-auth/admin-auth.service.ts": {
-    "mtime": 1781128637.242952,
-    "ast_hash": "ad13afc5ae0f7995c4ff15b7e29a6e95",
+    "mtime": 1781279551.6516643,
+    "ast_hash": "746ce068c1fe07523872c93fbcc72bf5",
     "semantic_hash": ""
   },
   "src/modules/admin-auth/decorators/admin-user.decorator.ts": {
@@ -120,23 +120,23 @@
     "semantic_hash": ""
   },
   "src/modules/admin-auth/dto/admin-login.dto.ts": {
-    "mtime": 1778235688.344322,
-    "ast_hash": "f09c9914cf0e1c6b159cfaf5d60fc4b0",
+    "mtime": 1781213879.716372,
+    "ast_hash": "e16a61b04a3e7cc15e068be1332d86d8",
     "semantic_hash": ""
   },
   "src/modules/admin-auth/dto/admin-response.dto.ts": {
-    "mtime": 1781128671.864685,
-    "ast_hash": "a0bf44c625ee5fb193dd417cc158b31e",
+    "mtime": 1781250819.9661725,
+    "ast_hash": "4882de4d3d2d963afa4a0f57e708c00d",
     "semantic_hash": ""
   },
   "src/modules/admin-auth/dto/admin-update-profile.dto.ts": {
-    "mtime": 1781128663.6726475,
-    "ast_hash": "267266f9aa26ab5cf31248697fe5911f",
+    "mtime": 1781280624.0468972,
+    "ast_hash": "552d12dd851a6600ef8c3e908dd78a50",
     "semantic_hash": ""
   },
   "src/modules/admin-auth/guards/admin-jwt.guard.ts": {
-    "mtime": 1781128611.5481253,
-    "ast_hash": "cccf488a6a566f412d08328853ffb8c8",
+    "mtime": 1781213901.8838234,
+    "ast_hash": "c3af7cc9ca133aa808caa3f354647144",
     "semantic_hash": ""
   },
   "src/modules/admin/admin-init.service.ts": {
@@ -225,8 +225,8 @@
     "semantic_hash": ""
   },
   "src/modules/admin/dto/create-admin-user.dto.ts": {
-    "mtime": 1781128682.0477405,
-    "ast_hash": "4dfc3a1696025ee1ddeed9afff605a8e",
+    "mtime": 1781250824.4022255,
+    "ast_hash": "feaac3115feefb6ef7b6a8c261978423",
     "semantic_hash": ""
   },
   "src/modules/admin/dto/create-user-admin.dto.ts": {
@@ -684,11 +684,6 @@
     "ast_hash": "0ad33eb5239505e8af5fdb45daabb6bc",
     "semantic_hash": ""
   },
-  ".github/copilot-instructions.md": {
-    "mtime": 1768490958.4009228,
-    "ast_hash": "53071537ec8e1e377814cc9628ccb472",
-    "semantic_hash": ""
-  },
   ".github/workflows/dependency-review.yml": {
     "mtime": 1768490958.4011052,
     "ast_hash": "f0dd3ee331a32593ec3789987eb4fce7",
@@ -702,11 +697,6 @@
   ".github/workflows/wiki-sync.yml": {
     "mtime": 1776878719.0514352,
     "ast_hash": "81fdd662fe87590b5c27518fd522d2ea",
-    "semantic_hash": ""
-  },
-  "AGENTS.md": {
-    "mtime": 1776859374.1437073,
-    "ast_hash": "66e4bb0ff23909283e91b875055cc440",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
@@ -827,6 +817,26 @@
   "storage/defaults.fileharbor/fileharbor_permission_denided.webp": {
     "mtime": 1769448174.959145,
     "ast_hash": "b0160778d4b6a3dc356c8acbfd7e8dad",
+    "semantic_hash": ""
+  },
+  ".claude/settings.json": {
+    "mtime": 1781213248.727864,
+    "ast_hash": "e1073342e958ac9f00716938c8f165e3",
+    "semantic_hash": ""
+  },
+  "prisma/migrations/20260612000000_admin_user_rename_name_add_image/migration.sql": {
+    "mtime": 1781250950.2869425,
+    "ast_hash": "0202f469f671bc949ae90e640d46fa0b",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1781213523.2553997,
+    "ast_hash": "7ada56d0ca89d2f7e112f6f560a3cf6d",
+    "semantic_hash": ""
+  },
+  "dev-plan/FE-01-identity-profile.md": {
+    "mtime": 1781279607.208247,
+    "ast_hash": "1cbc20e266f67bf6b7dddb0627def6cf",
     "semantic_hash": ""
   }
 }
