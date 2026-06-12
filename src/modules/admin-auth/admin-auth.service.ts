@@ -37,51 +37,22 @@ export class AdminAuthService {
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
 
+  async exchange(code: string): Promise<AdminLoginResponseDto> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    const appSlug = this.config.get<string>('bastionAppSlug');
+    const tokens = await this.callBastion<BastionTokenResponse>(
+      'POST', `${bastionUrl}/auth/exchange`, { code, appSlug },
+    );
+    return this.buildLoginResponse(tokens, '[Admin] OAuth exchange');
+  }
+
   async login(email: string, password: string): Promise<AdminLoginResponseDto> {
     const bastionUrl = this.config.get<string>('bastionUrl');
     const appSlug = this.config.get<string>('bastionAppSlug');
-
     const tokens = await this.callBastion<BastionTokenResponse>(
-      'POST',
-      `${bastionUrl}/auth/login`,
-      { email, password, appSlug },
+      'POST', `${bastionUrl}/auth/login`, { email, password, appSlug },
     );
-
-    const decoded = this.jwtService.decode<BastionJwtPayload>(tokens.accessToken);
-    if (!decoded?.sub) {
-      throw new ServiceUnavailableException('Malformed token from auth service');
-    }
-
-    const isSuperAdmin = decoded.role === 'SUPER_ADMIN';
-    const adminUser = await this.prisma.adminUser.upsert({
-      where: { bastionUserId: decoded.sub },
-      create: {
-        bastionUserId: decoded.sub,
-        email: decoded.email,
-        name: decoded.username ?? null,
-        active: true,
-        allClientsAccess: isSuperAdmin,
-        lastLoginAt: new Date(),
-      },
-      update: {
-        email: decoded.email,
-        ...(decoded.username && { name: decoded.username }),
-        lastLoginAt: new Date(),
-      },
-      include: { clientAccess: { select: { clientId: true } } },
-    });
-
-    this.logger.log(`[Admin] Login: bastionUserId=${decoded.sub}`);
-
-    const expiresIn = decoded.exp - decoded.iat;
-    const allowedClientIds = adminUser.clientAccess.map((a) => a.clientId);
-    const user = this.formatAdminUser(adminUser, decoded.role, allowedClientIds);
-
-    return plainToInstance(
-      AdminLoginResponseDto,
-      { ...tokens, expiresIn, user },
-      { excludeExtraneousValues: true },
-    );
+    return this.buildLoginResponse(tokens, '[Admin] Login');
   }
 
   async refresh(refreshToken: string): Promise<AdminRefreshResponseDto> {
@@ -121,21 +92,81 @@ export class AdminAuthService {
       include: { clientAccess: { select: { clientId: true } } },
     });
     if (!adminUser) throw new NotFoundException('Admin user not found');
-    return this.formatAdminUser(adminUser, admin.role, adminUser.clientAccess.map((a) => a.clientId));
+    return this.formatAdminUser(adminUser, admin.role, admin.username, adminUser.clientAccess.map((a) => a.clientId), admin.image);
   }
 
   async updateProfile(
     admin: AdminJwtPayload,
-    data: { name?: string },
+    data: { username?: string; image?: string },
   ): Promise<AdminUserResponseDto> {
     const updated = await this.prisma.adminUser.update({
       where: { bastionUserId: admin.sub },
-      data: { ...(data.name !== undefined && { name: data.name }) },
+      data: {
+        ...(data.username !== undefined && { username: data.username }),
+        ...(data.image !== undefined && { image: data.image }),
+      },
       include: { clientAccess: { select: { clientId: true } } },
     });
 
     this.logger.log(`[Admin] Profile updated: bastionUserId=${admin.sub}`);
-    return this.formatAdminUser(updated, admin.role, updated.clientAccess.map((a) => a.clientId));
+    return this.formatAdminUser(updated, admin.role, admin.username, updated.clientAccess.map((a) => a.clientId), admin.image);
+  }
+
+  // ─── Identity (proxied to Bastion) ──────────────────────────────────────────
+
+  async requestEmailChange(accessToken: string, email: string): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    const frontendUrl = this.config.get<string>('frontendUrl');
+    await this.callBastion(
+      'PATCH',
+      `${bastionUrl}/auth/me/email`,
+      {
+        email,
+        confirmUrl: `${frontendUrl}/admin/confirm-email`,
+        revokeUrl: `${frontendUrl}/admin/revoke-email-change`,
+      },
+      accessToken,
+    );
+  }
+
+  async confirmEmailChange(token: string): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    await this.callBastion('POST', `${bastionUrl}/auth/me/confirm-email`, { token });
+  }
+
+  async revokeEmailChange(token: string): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    await this.callBastion('POST', `${bastionUrl}/auth/me/revoke-email-change`, { token });
+  }
+
+  async changePassword(
+    accessToken: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    await this.callBastion(
+      'PATCH',
+      `${bastionUrl}/auth/me/password`,
+      { currentPassword, newPassword },
+      accessToken,
+    );
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    const frontendUrl = this.config.get<string>('frontendUrl');
+    const appSlug = this.config.get<string>('bastionAppSlug');
+    await this.callBastion('POST', `${bastionUrl}/auth/forgot-password`, {
+      email,
+      appSlug,
+      resetUrl: `${frontendUrl}/admin/reset-password`,
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    await this.callBastion('POST', `${bastionUrl}/auth/reset-password`, { token, newPassword });
   }
 
   // ─── Admin User Management ──────────────────────────────────────────────────
@@ -143,7 +174,7 @@ export class AdminAuthService {
   async createAdminUser(
     bastionUserId: string,
     email: string,
-    name?: string,
+    username?: string,
     allClientsAccess = false,
     clientIds: string[] = [],
   ): Promise<AdminUserResponseDto> {
@@ -154,7 +185,7 @@ export class AdminAuthService {
       data: {
         bastionUserId,
         email,
-        name: name ?? null,
+        username: username ?? null,
         allClientsAccess,
         clientAccess: clientIds.length
           ? { createMany: { data: clientIds.map((clientId) => ({ clientId })) } }
@@ -164,7 +195,7 @@ export class AdminAuthService {
     });
 
     this.logger.log(`[Admin] Created AdminUser: bastionUserId=${bastionUserId}`);
-    return this.formatAdminUser(adminUser, 'VIEWER', adminUser.clientAccess.map((a) => a.clientId));
+    return this.formatAdminUser(adminUser, 'VIEWER', username, adminUser.clientAccess.map((a) => a.clientId));
   }
 
   async setClientAccess(
@@ -188,11 +219,54 @@ export class AdminAuthService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
+  private async buildLoginResponse(
+    tokens: BastionTokenResponse,
+    logLabel: string,
+  ): Promise<AdminLoginResponseDto> {
+    const decoded = this.jwtService.decode<BastionJwtPayload>(tokens.accessToken);
+    if (!decoded?.sub) {
+      throw new ServiceUnavailableException('Malformed token from auth service');
+    }
+
+    const adminUser = await this.prisma.adminUser.upsert({
+      where: { bastionUserId: decoded.sub },
+      create: {
+        bastionUserId: decoded.sub,
+        email: decoded.email,
+        username: decoded.username ?? null,
+        image: decoded.image ?? null,
+        active: true,
+        allClientsAccess: decoded.role === 'SUPER_ADMIN',
+        lastLoginAt: new Date(),
+      },
+      update: {
+        email: decoded.email,
+        lastLoginAt: new Date(),
+      },
+      include: { clientAccess: { select: { clientId: true } } },
+    });
+
+    this.logger.log(`${logLabel}: bastionUserId=${decoded.sub}`);
+
+    const expiresIn = decoded.exp - decoded.iat;
+    const allowedClientIds = adminUser.clientAccess.map((a) => a.clientId);
+    const user = this.formatAdminUser(adminUser, decoded.role, decoded.username, allowedClientIds, decoded.image);
+
+    return plainToInstance(
+      AdminLoginResponseDto,
+      { ...tokens, expiresIn, user },
+      { excludeExtraneousValues: true },
+    );
+  }
+
   private formatAdminUser(
     user: any,
     role: string,
+    _jwtUsername: string | undefined,
     allowedClientIds: string[],
+    _jwtImage?: string,
   ): AdminUserResponseDto {
+    // Return raw DB values (null = no local override). Frontend merges with JWT claims.
     return plainToInstance(
       AdminUserResponseDto,
       { ...user, role, allowedClientIds },
@@ -200,10 +274,20 @@ export class AdminAuthService {
     );
   }
 
-  private async callBastion<T>(method: 'POST', url: string, body: object): Promise<T> {
+  private async callBastion<T>(
+    method: 'POST' | 'PATCH',
+    url: string,
+    body: object,
+    bearerToken?: string,
+  ): Promise<T> {
     try {
       const response = await firstValueFrom(
-        this.httpService.request<T>({ method, url, data: body }),
+        this.httpService.request<T>({
+          method,
+          url,
+          data: body,
+          ...(bearerToken && { headers: { Authorization: `Bearer ${bearerToken}` } }),
+        }),
       );
       return response.data;
     } catch (error: any) {

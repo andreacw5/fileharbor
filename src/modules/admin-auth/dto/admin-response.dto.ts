@@ -5,7 +5,8 @@ export class AdminUserResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() bastionUserId: string;
   @ApiProperty() @Expose() email: string;
-  @ApiPropertyOptional() @Expose() name?: string;
+  @ApiPropertyOptional() @Expose() username?: string;
+  @ApiPropertyOptional() @Expose() image?: string;
   @ApiProperty() @Expose() role: string;
   @ApiProperty() @Expose() active: boolean;
   @ApiProperty({ description: 'If true, has access to all clients' }) @Expose() allClientsAccess: boolean;

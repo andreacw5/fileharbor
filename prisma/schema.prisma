@@ -230,7 +230,8 @@ model AdminUser {
   id               String    @id @default(uuid())
   bastionUserId    String    @unique // ID from Bastion's authentication system
   email            String    @unique
-  name             String?
+  username         String?
+  image            String?
   active           Boolean   @default(true)
   allClientsAccess Boolean   @default(false) // if true, can access all clients
   lastLoginAt      DateTime?

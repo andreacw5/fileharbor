@@ -13,7 +13,7 @@ export class CreateAdminUserDto {
   @ApiPropertyOptional({ example: 'John Doe' })
   @IsOptional()
   @IsString()
-  name?: string;
+  username?: string;
 
   @ApiPropertyOptional({ description: 'If true, grants access to all clients', default: false })
   @IsOptional()

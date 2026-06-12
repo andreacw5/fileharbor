@@ -12,3 +12,9 @@ export class AdminLoginDto {
   password: string;
 }
 
+export class AdminExchangeDto {
+  @ApiProperty({ description: 'One-time OAuth code issued by Bastion after social login' })
+  @IsString()
+  code: string;
+}
+

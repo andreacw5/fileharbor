@@ -21,8 +21,15 @@ import {
 import { AdminAuthService } from './admin-auth.service';
 import { AdminJwtGuard, AdminJwtPayload } from './guards/admin-jwt.guard';
 import { AdminUser } from './decorators/admin-user.decorator';
-import { AdminLoginDto } from './dto/admin-login.dto';
-import { AdminUpdateProfileDto } from './dto/admin-update-profile.dto';
+import { AdminLoginDto, AdminExchangeDto } from './dto/admin-login.dto';
+import {
+  AdminUpdateProfileDto,
+  UpdateEmailDto,
+  ConfirmTokenDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto/admin-update-profile.dto';
 import {
   AdminLoginResponseDto,
   AdminRefreshResponseDto,
@@ -62,6 +69,20 @@ export class AdminAuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<Omit<AdminLoginResponseDto, 'refreshToken'>> {
     const result = await this.adminAuthService.login(dto.email, dto.password);
+    this.setRefreshCookie(res, result.refreshToken);
+    const { refreshToken: _rt, ...body } = result;
+    return body;
+  }
+
+  @Post('exchange')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exchange Bastion OAuth code for session (social login landing)' })
+  @ApiResponse({ status: 200, type: AdminLoginResponseDto, description: 'Sets httpOnly refresh token cookie' })
+  async exchange(
+    @Body() dto: AdminExchangeDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Omit<AdminLoginResponseDto, 'refreshToken'>> {
+    const result = await this.adminAuthService.exchange(dto.code);
     this.setRefreshCookie(res, result.refreshToken);
     const { refreshToken: _rt, ...body } = result;
     return body;
@@ -118,6 +139,78 @@ export class AdminAuthController {
     @AdminUser() adminUser: AdminJwtPayload,
     @Body() dto: AdminUpdateProfileDto,
   ): Promise<AdminUserResponseDto> {
-    return this.adminAuthService.updateProfile(adminUser, dto);
+    return this.adminAuthService.updateProfile(adminUser, { username: dto.username, image: dto.image });
+  }
+
+  // ─── Identity (Bastion proxied) ───────────────────────────────────────────
+
+  @Patch('me/email')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request email change — sends verification to new address via Bastion' })
+  @ApiResponse({ status: 200, description: 'Verification emails sent' })
+  async requestEmailChange(
+    @AdminUser() _adminUser: AdminJwtPayload,
+    @Req() req: Request,
+    @Body() dto: UpdateEmailDto,
+  ): Promise<{ message: string }> {
+    const accessToken = req.headers['authorization']!.substring(7);
+    await this.adminAuthService.requestEmailChange(accessToken, dto.email);
+    return { message: `Verification email sent to ${dto.email}` };
+  }
+
+  @Post('me/confirm-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm email change via token from email link' })
+  @ApiResponse({ status: 200, description: 'Email updated — user must log in again' })
+  async confirmEmailChange(@Body() dto: ConfirmTokenDto): Promise<{ message: string }> {
+    await this.adminAuthService.confirmEmailChange(dto.token);
+    return { message: 'Email updated. Please log in again.' };
+  }
+
+  @Post('me/revoke-email-change')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel pending email change via revoke token from email link' })
+  @ApiResponse({ status: 200, description: 'Email change cancelled' })
+  async revokeEmailChange(@Body() dto: ConfirmTokenDto): Promise<{ message: string }> {
+    await this.adminAuthService.revokeEmailChange(dto.token);
+    return { message: 'Email change cancelled.' };
+  }
+
+  @Patch('me/password')
+  @UseGuards(AdminJwtGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password — proxied to Bastion, revokes all sessions' })
+  @ApiResponse({ status: 200, description: 'Password updated — user must log in again' })
+  @ApiResponse({ status: 401, description: 'Current password incorrect' })
+  async changePassword(
+    @AdminUser() _adminUser: AdminJwtPayload,
+    @Req() req: Request,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    const accessToken = req.headers['authorization']!.substring(7);
+    await this.adminAuthService.changePassword(accessToken, dto.currentPassword, dto.newPassword);
+    return { message: 'Password updated. Please log in again.' };
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request password reset — sends link to email via Bastion' })
+  @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string }> {
+    await this.adminAuthService.forgotPassword(dto.email);
+    return { message: 'If an account exists for that email, a reset link has been sent.' };
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password via token from email link' })
+  @ApiResponse({ status: 200, description: 'Password reset — user must log in again' })
+  @ApiResponse({ status: 400, description: 'Token invalid or expired' })
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ message: string }> {
+    await this.adminAuthService.resetPassword(dto.token, dto.newPassword);
+    return { message: 'Password reset successfully. Please log in.' };
   }
 }

@@ -94,7 +94,27 @@ export class AdminJwtGuard implements CanActivate {
       allowedClientIds: adminUser.clientAccess.map((a) => a.clientId),
     } satisfies AdminJwtPayload;
 
+    // 5.6: fire-and-forget UserCache upsert — keeps Bastion profile data fresh
+    this.upsertUserCache(bastionPayload).catch(() => undefined);
+
     return true;
+  }
+
+  private async upsertUserCache(payload: BastionJwtPayload): Promise<void> {
+    await this.prisma.userCache.upsert({
+      where: { id: payload.sub },
+      create: {
+        id: payload.sub,
+        username: payload.username ?? null,
+        email: payload.email,
+        image: payload.image ?? null,
+      },
+      update: {
+        username: payload.username ?? null,
+        email: payload.email,
+        image: payload.image ?? null,
+      },
+    });
   }
 
   private async verifyToken(token: string): Promise<BastionJwtPayload> {
