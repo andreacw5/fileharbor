@@ -210,7 +210,7 @@ export class UserService {
 
     if (filters.isBookmarked === true) {
       where.adminBookmarks = {
-        some: { adminUserId: admin.sub },
+        some: { adminUserId: admin.adminUserId },
       };
     }
 
@@ -239,7 +239,7 @@ export class UserService {
       } else {
         const bookmarks = await this.prisma.adminUserBookmark.findMany({
           where: {
-            adminUserId: admin.sub,
+            adminUserId: admin.adminUserId,
             userId: { in: users.map((u) => u.id) },
           },
           select: { userId: true },
@@ -289,7 +289,7 @@ export class UserService {
     const bookmark = await this.prisma.adminUserBookmark.findUnique({
       where: {
         adminUserId_userId: {
-          adminUserId: admin.sub,
+          adminUserId: admin.adminUserId,
           userId: user.id,
         },
       },

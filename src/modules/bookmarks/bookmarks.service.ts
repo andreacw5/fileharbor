@@ -34,6 +34,7 @@ export class BookmarksService {
     const now = new Date();
 
     const where: any = {
+      adminUserId: adminUser.adminUserId,
       image: buildClientWhere(adminUser, params.clientId),
     };
 
@@ -93,18 +94,18 @@ export class BookmarksService {
     await prisma.adminImageBookmark.upsert({
       where: {
         adminUserId_imageId: {
-          adminUserId: adminUser.sub,
+          adminUserId: adminUser.adminUserId,
           imageId,
         },
       },
       create: {
-        adminUserId: adminUser.sub,
+        adminUserId: adminUser.adminUserId,
         imageId,
       },
       update: {},
     });
 
-    return this.getBookmarkByAdminAndImage(adminUser.sub, imageId);
+    return this.getBookmarkByAdminAndImage(adminUser.adminUserId, imageId);
   }
 
   async bookmarkUser(adminUser: AdminJwtPayload, userId: string) {
@@ -124,18 +125,18 @@ export class BookmarksService {
     await prisma.adminUserBookmark.upsert({
       where: {
         adminUserId_userId: {
-          adminUserId: adminUser.sub,
+          adminUserId: adminUser.adminUserId,
           userId,
         },
       },
       create: {
-        adminUserId: adminUser.sub,
+        adminUserId: adminUser.adminUserId,
         userId,
       },
       update: {},
     });
 
-    return this.getBookmarkByAdminAndUser(adminUser.sub, userId);
+    return this.getBookmarkByAdminAndUser(adminUser.adminUserId, userId);
   }
 
   async removeBookmark(adminUser: AdminJwtPayload, imageId: string): Promise<{ removed: number }> {
@@ -154,7 +155,7 @@ export class BookmarksService {
 
     const result = await prisma.adminImageBookmark.deleteMany({
       where: {
-        adminUserId: adminUser.sub,
+        adminUserId: adminUser.adminUserId,
         imageId,
       },
     });
@@ -178,7 +179,7 @@ export class BookmarksService {
 
     const result = await prisma.adminUserBookmark.deleteMany({
       where: {
-        adminUserId: adminUser.sub,
+        adminUserId: adminUser.adminUserId,
         userId,
       },
     });

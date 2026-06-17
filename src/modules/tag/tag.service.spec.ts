@@ -14,6 +14,8 @@ describe('TagService', () => {
 
   const adminUser: AdminJwtPayload = {
     sub: 'admin-1',
+    tenantId: 'tenant-1',
+    tenantSlug: 'fileharbor',
     email: 'admin@example.com',
     role: 'SUPER_ADMIN',
     appSlug: 'fileharbor',

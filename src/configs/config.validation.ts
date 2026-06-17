@@ -36,5 +36,6 @@ export const configValidationSchema = Joi.object({
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),
   BASTION_APP_SLUG: Joi.string().default('fileharbor'),
+  BASTION_TENANT_SLUG: Joi.string().allow('').default(''),
   FRONTEND_URL: Joi.string().uri().default('http://localhost:3000'),
 });

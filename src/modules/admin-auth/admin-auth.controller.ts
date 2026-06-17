@@ -4,6 +4,7 @@ import {
   Get,
   Patch,
   Body,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -58,6 +59,16 @@ export class AdminAuthController {
     res.clearCookie(REFRESH_COOKIE, { httpOnly: true, sameSite: 'strict', path: '/' });
   }
 
+  // ─── Tenant info (public) ─────────────────────────────────────────────────
+
+  @Get('tenant/:slug')
+  @ApiOperation({ summary: 'Get tenant display info by slug — used to populate login page UI' })
+  @ApiResponse({ status: 200, description: '{ id, slug, name, active, createdAt }' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  getTenantInfo(@Param('slug') slug: string) {
+    return this.adminAuthService.getTenantInfo(slug);
+  }
+
   // ─── Auth ──────────────────────────────────────────────────────────────────
 
   @Post('login')
@@ -68,7 +79,7 @@ export class AdminAuthController {
     @Body() dto: AdminLoginDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Omit<AdminLoginResponseDto, 'refreshToken'>> {
-    const result = await this.adminAuthService.login(dto.email, dto.password);
+    const result = await this.adminAuthService.login(dto.email, dto.password, dto.tenantSlug);
     this.setRefreshCookie(res, result.refreshToken);
     const { refreshToken: _rt, ...body } = result;
     return body;
@@ -216,7 +227,7 @@ export class AdminAuthController {
   @ApiOperation({ summary: 'Request password reset — sends link to email via Bastion' })
   @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
   async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string }> {
-    await this.adminAuthService.forgotPassword(dto.email);
+    await this.adminAuthService.forgotPassword(dto.email, dto.tenantSlug);
     return { message: 'If an account exists for that email, a reset link has been sent.' };
   }
 

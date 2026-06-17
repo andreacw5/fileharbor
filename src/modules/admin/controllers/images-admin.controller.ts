@@ -158,7 +158,7 @@ export class ImagesAdminController {
       where,
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
-      adminUser.sub,
+      adminUser.adminUserId,
     );
   }
 
@@ -169,7 +169,7 @@ export class ImagesAdminController {
     @Param('id') id: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminImageResponseDto> {
-    const image = await this.imageService.findAdminImageById(id, adminUser.sub);
+    const image = await this.imageService.findAdminImageById(id, adminUser.adminUserId);
     if (!image) throw new BadRequestException('Image not found');
     assertClientAccess(adminUser, image.clientId);
 

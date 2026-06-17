@@ -46,11 +46,12 @@ export class AdminAuthService {
     return this.buildLoginResponse(tokens, '[Admin] OAuth exchange');
   }
 
-  async login(email: string, password: string): Promise<AdminLoginResponseDto> {
+  async login(email: string, password: string, tenantSlug?: string): Promise<AdminLoginResponseDto> {
     const bastionUrl = this.config.get<string>('bastionUrl');
     const appSlug = this.config.get<string>('bastionAppSlug');
+    const resolvedTenantSlug = tenantSlug || this.config.get<string>('bastionTenantSlug');
     const tokens = await this.callBastion<BastionTokenResponse>(
-      'POST', `${bastionUrl}/auth/login`, { email, password, appSlug },
+      'POST', `${bastionUrl}/auth/login`, { email, password, appSlug, ...(resolvedTenantSlug && { tenantSlug: resolvedTenantSlug }) },
     );
     return this.buildLoginResponse(tokens, '[Admin] Login');
   }
@@ -161,14 +162,16 @@ export class AdminAuthService {
     );
   }
 
-  async forgotPassword(email: string): Promise<void> {
+  async forgotPassword(email: string, tenantSlug?: string): Promise<void> {
     const bastionUrl = this.config.get<string>('bastionUrl');
     const frontendUrl = this.config.get<string>('frontendUrl');
     const appSlug = this.config.get<string>('bastionAppSlug');
+    const resolvedTenantSlug = tenantSlug || this.config.get<string>('bastionTenantSlug');
     await this.callBastion('POST', `${bastionUrl}/auth/forgot-password`, {
       email,
       appSlug,
       resetUrl: `${frontendUrl}/admin/reset-password`,
+      ...(resolvedTenantSlug && { tenantSlug: resolvedTenantSlug }),
     });
   }
 
@@ -280,6 +283,23 @@ export class AdminAuthService {
       { ...user, role, allowedClientIds },
       { excludeExtraneousValues: true },
     );
+  }
+
+  async getTenantInfo(slug: string): Promise<{ id: string; slug: string; name: string; active: boolean; createdAt: string }> {
+    const bastionUrl = this.config.get<string>('bastionUrl');
+    return this.getFromBastion(`${bastionUrl}/tenants/slug/${encodeURIComponent(slug)}`);
+  }
+
+  private async getFromBastion<T>(url: string): Promise<T> {
+    try {
+      const response = await firstValueFrom(this.httpService.get<T>(url));
+      return response.data;
+    } catch (error: any) {
+      const status = error.response?.status;
+      if (status === 404) throw new NotFoundException('Tenant not found');
+      this.logger.error(`Bastion GET failed: ${url} → ${status ?? 'network error'}`);
+      throw new ServiceUnavailableException('Authentication service unavailable');
+    }
   }
 
   private async callBastion<T>(

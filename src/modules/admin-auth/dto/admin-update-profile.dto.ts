@@ -43,6 +43,11 @@ export class ForgotPasswordDto {
   @ApiProperty()
   @IsEmail()
   email: string;
+
+  @ApiPropertyOptional({ example: 'dbd', description: 'Required when fileharbor app is registered in multiple tenants' })
+  @IsOptional()
+  @IsString()
+  tenantSlug?: string;
 }
 
 export class ResetPasswordDto {

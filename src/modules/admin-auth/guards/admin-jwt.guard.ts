@@ -13,6 +13,8 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 
 export interface BastionJwtPayload {
   sub: string;
+  tenantId: string;
+  tenantSlug: string;
   email: string;
   username?: string;
   image?: string;
@@ -27,6 +29,8 @@ export interface BastionJwtPayload {
 export interface AdminJwtPayload {
   // From Bastion JWT
   sub: string;
+  tenantId: string;
+  tenantSlug: string;
   email: string;
   username?: string;
   image?: string;
@@ -83,6 +87,8 @@ export class AdminJwtGuard implements CanActivate {
 
     (request as any).adminUser = {
       sub: bastionPayload.sub,
+      tenantId: bastionPayload.tenantId,
+      tenantSlug: bastionPayload.tenantSlug,
       email: bastionPayload.email,
       username: bastionPayload.username,
       image: bastionPayload.image,

@@ -44,5 +44,6 @@ export default () => ({
   // Bastion IdP
   bastionUrl: process.env.BASTION_URL || 'http://localhost:3001',
   bastionAppSlug: process.env.BASTION_APP_SLUG || 'fileharbor',
+  bastionTenantSlug: process.env.BASTION_TENANT_SLUG || '',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
 });
