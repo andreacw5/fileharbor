@@ -94,9 +94,6 @@ Auth flow: `POST /admin/auth/login` → `POST /admin/auth/refresh` → `POST /ad
 
 Required env vars:
 ```
-ADMIN_DEFAULT_EMAIL=
-ADMIN_DEFAULT_PASSWORD=
-ADMIN_DEFAULT_NAME=           # optional, defaults to "Super Admin"
 JWT_ADMIN_SECRET=
 JWT_ADMIN_EXPIRES_IN=         # e.g. 15m
 JWT_ADMIN_REFRESH_SECRET=

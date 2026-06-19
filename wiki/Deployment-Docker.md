@@ -68,9 +68,6 @@ services:
 
       # Admin
       ADMIN_SECRET: change-me-in-production
-      ADMIN_DEFAULT_EMAIL: admin@your-domain.com
-      ADMIN_DEFAULT_PASSWORD: change-me-in-production
-      ADMIN_DEFAULT_NAME: Super Admin
 
       # Admin JWT
       JWT_ADMIN_SECRET: change-me-in-production

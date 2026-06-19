@@ -8,12 +8,7 @@ It is **completely separate** from the client API Key system.
 
 ## Setup
 
-The first `SUPER_ADMIN` account is auto-seeded on startup if no admin users exist:
-
 ```env
-ADMIN_DEFAULT_EMAIL=admin@example.com
-ADMIN_DEFAULT_PASSWORD=supersecretpassword
-ADMIN_DEFAULT_NAME=Super Admin   # optional
 JWT_ADMIN_SECRET=your-secret-key
 JWT_ADMIN_EXPIRES_IN=8h
 JWT_ADMIN_REFRESH_SECRET=your-refresh-secret

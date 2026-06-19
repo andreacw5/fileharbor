@@ -46,3 +46,4 @@ storage/*
 !/storage/defaults.fileharbor/**
 
 /generated/prisma
+graphify-out/

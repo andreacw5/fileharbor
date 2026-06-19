@@ -69,9 +69,6 @@ All configuration is done through environment variables. FileHarbor validates th
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ADMIN_SECRET` | — | **Required.** Internal admin secret |
-| `ADMIN_DEFAULT_EMAIL` | — | Email for the auto-seeded first admin user |
-| `ADMIN_DEFAULT_PASSWORD` | — | Password for the auto-seeded first admin user |
-| `ADMIN_DEFAULT_NAME` | `Super Admin` | Display name for the first admin |
 | `JWT_ADMIN_SECRET` | `change-me-in-production` | Secret for admin access tokens |
 | `JWT_ADMIN_EXPIRES_IN` | `8h` | Admin access token lifetime |
 | `JWT_ADMIN_REFRESH_SECRET` | — | Secret for admin refresh tokens |
@@ -109,9 +106,6 @@ THROTTLE_LIMIT=100
 
 # Admin
 ADMIN_SECRET=a-strong-random-secret
-ADMIN_DEFAULT_EMAIL=admin@your-domain.com
-ADMIN_DEFAULT_PASSWORD=a-strong-password
-ADMIN_DEFAULT_NAME=Super Admin
 
 # Admin JWT
 JWT_ADMIN_SECRET=another-strong-secret
