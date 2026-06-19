@@ -59,11 +59,12 @@ export class AdminAuthService {
   async refresh(refreshToken: string): Promise<AdminRefreshResponseDto> {
     const bastionUrl = this.config.get<string>('bastionUrl');
     const appSlug = this.config.get<string>('bastionAppSlug');
+    const tenantSlug = this.config.get<string>('bastionTenantSlug');
 
     const tokens = await this.callBastion<BastionTokenResponse>(
       'POST',
       `${bastionUrl}/auth/refresh`,
-      { refreshToken, appSlug },
+      { refreshToken, appSlug, ...(tenantSlug && { tenantSlug }) },
     );
 
     const decoded = this.jwtService.decode<BastionJwtPayload>(tokens.accessToken);
@@ -123,16 +124,17 @@ export class AdminAuthService {
     await this.callBastion('PATCH', `${bastionUrl}/auth/me`, data, accessToken);
   }
 
-  async requestEmailChange(accessToken: string, email: string): Promise<void> {
+  async requestEmailChange(accessToken: string, email: string, tenantSlug?: string): Promise<void> {
     const bastionUrl = this.config.get<string>('bastionUrl');
     const frontendUrl = this.config.get<string>('frontendUrl');
+    const tenantPrefix = tenantSlug ? `/${encodeURIComponent(tenantSlug)}` : '';
     await this.callBastion(
       'PATCH',
       `${bastionUrl}/auth/me/email`,
       {
         email,
-        confirmUrl: `${frontendUrl}/admin/confirm-email`,
-        revokeUrl: `${frontendUrl}/admin/revoke-email-change`,
+        confirmUrl: `${frontendUrl}${tenantPrefix}/admin/confirm-email`,
+        revokeUrl: `${frontendUrl}${tenantPrefix}/admin/revoke-email-change`,
       },
       accessToken,
     );
@@ -297,7 +299,7 @@ export class AdminAuthService {
     } catch (error: any) {
       const status = error.response?.status;
       if (status === 404) throw new NotFoundException('Tenant not found');
-      this.logger.error(`Bastion GET failed: ${url} → ${status ?? 'network error'}`);
+      this.logger.error(`Bastion GET failed: ${url} → ${status ?? 'network error'} — ${JSON.stringify(error.response?.data ?? {})}`);
       throw new ServiceUnavailableException('Authentication service unavailable');
     }
   }
@@ -323,7 +325,7 @@ export class AdminAuthService {
       if (status === 401 || status === 403) {
         throw new UnauthorizedException(error.response?.data?.message ?? 'Invalid credentials');
       }
-      this.logger.error(`Bastion call failed: ${method} ${url} → ${status ?? 'network error'}`);
+      this.logger.error(`Bastion call failed: ${method} ${url} → ${status ?? 'network error'} — ${JSON.stringify(error.response?.data ?? {})}`);
       throw new ServiceUnavailableException('Authentication service unavailable');
     }
   }

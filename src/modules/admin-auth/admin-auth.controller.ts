@@ -178,12 +178,12 @@ export class AdminAuthController {
   @ApiOperation({ summary: 'Request email change — sends verification to new address via Bastion' })
   @ApiResponse({ status: 200, description: 'Verification emails sent' })
   async requestEmailChange(
-    @AdminUser() _adminUser: AdminJwtPayload,
+    @AdminUser() adminUser: AdminJwtPayload,
     @Req() req: Request,
     @Body() dto: UpdateEmailDto,
   ): Promise<{ message: string }> {
     const accessToken = req.headers['authorization']!.substring(7);
-    await this.adminAuthService.requestEmailChange(accessToken, dto.email);
+    await this.adminAuthService.requestEmailChange(accessToken, dto.email, adminUser.tenantSlug);
     return { message: `Verification email sent to ${dto.email}` };
   }
 
