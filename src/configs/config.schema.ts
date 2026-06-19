@@ -41,8 +41,9 @@ export default () => ({
   // Admin
   adminSecret: process.env.ADMIN_SECRET,
 
-  // Admin JWT
-  jwtAdminSecret: process.env.JWT_ADMIN_SECRET || 'change-me-in-production',
-  jwtAdminExpiresIn: process.env.JWT_ADMIN_EXPIRES_IN || '15m',
-  jwtAdminRefreshExpiresInDays: parseInt(process.env.JWT_ADMIN_REFRESH_EXPIRES_IN_DAYS, 10) || 7,
+  // Bastion IdP
+  bastionUrl: process.env.BASTION_URL || 'http://localhost:3001',
+  bastionAppSlug: process.env.BASTION_APP_SLUG || 'fileharbor',
+  bastionTenantSlug: process.env.BASTION_TENANT_SLUG || '',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
 });

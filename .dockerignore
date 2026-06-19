@@ -37,3 +37,9 @@ scripts
 # Misc
 *.zip
 *.tar
+
+graphify-out
+CLAUDE.md
+CHANGELOG.md
+app_logo.png
+AGENTS.md

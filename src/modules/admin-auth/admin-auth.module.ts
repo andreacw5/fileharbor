@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
@@ -11,10 +12,10 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
     PrismaModule,
     ConfigModule,
     JwtModule.register({}),
+    HttpModule,
   ],
   controllers: [AdminAuthController],
   providers: [AdminAuthService, AdminJwtGuard],
   exports: [AdminAuthService, AdminJwtGuard, JwtModule],
 })
 export class AdminAuthModule {}
-

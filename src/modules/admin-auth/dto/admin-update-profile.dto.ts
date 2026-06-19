@@ -1,39 +1,63 @@
-import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
-import {
-  IsString,
-  IsEmail,
-  IsOptional,
-  MinLength,
-  MaxLength,
-} from 'class-validator';
-import { Match } from '../decorators/match.decorator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, IsUrl, IsEmail, MaxLength, MinLength } from 'class-validator';
 
 export class AdminUpdateProfileDto {
-  @ApiPropertyOptional({ description: 'Display name' })
+  @ApiPropertyOptional({ description: 'Per-app display name (overrides Bastion username when set)' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  name?: string;
+  username?: string;
 
-  @ApiPropertyOptional({ description: 'Email address' })
+  @ApiPropertyOptional({ description: 'Per-app avatar URL (overrides Bastion image when set)' })
   @IsOptional()
-  @IsEmail()
-  email?: string;
+  @IsUrl({ require_tld: false })
+  image?: string;
 }
 
-export class AdminChangePasswordDto {
-  @ApiProperty({ description: 'Current password' })
-  @IsString()
-  currentPassword: string;
+export class UpdateEmailDto {
+  @ApiProperty({ description: 'New email address — triggers verification flow on Bastion' })
+  @IsEmail()
+  email: string;
+}
 
-  @ApiProperty({ description: 'New password (min 8 chars)' })
+export class ConfirmTokenDto {
+  @ApiProperty({ description: 'One-time token from the email link' })
+  @IsString()
+  token: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty()
   @IsString()
   @MinLength(8)
-  newPassword: string;
+  currentPassword: string;
 
-  @ApiProperty({ description: 'Confirm new password' })
+  @ApiProperty()
   @IsString()
-  @Match('newPassword', { message: 'confirmPassword must match newPassword' })
-  confirmPassword: string;
+  @MinLength(8)
+  @MaxLength(128)
+  newPassword: string;
 }
 
+export class ForgotPasswordDto {
+  @ApiProperty()
+  @IsEmail()
+  email: string;
+
+  @ApiPropertyOptional({ example: 'dbd', description: 'Required when fileharbor app is registered in multiple tenants' })
+  @IsOptional()
+  @IsString()
+  tenantSlug?: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ description: 'One-time token from the password reset email link' })
+  @IsString()
+  token: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  newPassword: string;
+}
