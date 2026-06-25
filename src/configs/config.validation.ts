@@ -30,6 +30,10 @@ export const configValidationSchema = Joi.object({
   // Logging
   LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'debug', 'verbose').default('info'),
 
+  // Video Processing
+  MAX_VIDEO_SIZE: Joi.number().positive().default(524288000),
+  VIDEO_THUMBNAIL_QUALITY: Joi.number().min(1).max(100).default(80),
+
   // Admin
   ADMIN_SECRET: Joi.string().required(),
 

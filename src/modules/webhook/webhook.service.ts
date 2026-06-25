@@ -22,6 +22,8 @@ export enum WebhookEvent {
   ALBUM_DELETED = 'album.deleted',
   IMAGE_ADDED_TO_ALBUM = 'album.image_added',
   IMAGE_REMOVED_FROM_ALBUM = 'album.image_removed',
+  VIDEO_UPLOADED = 'video.uploaded',
+  VIDEO_DELETED = 'video.deleted',
 }
 
 @Injectable()
@@ -210,6 +212,16 @@ export class WebhookService {
         description: 'An image has been removed from an album.',
         color: 0xe74c3c,
       },
+      [WebhookEvent.VIDEO_UPLOADED]: {
+        title: 'New Video Uploaded!',
+        description: 'A new video has been successfully uploaded.',
+        color: 0xFFAD58,
+      },
+      [WebhookEvent.VIDEO_DELETED]: {
+        title: 'Video Deleted',
+        description: 'A video has been deleted.',
+        color: 0xe74c3c,
+      },
     };
 
     return configs[event];
@@ -262,6 +274,21 @@ export class WebhookService {
       case WebhookEvent.AVATAR_DELETED:
       case WebhookEvent.ALBUM_DELETED:
       case WebhookEvent.IMAGE_REMOVED_FROM_ALBUM:
+        fields.push(
+          { name: 'ID', value: data.id || 'N/A' },
+          { name: 'Timestamp', value: new Date(data.timestamp || Date.now()).toLocaleString('en-US') }
+        );
+        break;
+
+      case WebhookEvent.VIDEO_UPLOADED:
+        fields.push(
+          { name: 'ID', value: data.videoId || 'N/A' },
+          { name: 'Size', value: formatFileSize(data.size), inline: true },
+          { name: 'User', value: data.userId || 'System', inline: true }
+        );
+        break;
+
+      case WebhookEvent.VIDEO_DELETED:
         fields.push(
           { name: 'ID', value: data.id || 'N/A' },
           { name: 'Timestamp', value: new Date(data.timestamp || Date.now()).toLocaleString('en-US') }

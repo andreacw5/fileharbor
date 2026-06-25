@@ -37,6 +37,7 @@ model Client {
   avatars Avatar[]
   albums  Album[]
   tags    Tag[]
+  videos  Video[]
 
   @@map("clients")
 }
@@ -58,6 +59,7 @@ model User {
   // Relations
   client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   images         Image[]
+  videos         Video[]
   avatars        Avatar[]
   albums         Album[]
   adminBookmarks AdminUserBookmark[]
@@ -116,6 +118,7 @@ model Tag {
 
   client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   imageTags ImageTag[]
+  videoTags VideoTag[]
 
   @@unique([clientId, name])
   @@index([clientId])
@@ -135,6 +138,67 @@ model ImageTag {
   @@id([imageId, tagId])
   @@index([tagId])
   @@map("image_tags")
+}
+
+// Video entity
+model Video {
+  id           String   @id @default(uuid())
+  clientId     String
+  userId       String
+  originalName String
+  storagePath  String
+  mimeType     String
+  size         Int
+  duration     Float?
+  width        Int?
+  height       Int?
+  isPrivate    Boolean  @default(false)
+  views        Int      @default(0)
+  downloads    Int      @default(0)
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoTags      VideoTag[]
+  adminBookmarks AdminVideoBookmark[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([clientId, userId])
+  @@index([isPrivate])
+  @@map("videos")
+}
+
+// Many-to-many relationship between Video and Tag
+model VideoTag {
+  videoId   String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, tagId])
+  @@index([tagId])
+  @@map("video_tags")
+}
+
+// Admin personal bookmark for a video
+model AdminVideoBookmark {
+  id          String   @id @default(uuid())
+  adminUserId String
+  videoId     String
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  video     Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, videoId])
+  @@index([adminUserId])
+  @@index([videoId])
+  @@map("admin_video_bookmarks")
 }
 
 // Avatar entity - one active per user per client
@@ -238,9 +302,10 @@ model AdminUser {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  clientAccess  AdminClientAccess[]
-  bookmarks     AdminImageBookmark[]
-  userBookmarks AdminUserBookmark[]
+  clientAccess   AdminClientAccess[]
+  bookmarks      AdminImageBookmark[]
+  userBookmarks  AdminUserBookmark[]
+  videoBookmarks AdminVideoBookmark[]
 
   @@index([email])
   @@map("admin_users")
