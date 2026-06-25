@@ -49,11 +49,14 @@ export class AlbumResponseDto {
   })
   createdAt: Date;
 
-  @ApiPropertyOptional({
-    description: 'Number of images in the album',
-    example: 24,
-  })
+  @ApiPropertyOptional({ description: 'Total items (images + videos) in the album', example: 24 })
+  itemCount?: number;
+
+  @ApiPropertyOptional({ description: 'Number of images in the album', example: 20 })
   imageCount?: number;
+
+  @ApiPropertyOptional({ description: 'Number of videos in the album', example: 4 })
+  videoCount?: number;
 
   @ApiPropertyOptional({
     description: 'Cover image URL (first image in the album)',

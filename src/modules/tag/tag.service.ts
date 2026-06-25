@@ -32,11 +32,7 @@ export class TagService {
 
     const limit = Math.min(filters.limit || 200, 500);
 
-    const where: Record<string, any> = {
-      imageTags: {
-        some: {},
-      },
-    };
+    const where: Record<string, any> = {};
 
     if (filters.clientId) {
       assertClientAccess(admin, filters.clientId);

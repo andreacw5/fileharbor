@@ -10,6 +10,7 @@ import { ImageModule } from "@/modules/image/image.module";
 import { AvatarModule } from "@/modules/avatar/avatar.module";
 import { AlbumModule } from "@/modules/album/album.module";
 import { AdminModule } from "@/modules/admin/admin.module";
+import { VideoModule } from "@/modules/video/video.module";
 import { StatisticsModule } from "@/modules/statistics/statistics.module";
 import { UserModule } from "@/modules/user/user.module";
 import { TagModule } from "@/modules/tag/tag.module";
@@ -58,6 +59,9 @@ import { RouteHelperModule } from '@/utils/route.utils';
         AlbumModule,
         UserModule,
         RouteHelperModule,
+
+        // Video module
+        VideoModule,
 
         // Admin module
         AdminModule,

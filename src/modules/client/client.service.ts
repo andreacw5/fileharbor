@@ -168,7 +168,7 @@ export class ClientService {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { images: true, avatars: true, albums: true, users: true } },
+        _count: { select: { images: true, avatars: true, albums: true, videos: true, users: true } },
       },
     });
 
@@ -185,6 +185,7 @@ export class ClientService {
       totalImages: c._count.images,
       totalAvatars: c._count.avatars,
       totalAlbums: c._count.albums,
+      totalVideos: c._count.videos,
       totalUsers: c._count.users,
       totalStorage: storageMap.get(c.id) || 0,
     }));
@@ -197,7 +198,7 @@ export class ClientService {
   async getClientWithStats(clientId: string) {
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      include: { _count: { select: { images: true, avatars: true, albums: true, users: true } } },
+      include: { _count: { select: { images: true, avatars: true, albums: true, videos: true, users: true } } },
     });
 
     if (!client) return null;
@@ -212,6 +213,7 @@ export class ClientService {
       totalImages: client._count.images,
       totalAvatars: client._count.avatars,
       totalAlbums: client._count.albums,
+      totalVideos: client._count.videos,
       totalUsers: client._count.users,
       totalStorage: storageAgg._sum.size || 0,
     };
@@ -224,7 +226,7 @@ export class ClientService {
     const updated = await this.prisma.client.update({
       where: { id: clientId },
       data,
-      include: { _count: { select: { images: true, avatars: true, albums: true } } },
+      include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
     });
 
     const storageAgg = await this.prisma.image.aggregate({
@@ -237,6 +239,7 @@ export class ClientService {
       totalImages: updated._count.images,
       totalAvatars: updated._count.avatars,
       totalAlbums: updated._count.albums,
+      totalVideos: updated._count.videos,
       totalStorage: storageAgg._sum.size || 0,
     };
   }

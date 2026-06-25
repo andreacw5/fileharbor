@@ -37,6 +37,7 @@ model Client {
   avatars Avatar[]
   albums  Album[]
   tags    Tag[]
+  videos  Video[]
 
   @@map("clients")
 }
@@ -58,6 +59,7 @@ model User {
   // Relations
   client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   images         Image[]
+  videos         Video[]
   avatars        Avatar[]
   albums         Album[]
   adminBookmarks AdminUserBookmark[]
@@ -93,7 +95,7 @@ model Image {
   // Relations
   client          Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  albumImages     AlbumImage[]
+  albumItems      AlbumItem[]
   imageTags       ImageTag[]
   shareLinks      ImageShareLink[]
   albumCoverImage Album[]              @relation("AlbumCoverImage")
@@ -116,6 +118,7 @@ model Tag {
 
   client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   imageTags ImageTag[]
+  videoTags VideoTag[]
 
   @@unique([clientId, name])
   @@index([clientId])
@@ -135,6 +138,68 @@ model ImageTag {
   @@id([imageId, tagId])
   @@index([tagId])
   @@map("image_tags")
+}
+
+// Video entity
+model Video {
+  id           String   @id @default(uuid())
+  clientId     String
+  userId       String
+  originalName String
+  storagePath  String
+  mimeType     String
+  size         Int
+  duration     Float?
+  width        Int?
+  height       Int?
+  isPrivate    Boolean  @default(false)
+  views        Int      @default(0)
+  downloads    Int      @default(0)
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoTags      VideoTag[]
+  adminBookmarks AdminVideoBookmark[]
+  albumItems     AlbumItem[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([clientId, userId])
+  @@index([isPrivate])
+  @@map("videos")
+}
+
+// Many-to-many relationship between Video and Tag
+model VideoTag {
+  videoId   String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, tagId])
+  @@index([tagId])
+  @@map("video_tags")
+}
+
+// Admin personal bookmark for a video
+model AdminVideoBookmark {
+  id          String   @id @default(uuid())
+  adminUserId String
+  videoId     String
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  video     Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, videoId])
+  @@index([adminUserId])
+  @@index([videoId])
+  @@map("admin_video_bookmarks")
 }
 
 // Avatar entity - one active per user per client
@@ -177,10 +242,10 @@ model Album {
   updatedAt       DateTime @updatedAt
 
   // Relations
-  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coverImage  Image?       @relation("AlbumCoverImage", fields: [coverImageId], references: [id], onDelete: SetNull)
-  albumImages AlbumImage[]
+  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coverImage  Image?      @relation("AlbumCoverImage", fields: [coverImageId], references: [id], onDelete: SetNull)
+  albumItems  AlbumItem[]
   albumTokens AlbumToken[]
 
   @@unique([clientId, externalAlbumId])
@@ -191,22 +256,30 @@ model Album {
   @@map("albums")
 }
 
-// Many-to-many relationship between Album and Image
-model AlbumImage {
-  id        String   @id @default(uuid())
-  albumId   String
-  imageId   String
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
+enum AlbumResourceType {
+  IMAGE
+  VIDEO
+}
 
-  // Relations
-  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
+// Many-to-many between Album and Image/Video (mixed)
+model AlbumItem {
+  id           String            @id @default(uuid())
+  albumId      String
+  imageId      String?
+  videoId      String?
+  resourceType AlbumResourceType
+  order        Int               @default(0)
+  addedAt      DateTime          @default(now())
+
+  album Album  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  image Image? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  video Video? @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([albumId, imageId])
-  @@index([albumId])
-  @@index([imageId])
-  @@map("album_images")
+  @@unique([albumId, videoId])
+  @@index([albumId, order])
+  @@index([albumId, resourceType])
+  @@map("album_items")
 }
 
 // Token for private album access
@@ -238,9 +311,10 @@ model AdminUser {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  clientAccess  AdminClientAccess[]
-  bookmarks     AdminImageBookmark[]
-  userBookmarks AdminUserBookmark[]
+  clientAccess   AdminClientAccess[]
+  bookmarks      AdminImageBookmark[]
+  userBookmarks  AdminUserBookmark[]
+  videoBookmarks AdminVideoBookmark[]
 
   @@index([email])
   @@map("admin_users")

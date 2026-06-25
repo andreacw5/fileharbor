@@ -105,7 +105,7 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Nuova immagine caricata!',
+              title: 'New Image Uploaded!',
               color: 0xFFAD58,
             }),
           ]),
@@ -183,20 +183,19 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Nuova immagine caricata!',
-              description: 'Una nuova immagine è stata correttamente caricata.',
+              title: 'New Image Uploaded!',
+              description: 'A new image has been successfully uploaded.',
               color: 0xFFAD58,
               fields: expect.arrayContaining([
-                { name: 'Identificativo', value: 'image-123' },
-                { name: 'Dimensioni', value: '2000.00 KB', inline: true },
-                { name: 'Utente', value: 'user-123', inline: true },
+                { name: 'ID', value: 'image-123' },
+                { name: 'Size', value: '1.95 MB', inline: true },
+                { name: 'User', value: 'user-123', inline: true },
               ]),
               thumbnail: {
                 url: `${mockBaseUrl}/images/image-123`,
               },
               footer: expect.objectContaining({
-                text: 'FileHarbor Monitoring Sender',
-                icon_url: `${mockBaseUrl}/images/image-123`,
+                text: 'FileHarbor Monitoring',
               }),
             }),
           ]),
@@ -224,11 +223,11 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Immagine eliminata',
-              description: "Un'immagine è stata eliminata.",
+              title: 'Image Deleted',
+              description: 'An image has been deleted.',
               color: 0xe74c3c,
               fields: expect.arrayContaining([
-                { name: 'Identificativo', value: 'image-123' },
+                { name: 'ID', value: 'image-123' },
                 { name: 'Timestamp', value: expect.any(String) },
               ]),
             }),
@@ -258,20 +257,19 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Nuovo avatar caricato!',
-              description: 'Un nuovo avatar è stato correttamente caricato.',
+              title: 'New Avatar Uploaded!',
+              description: 'A new avatar has been successfully uploaded.',
               color: 0xFFAD58,
               fields: expect.arrayContaining([
-                { name: 'Identificativo', value: 'avatar-123' },
-                { name: 'Dimensioni', value: '500.00 KB', inline: true },
-                { name: 'Utente', value: 'user-123', inline: true },
+                { name: 'ID', value: 'avatar-123' },
+                { name: 'Size', value: '500.00 KB', inline: true },
+                { name: 'User', value: 'user-123', inline: true },
               ]),
               thumbnail: {
                 url: `${mockBaseUrl}/avatars/user-123`,
               },
               footer: expect.objectContaining({
-                text: 'FileHarbor Monitoring Sender',
-                icon_url: `${mockBaseUrl}/avatars/user-123`,
+                text: 'FileHarbor Monitoring',
               }),
             }),
           ]),
@@ -299,8 +297,8 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Avatar eliminato',
-              description: 'Un avatar è stato eliminato.',
+              title: 'Avatar Deleted',
+              description: 'An avatar has been deleted.',
               color: 0xe74c3c,
             }),
           ]),
@@ -331,15 +329,15 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Nuovo album creato!',
-              description: 'Un nuovo album è stato creato.',
+              title: 'New Album Created!',
+              description: 'A new album has been created.',
               color: 0x2ecc71,
               fields: expect.arrayContaining([
-                { name: 'Identificativo', value: 'album-123' },
-                { name: 'Nome', value: 'Test Album' },
-                { name: 'Pubblico', value: 'Sì', inline: true },
-                { name: 'Utente', value: 'user-123', inline: true },
-                { name: 'Descrizione', value: 'Test Description' },
+                { name: 'ID', value: 'album-123' },
+                { name: 'Name', value: 'Test Album' },
+                { name: 'Public', value: 'Yes', inline: true },
+                { name: 'User', value: 'user-123', inline: true },
+                { name: 'Description', value: 'Test Description' },
               ]),
             }),
           ]),
@@ -360,9 +358,9 @@ describe('WebhookService', () => {
       const call = mockHttpService.post.mock.calls[0];
       const embedFields = call[1].embeds[0].fields;
 
-      expect(embedFields).toContainEqual({ name: 'Pubblico', value: 'No', inline: true });
+      expect(embedFields).toContainEqual({ name: 'Public', value: 'No', inline: true });
       expect(embedFields).not.toContainEqual(
-        expect.objectContaining({ name: 'Descrizione' }),
+        expect.objectContaining({ name: 'Description' }),
       );
     });
   });
@@ -389,8 +387,8 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Album aggiornato',
-              description: 'Un album è stato aggiornato.',
+              title: 'Album Updated',
+              description: 'An album has been updated.',
               color: 0xf39c12,
             }),
           ]),
@@ -418,8 +416,8 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: 'Album eliminato',
-              description: 'Un album è stato eliminato.',
+              title: 'Album Deleted',
+              description: 'An album has been deleted.',
               color: 0xe74c3c,
             }),
           ]),
@@ -451,12 +449,12 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: "Immagine aggiunta all'album",
-              description: 'Una immagine è stata aggiunta a un album.',
+              title: 'Image Added to Album',
+              description: 'An image has been added to an album.',
               color: 0x3498db,
               fields: expect.arrayContaining([
                 { name: 'Album', value: 'Test Album' },
-                { name: 'Immagine', value: 'image-123' },
+                { name: 'Image', value: 'image-123' },
               ]),
             }),
           ]),
@@ -488,8 +486,8 @@ describe('WebhookService', () => {
         expect.objectContaining({
           embeds: expect.arrayContaining([
             expect.objectContaining({
-              title: "Immagine rimossa dall'album",
-              description: 'Una immagine è stata rimossa da un album.',
+              title: 'Image Removed from Album',
+              description: 'An image has been removed from an album.',
               color: 0xe74c3c,
             }),
           ]),
@@ -531,7 +529,7 @@ describe('WebhookService', () => {
 
       expect(embed.footer).toEqual(
         expect.objectContaining({
-          text: 'FileHarbor Monitoring Sender',
+          text: 'FileHarbor Monitoring',
         }),
       );
     });
@@ -542,8 +540,8 @@ describe('WebhookService', () => {
       const call = mockHttpService.post.mock.calls[0];
       const embed = call[1].embeds[0];
 
-      expect(embed.fields).toContainEqual({ name: 'Identificativo', value: 'N/A' });
-      expect(embed.fields).toContainEqual({ name: 'Utente', value: 'System', inline: true });
+      expect(embed.fields).toContainEqual({ name: 'ID', value: 'N/A' });
+      expect(embed.fields).toContainEqual({ name: 'User', value: 'System', inline: true });
     });
   });
 

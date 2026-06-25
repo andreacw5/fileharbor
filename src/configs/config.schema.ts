@@ -27,6 +27,12 @@ export default () => ({
     compressionQuality: parseInt(process.env.COMPRESSION_QUALITY, 10) || 90
   },
 
+  // Video Processing
+  video: {
+    maxVideoSize: parseInt(process.env.MAX_VIDEO_SIZE, 10) || 524288000,
+    thumbnailQuality: parseInt(process.env.VIDEO_THUMBNAIL_QUALITY, 10) || 80,
+  },
+
   // Rate Limiting
   throttle: {
     ttl: parseInt(process.env.THROTTLE_TTL, 10) || 60, // seconds

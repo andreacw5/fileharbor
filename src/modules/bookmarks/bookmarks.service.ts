@@ -2,8 +2,15 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { assertClientAccess, buildClientWhere } from '@/modules/admin/helpers/admin-access.helper';
-import { extractTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
+import { extractTagNames, extractVideoTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
 import { RouteHelperService } from '@/utils/route.utils';
+
+export type AdminVideoBookmarksListParams = {
+  clientId?: string;
+  search?: string;
+  page?: number;
+  perPage?: number;
+};
 
 export type AdminBookmarksListParams = {
   clientId?: string;
@@ -238,7 +245,8 @@ export class BookmarksService {
           },
           client: { select: { id: true, name: true, domain: true } },
           user: { select: { externalUserId: true, username: true } },
-          albumImages: {
+          albumItems: {
+            where: { resourceType: 'IMAGE' },
             include: {
               album: {
                 select: { id: true, name: true, externalAlbumId: true, isPublic: true },
@@ -284,8 +292,118 @@ export class BookmarksService {
         ...image,
         tags: extractTagNames(image),
         fullPath: this.route.fullUrl('images', image.id),
-        albums: (image.albumImages ?? []).map((albumImage: any) => albumImage.album),
+        albums: (image.albumItems ?? []).map((albumItem: any) => albumItem.album),
         activeShareLinks: image._count?.shareLinks ?? 0,
+      },
+    };
+  }
+
+  async listVideoBookmarks(adminUser: AdminJwtPayload, params: AdminVideoBookmarksListParams) {
+    const page = Math.max(Number(params.page) || 1, 1);
+    const perPage = Math.min(Math.max(Number(params.perPage) || 20, 1), 100);
+    const skip = (page - 1) * perPage;
+
+    const where: any = {
+      adminUserId: adminUser.adminUserId,
+      video: buildClientWhere(adminUser, params.clientId),
+    };
+
+    if (params.search) {
+      where.video.originalName = { contains: params.search, mode: 'insensitive' };
+    }
+
+    const prisma = this.prisma as any;
+
+    const [rows, total] = await Promise.all([
+      prisma.adminVideoBookmark.findMany({
+        where,
+        include: this.buildVideoBookmarkInclude(),
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: perPage,
+      }),
+      prisma.adminVideoBookmark.count({ where }),
+    ]);
+
+    return {
+      data: rows.map((b: any) => this.mapVideoBookmark(b)),
+      pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
+    };
+  }
+
+  async bookmarkVideo(adminUser: AdminJwtPayload, videoId: string) {
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+      select: { id: true, clientId: true },
+    });
+
+    if (!video) throw new NotFoundException('Video not found');
+    assertClientAccess(adminUser, video.clientId);
+
+    const prisma = this.prisma as any;
+
+    await prisma.adminVideoBookmark.upsert({
+      where: { adminUserId_videoId: { adminUserId: adminUser.adminUserId, videoId } },
+      create: { adminUserId: adminUser.adminUserId, videoId },
+      update: {},
+    });
+
+    return this.getBookmarkByAdminAndVideo(adminUser.adminUserId, videoId);
+  }
+
+  async removeVideoBookmark(adminUser: AdminJwtPayload, videoId: string): Promise<{ removed: number }> {
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+      select: { id: true, clientId: true },
+    });
+
+    if (!video) throw new NotFoundException('Video not found');
+    assertClientAccess(adminUser, video.clientId);
+
+    const prisma = this.prisma as any;
+    const result = await prisma.adminVideoBookmark.deleteMany({
+      where: { adminUserId: adminUser.adminUserId, videoId },
+    });
+
+    return { removed: result.count };
+  }
+
+  private async getBookmarkByAdminAndVideo(adminUserId: string, videoId: string) {
+    const prisma = this.prisma as any;
+
+    const bookmark = await prisma.adminVideoBookmark.findUnique({
+      where: { adminUserId_videoId: { adminUserId, videoId } },
+      include: this.buildVideoBookmarkInclude(),
+    });
+
+    if (!bookmark) throw new BadRequestException('Bookmark could not be created');
+    return this.mapVideoBookmark(bookmark);
+  }
+
+  private buildVideoBookmarkInclude() {
+    return {
+      video: {
+        include: {
+          videoTags: { include: { tag: { select: { name: true } } } },
+          client: { select: { id: true, name: true, domain: true } },
+          user: { select: { externalUserId: true, username: true } },
+        },
+      },
+    };
+  }
+
+  private mapVideoBookmark(bookmark: any) {
+    const video = bookmark.video;
+    return {
+      id: bookmark.id,
+      adminUserId: bookmark.adminUserId,
+      videoId: bookmark.videoId,
+      bookmarkedAt: bookmark.createdAt,
+      video: {
+        ...video,
+        tags: extractVideoTagNames(video),
+        fullPath: this.route.fullUrl('admin', 'videos', video.id, 'stream'),
+        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', video.id, 'thumb'),
       },
     };
   }

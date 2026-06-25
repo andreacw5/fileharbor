@@ -25,6 +25,8 @@ import {
   AdminDeleteResponseDto,
   AdminUserBookmarkListResponseDto,
   AdminUserBookmarkResponseDto,
+  AdminVideoBookmarkListResponseDto,
+  AdminVideoBookmarkResponseDto,
 } from '../dto/admin-response.dto';
 import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
 
@@ -129,6 +131,62 @@ export class BookmarksAdminController {
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const result = await this.bookmarksService.removeUserBookmark(adminUser, userId);
+
+    return plainToInstance(
+      AdminDeleteResponseDto,
+      {
+        success: true,
+        message: result.removed > 0 ? 'Bookmark removed successfully' : 'Bookmark not found',
+      },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  @Get('videos')
+  @ApiOperation({ summary: 'List bookmarked videos for admin GUI' })
+  @ApiQuery({ name: 'clientId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, type: AdminVideoBookmarkListResponseDto })
+  async listVideoBookmarks(
+    @AdminUser() adminUser: AdminJwtPayload,
+    @Query('clientId') clientId?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ): Promise<AdminVideoBookmarkListResponseDto> {
+    const result = await this.bookmarksService.listVideoBookmarks(adminUser, {
+      clientId,
+      search,
+      page: Number(page) || 1,
+      perPage: Number(perPage) || 20,
+    });
+
+    return plainToInstance(AdminVideoBookmarkListResponseDto, result, { excludeExtraneousValues: true });
+  }
+
+  @Post('videos/:videoId')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Bookmark a video for the current admin' })
+  @ApiResponse({ status: 201, type: AdminVideoBookmarkResponseDto })
+  async bookmarkVideo(
+    @Param('videoId') videoId: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminVideoBookmarkResponseDto> {
+    const bookmark = await this.bookmarksService.bookmarkVideo(adminUser, videoId);
+    return plainToInstance(AdminVideoBookmarkResponseDto, bookmark, { excludeExtraneousValues: true });
+  }
+
+  @Delete('videos/:videoId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a video from admin bookmarks' })
+  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  async removeVideoBookmark(
+    @Param('videoId') videoId: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminDeleteResponseDto> {
+    const result = await this.bookmarksService.removeVideoBookmark(adminUser, videoId);
 
     return plainToInstance(
       AdminDeleteResponseDto,

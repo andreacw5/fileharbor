@@ -3,6 +3,29 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as sharp from 'sharp';
+import * as os from 'os';
+import { v4 as uuidv4 } from 'uuid';
+import * as fluentFfmpeg from 'fluent-ffmpeg';
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const ffmpegStaticPath: string | null = require('ffmpeg-static');
+  if (ffmpegStaticPath) {
+    fluentFfmpeg.setFfmpegPath(ffmpegStaticPath);
+  }
+} catch {
+  // ffmpeg-static not available; thumbnail extraction will fail at runtime
+}
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const ffprobeStatic = require('ffprobe-static');
+  if (ffprobeStatic?.path) {
+    fluentFfmpeg.setFfprobePath(ffprobeStatic.path);
+  }
+} catch {
+  // ffprobe-static not available; metadata extraction will fail at runtime
+}
 
 @Injectable()
 export class StorageService {
@@ -212,6 +235,80 @@ export class StorageService {
   async getClientAvatarUserIds(domain: string): Promise<string[]> {
     const avatarsPath = path.join(this.getClientPath(domain), 'avatars');
     return this.listDirectories(avatarsPath);
+  }
+
+  getVideoPath(domain: string, videoId: string): string {
+    const sanitizedVideoId = this.sanitizePathComponent(videoId);
+    return path.join(this.getClientPath(domain), 'videos', sanitizedVideoId);
+  }
+
+  getVideoFilePath(domain: string, videoId: string, variant: 'original' | 'thumb' = 'original'): string {
+    const ext = variant === 'original' ? 'mp4' : 'webp';
+    return `${this.getVideoPath(domain, videoId)}/${variant}.${ext}`;
+  }
+
+  async getClientVideoIds(domain: string): Promise<string[]> {
+    const videosPath = path.join(this.getClientPath(domain), 'videos');
+    return this.listDirectories(videosPath);
+  }
+
+  async copyFromTemp(srcPath: string, destPath: string): Promise<void> {
+    try {
+      this.validatePath(destPath);
+      const dir = path.dirname(destPath);
+      await this.ensureDirectory(dir);
+      await fs.copyFile(srcPath, destPath);
+    } catch (error) {
+      this.logger.error(`[copyFromTemp] Failed: ${destPath}`, error instanceof Error ? error.stack : error);
+      throw new InternalServerErrorException(`Failed to store file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async extractVideoThumbnail(videoPath: string, outputPath: string, quality: number = 80): Promise<void> {
+    const tmpJpeg = path.join(os.tmpdir(), `${uuidv4()}.jpg`);
+    const FFMPEG_TIMEOUT_MS = 30_000;
+
+    try {
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          fluentFfmpeg(videoPath)
+            .screenshots({
+              timestamps: ['00:00:00'],
+              filename: path.basename(tmpJpeg),
+              folder: path.dirname(tmpJpeg),
+              size: '640x?',
+            })
+            .on('end', () => resolve())
+            .on('error', (err: Error) => reject(err));
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('ffmpeg thumbnail extraction timed out')), FFMPEG_TIMEOUT_MS),
+        ),
+      ]);
+
+      const jpegBuffer = await fs.readFile(tmpJpeg);
+      const webpBuffer = await sharp(jpegBuffer).webp({ quality }).toBuffer();
+      await this.saveFile(outputPath, webpBuffer);
+    } catch (error) {
+      this.logger.error(`[extractVideoThumbnail] Failed: ${error instanceof Error ? error.message : error}`);
+      throw new InternalServerErrorException(`Failed to extract thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      await fs.unlink(tmpJpeg).catch(() => {});
+    }
+  }
+
+  async getVideoMetadata(videoPath: string): Promise<{ duration: number; width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      fluentFfmpeg.ffprobe(videoPath, (err: Error | null, data: any) => {
+        if (err) return reject(err);
+        const videoStream = data.streams?.find((s: any) => s.codec_type === 'video');
+        resolve({
+          duration: Math.round(data.format?.duration ?? 0),
+          width: videoStream?.width ?? 0,
+          height: videoStream?.height ?? 0,
+        });
+      });
+    });
   }
 
   /**

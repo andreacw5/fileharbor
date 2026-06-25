@@ -19,24 +19,20 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { AlbumResourceType } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUpdateAlbumDto } from '../dto/admin-update-album.dto';
 import { AdminCreateAlbumDto } from '../dto/admin-create-album.dto';
-import { AdminAddImagesToAlbumDto } from '../dto/admin-add-images-to-album.dto';
-import { AdminRemoveImagesFromAlbumDto } from '../dto/admin-remove-images-from-album.dto';
-import {
-  AdminDeleteResponseDto,
-  AdminAlbumResponseDto,
-  AdminAddImagesToAlbumResponseDto,
-  AdminRemoveImagesFromAlbumResponseDto,
-} from '../dto/admin-response.dto';
+import { AdminDeleteResponseDto, AdminAlbumResponseDto } from '../dto/admin-response.dto';
+import { AddAlbumItemsDto, AddAlbumItemsResponseDto, RemoveAlbumItemsDto, ListAlbumItemsDto, AlbumItemListResponseDto } from '@/modules/album/dto';
 import { AlbumService } from '@/modules/album/album.service';
 import { ClientService } from '@/modules/client/client.service';
-import { plainToInstance } from 'class-transformer';
 import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
 
 @ApiTags('Admin - Albums')
@@ -54,13 +50,8 @@ export class AlbumsAdminController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary: 'Create an album on behalf of a client',
-    description: 'Admin-only album creation. Specify the target clientId in the body. The album is attributed to the given externalUserId (defaults to "system").',
-  })
-  @ApiResponse({ status: 201, description: 'Album created successfully', type: AdminAlbumResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
-  @ApiResponse({ status: 403, description: 'Admin has no access to the given client' })
+  @ApiOperation({ summary: 'Create an album on behalf of a client' })
+  @ApiResponse({ status: 201, type: AdminAlbumResponseDto })
   async createAlbum(
     @Body() dto: AdminCreateAlbumDto,
     @AdminUser() adminUser: AdminJwtPayload,
@@ -77,15 +68,13 @@ export class AlbumsAdminController {
       externalAlbumId: dto.externalAlbumId,
     });
 
-    this.logger.log(`[Admin] Album created: ${album.id} for client: ${dto.clientId}`);
-
-    // Re-fetch with counts for consistent response shape
     const enriched = await this.albumService.findAdminAlbumById(album.id);
     if (!enriched) throw new NotFoundException('Album not found');
 
+    this.logger.log(`[Admin] Album created: ${album.id} for client: ${dto.clientId}`);
     return plainToInstance(
       AdminAlbumResponseDto,
-      { ...enriched, totalImages: enriched._count.albumImages, activeTokens: enriched._count.albumTokens },
+      { ...enriched, totalItems: enriched._count.albumItems, activeTokens: enriched._count.albumTokens },
       { excludeExtraneousValues: true },
     );
   }
@@ -94,7 +83,7 @@ export class AlbumsAdminController {
   @ApiOperation({ summary: 'List albums (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'userId', required: false })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by album name' })
+  @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'public', required: false, type: Boolean })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
@@ -123,7 +112,7 @@ export class AlbumsAdminController {
     return {
       data: albums.map((a) => ({
         ...a,
-        totalImages: a._count.albumImages,
+        totalItems: a._count.albumItems,
         activeTokens: a._count.albumTokens,
         coverImageUrl: a.coverImageId ? this.buildImageFullPath(a.coverImageId) : undefined,
       })),
@@ -146,7 +135,7 @@ export class AlbumsAdminController {
       AdminAlbumResponseDto,
       {
         ...album,
-        totalImages: album._count.albumImages,
+        totalItems: album._count.albumItems,
         activeTokens: album._count.albumTokens,
         coverImageUrl: album.coverImageId ? this.buildImageFullPath(album.coverImageId) : undefined,
       },
@@ -180,7 +169,7 @@ export class AlbumsAdminController {
       AdminAlbumResponseDto,
       {
         ...updated,
-        totalImages: updated._count.albumImages,
+        totalItems: updated._count.albumItems,
         activeTokens: updated._count.albumTokens,
         coverImageUrl: updated.coverImageId ? this.buildImageFullPath(updated.coverImageId) : undefined,
       },
@@ -188,65 +177,71 @@ export class AlbumsAdminController {
     );
   }
 
-  @Post(':id/images')
+  // ---------------------------------------------------------------------------
+  // Items (admin — force mode, bypass ownership)
+  // ---------------------------------------------------------------------------
+
+  @Post(':id/items')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Add images to an album (admin)',
-    description: 'Admin-only. Bypasses ownership check — verifies only that both album and images belong to the same client.',
-  })
-  @ApiResponse({ status: 200, description: 'Images added successfully', type: AdminAddImagesToAlbumResponseDto })
-  @ApiResponse({ status: 404, description: 'Album or some images not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
-  async addImagesToAlbum(
+  @ApiOperation({ summary: 'Add images and/or videos to album (admin, bypasses ownership)' })
+  @ApiResponse({ status: 200, type: AddAlbumItemsResponseDto })
+  async addItems(
     @Param('id') id: string,
-    @Body() dto: AdminAddImagesToAlbumDto,
+    @Body() dto: AddAlbumItemsDto,
     @AdminUser() adminUser: AdminJwtPayload,
-  ): Promise<AdminAddImagesToAlbumResponseDto> {
+  ): Promise<AddAlbumItemsResponseDto> {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
     if (!album) throw new NotFoundException('Album not found');
-
     assertClientAccess(adminUser, album.clientId);
 
-    const result = await this.albumService.forceAddImagesToAlbum(id, album.clientId, dto.imageIds);
-
-    this.logger.log(`[Admin] Added ${result.images.length} images to album: ${id}`);
-
-    return plainToInstance(
-      AdminAddImagesToAlbumResponseDto,
-      { albumId: result.albumId, images: result.images, count: result.images.length },
-      { excludeExtraneousValues: true },
-    );
+    const result = await this.albumService.addItemsToAlbum(id, album.clientId, dto.items, { force: true });
+    this.logger.log(`[Admin] Added ${result.count} items to album: ${id}`);
+    return result;
   }
 
-  @Delete(':id/images')
+  @Delete(':id/items')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Remove images from an album (admin)',
-    description: 'Admin-only. Bypasses ownership check — verifies only that the album belongs to the client.',
-  })
-  @ApiResponse({ status: 200, description: 'Images removed successfully', type: AdminRemoveImagesFromAlbumResponseDto })
-  @ApiResponse({ status: 404, description: 'Album not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
-  async removeImagesFromAlbum(
+  @ApiOperation({ summary: 'Remove images and/or videos from album (admin)' })
+  @ApiBody({ type: RemoveAlbumItemsDto })
+  async removeItems(
     @Param('id') id: string,
-    @Body() dto: AdminRemoveImagesFromAlbumDto,
+    @Body() dto: RemoveAlbumItemsDto,
     @AdminUser() adminUser: AdminJwtPayload,
-  ): Promise<AdminRemoveImagesFromAlbumResponseDto> {
+  ) {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
     if (!album) throw new NotFoundException('Album not found');
-
     assertClientAccess(adminUser, album.clientId);
 
-    const result = await this.albumService.forceRemoveImagesFromAlbum(id, album.clientId, dto.imageIds);
-
-    this.logger.log(`[Admin] Removed ${result.removed} images from album: ${id}`);
-
-    return plainToInstance(
-      AdminRemoveImagesFromAlbumResponseDto,
-      result,
-      { excludeExtraneousValues: true },
-    );
+    const result = await this.albumService.removeItemsFromAlbum(id, album.clientId, dto.items, { force: true });
+    this.logger.log(`[Admin] Removed ${result.removed} items from album: ${id}`);
+    return result;
   }
+
+  @Get(':id/items')
+  @ApiOperation({ summary: 'List album items ordered (admin)' })
+  @ApiQuery({ name: 'resourceType', required: false, enum: AlbumResourceType })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, type: AlbumItemListResponseDto })
+  async listItems(
+    @Param('id') id: string,
+    @AdminUser() adminUser: AdminJwtPayload,
+    @Query() query: ListAlbumItemsDto,
+  ): Promise<AlbumItemListResponseDto> {
+    const album = await this.albumService.getAlbumByIdUnscoped(id);
+    if (!album) throw new NotFoundException('Album not found');
+    assertClientAccess(adminUser, album.clientId);
+
+    return this.albumService.listAlbumItems(album.id, album.clientId, {
+      resourceType: query.resourceType,
+      page: query.page ?? 1,
+      perPage: query.perPage ?? 20,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Delete
+  // ---------------------------------------------------------------------------
 
   @Delete(':id')
   @ApiOperation({ summary: 'Force delete an album (admin)' })
@@ -269,13 +264,9 @@ export class AlbumsAdminController {
     );
   }
 
-  /**
-   * Build full path URL for image
-   */
   private buildImageFullPath(imageId: string): string {
     const apiPrefix = this.config.get('apiPrefix') || 'v2';
     const baseUrl = this.config.get('baseUrl') || 'http://localhost:3000';
     return `${baseUrl}/${apiPrefix}/images/${imageId}`;
   }
 }
-
