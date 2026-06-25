@@ -100,7 +100,8 @@ export class AdminAlbumResponseDto {
   @Type(() => AdminAlbumUserDto)
   user?: AdminAlbumUserDto;
 
-  @ApiPropertyOptional() @Expose() totalImages?: number;
+  @ApiPropertyOptional({ description: 'Total items (images + videos) in the album' })
+  @Expose() totalItems?: number;
   @ApiPropertyOptional({ description: 'Number of active (non-expired) access tokens' })
   @Expose() activeTokens?: number;
 }
@@ -111,6 +112,7 @@ export class AdminDeleteResponseDto {
 }
 
 export class AdminImageUserDto {
+  @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() externalUserId: string;
   @ApiPropertyOptional() @Expose() username?: string;
 }
@@ -338,7 +340,6 @@ export class AdminVideoResponseDto {
   @ApiPropertyOptional() @Expose() description?: string;
   @ApiProperty() @Expose() views: number;
   @ApiProperty() @Expose() downloads: number;
-  @ApiProperty() @Expose() storagePath: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
 
@@ -351,6 +352,9 @@ export class AdminVideoResponseDto {
   @Expose()
   @Type(() => AdminImageUserDto)
   user?: AdminImageUserDto;
+
+  @ApiProperty({ description: 'Full absolute stream URL' }) @Expose() fullPath: string;
+  @ApiProperty({ description: 'Full absolute thumbnail URL' }) @Expose() fullThumbnailUrl: string;
 
   @ApiProperty({ description: 'Whether the requesting admin has bookmarked this video' })
   @Expose()

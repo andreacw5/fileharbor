@@ -480,17 +480,17 @@ export class ImageService {
       throw new NotFoundException('Album not found');
     }
 
-    // Get max order
-    const maxOrder = await this.prisma.albumImage.findFirst({
+    const maxOrder = await this.prisma.albumItem.findFirst({
       where: { albumId },
       orderBy: { order: 'desc' },
       select: { order: true },
     });
 
-    return this.prisma.albumImage.create({
+    return this.prisma.albumItem.create({
       data: {
         albumId,
         imageId,
+        resourceType: 'IMAGE',
         order: (maxOrder?.order || 0) + 1,
       },
     });
@@ -949,7 +949,8 @@ export class ImageService {
         imageTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
         user: { select: { externalUserId: true, username: true } },
-        albumImages: {
+        albumItems: {
+          where: { resourceType: 'IMAGE' },
           include: {
             album: { select: { id: true, name: true, externalAlbumId: true, isPublic: true } },
           },

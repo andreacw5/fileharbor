@@ -114,7 +114,7 @@ export class VideoService {
         },
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { externalUserId: true, username: true } },
+          user: { select: { id: true, externalUserId: true, username: true } },
           client: { select: { id: true, name: true, domain: true } },
         },
       });
@@ -141,7 +141,7 @@ export class VideoService {
       where,
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
-        user: { select: { externalUserId: true, username: true } },
+        user: { select: { id: true, externalUserId: true, username: true } },
         client: { select: { id: true, name: true, domain: true } },
       },
     });
@@ -190,7 +190,7 @@ export class VideoService {
         take: perPage,
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { externalUserId: true, username: true } },
+          user: { select: { id: true, externalUserId: true, username: true } },
           client: { select: { id: true, name: true, domain: true } },
         },
       }),
@@ -253,7 +253,7 @@ export class VideoService {
       },
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
-        user: { select: { externalUserId: true, username: true } },
+        user: { select: { id: true, externalUserId: true, username: true } },
         client: { select: { id: true, name: true, domain: true } },
       },
     });
@@ -287,7 +287,7 @@ export class VideoService {
         take: options.take,
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { externalUserId: true, username: true } },
+          user: { select: { id: true, externalUserId: true, username: true } },
           client: { select: { name: true, domain: true } },
         },
       }),
@@ -326,7 +326,7 @@ export class VideoService {
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        user: { select: { externalUserId: true, username: true } },
+        user: { select: { id: true, externalUserId: true, username: true } },
       },
     });
 
@@ -351,7 +351,7 @@ export class VideoService {
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        user: { select: { externalUserId: true, username: true } },
+        user: { select: { id: true, externalUserId: true, username: true } },
       },
     });
   }

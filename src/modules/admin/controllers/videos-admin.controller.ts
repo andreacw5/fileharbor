@@ -40,6 +40,7 @@ import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.he
 import { buildVideoTagCreateInput, extractVideoTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
 import { VideoService } from '@/modules/video/video.service';
 import { StorageService } from '@/modules/storage/storage.service';
+import { RouteHelperService } from '@/utils/route.utils';
 import { AdminDeleteResponseDto, AdminVideoResponseDto } from '../dto/admin-response.dto';
 
 const videoMulterOptions = {
@@ -64,6 +65,7 @@ export class VideosAdminController {
   constructor(
     private readonly videoService: VideoService,
     private readonly storage: StorageService,
+    private readonly route: RouteHelperService,
   ) {}
 
   @Post()
@@ -100,7 +102,15 @@ export class VideosAdminController {
     const isPrivate = isPrivateRaw === 'true' || isPrivateRaw === '1';
     const result = await this.videoService.uploadVideo(clientId, externalUserId, file, [], description, isPrivate);
 
-    return plainToInstance(AdminVideoResponseDto, { ...result }, { excludeExtraneousValues: true });
+    return plainToInstance(
+      AdminVideoResponseDto,
+      {
+        ...result,
+        fullPath: this.route.fullUrl('admin', 'videos', result.id, 'stream'),
+        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', result.id, 'thumb'),
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Get()
@@ -145,12 +155,27 @@ export class VideosAdminController {
       };
     }
 
-    return this.videoService.findAdminVideos(
+    const result = await this.videoService.findAdminVideos(
       where,
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
       adminUser.adminUserId,
     );
+
+    return {
+      ...result,
+      data: result.data.map((v) =>
+        plainToInstance(
+          AdminVideoResponseDto,
+          {
+            ...v,
+            fullPath: this.route.fullUrl('admin', 'videos', v.id, 'stream'),
+            fullThumbnailUrl: this.route.fullUrl('admin', 'videos', v.id, 'thumb'),
+          },
+          { excludeExtraneousValues: true },
+        ),
+      ),
+    };
   }
 
   @Get(':id')
@@ -166,7 +191,12 @@ export class VideosAdminController {
 
     return plainToInstance(
       AdminVideoResponseDto,
-      { ...video, tags: extractVideoTagNames(video) },
+      {
+        ...video,
+        tags: extractVideoTagNames(video),
+        fullPath: this.route.fullUrl('admin', 'videos', video.id, 'stream'),
+        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', video.id, 'thumb'),
+      },
       { excludeExtraneousValues: true },
     );
   }
@@ -197,7 +227,12 @@ export class VideosAdminController {
     const updated = await this.videoService.adminUpdateVideo(id, data);
     return plainToInstance(
       AdminVideoResponseDto,
-      { ...updated, tags: extractVideoTagNames(updated) },
+      {
+        ...updated,
+        tags: extractVideoTagNames(updated),
+        fullPath: this.route.fullUrl('admin', 'videos', updated.id, 'stream'),
+        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', updated.id, 'thumb'),
+      },
       { excludeExtraneousValues: true },
     );
   }

@@ -401,6 +401,8 @@ export class BookmarksService {
       video: {
         ...video,
         tags: extractVideoTagNames(video),
+        fullPath: this.route.fullUrl('admin', 'videos', video.id, 'stream'),
+        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', video.id, 'thumb'),
       },
     };
   }

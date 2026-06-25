@@ -175,7 +175,7 @@ export class ImagesAdminController {
 
     const fullPath = this.route.fullUrl('images', image.id);
 
-    const albums = image.albumImages.map((ai) => ai.album);
+    const albums = image.albumItems.map((ai) => ai.album);
     const activeShareLinks = image._count.shareLinks;
 
     return plainToInstance(
