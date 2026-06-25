@@ -9,6 +9,9 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import { HttpService } from '@nestjs/axios';
+import { UserService } from '@/modules/user/user.service';
+import { RouteHelperService } from '@/utils/route.utils';
 
 describe('ImageService', () => {
   let service: ImageService;
@@ -125,6 +128,10 @@ describe('ImageService', () => {
       create: jest.fn(),
       findFirst: jest.fn(),
     },
+    albumItem: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+    },
   };
 
   const mockStorageService = {
@@ -156,6 +163,11 @@ describe('ImageService', () => {
     sendWebhook: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockUserServiceMock = {
+    resolveUser: jest.fn(),
+    findOrCreate: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -175,6 +187,23 @@ describe('ImageService', () => {
         {
           provide: WebhookService,
           useValue: mockWebhookService,
+        },
+        {
+          provide: HttpService,
+          useValue: { post: jest.fn() },
+        },
+        {
+          provide: UserService,
+          useValue: mockUserServiceMock,
+        },
+        {
+          provide: RouteHelperService,
+          useValue: {
+            path: jest.fn((...segments: string[]) => '/' + segments.join('/')),
+            fullUrl: jest.fn((...segments: string[]) => 'http://localhost:3000/' + segments.join('/')),
+            apiPrefix: 'v2',
+            baseUrl: 'http://localhost:3000',
+          },
         },
       ],
     }).compile();
@@ -197,6 +226,7 @@ describe('ImageService', () => {
     beforeEach(() => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
       mockPrismaService.user.upsert.mockResolvedValue(mockUser);
+      mockUserServiceMock.resolveUser.mockResolvedValue(mockUser);
       mockStorageService.getImageMetadata.mockResolvedValue(mockImageMetadata);
       mockStorageService.convertToWebP.mockResolvedValue(Buffer.from('webp-data'));
       mockStorageService.createThumbnail.mockResolvedValue(Buffer.from('thumb-data'));
@@ -219,19 +249,6 @@ describe('ImageService', () => {
       expect(result.originalName).toBe('test.jpg');
       expect(mockPrismaService.client.findUnique).toHaveBeenCalledWith({
         where: { id: mockClientId },
-      });
-      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
-        where: {
-          clientId_externalUserId: {
-            clientId: mockClientId,
-            externalUserId: mockExternalUserId,
-          },
-        },
-        update: {},
-        create: {
-          clientId: mockClientId,
-          externalUserId: mockExternalUserId,
-        },
       });
       expect(mockStorageService.convertToWebP).toHaveBeenCalled();
       expect(mockStorageService.createThumbnail).toHaveBeenCalled();
@@ -266,22 +283,11 @@ describe('ImageService', () => {
     it('should upsert user with username when provided', async () => {
       await service.uploadImage(mockClientId, mockExternalUserId, mockFile, undefined, undefined, undefined, undefined, 'Andrea');
 
-      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
-        where: {
-          clientId_externalUserId: {
-            clientId: mockClientId,
-            externalUserId: mockExternalUserId,
-          },
-        },
-        update: {
-          username: 'Andrea',
-        },
-        create: {
-          clientId: mockClientId,
-          externalUserId: mockExternalUserId,
-          username: 'Andrea',
-        },
-      });
+      expect(mockUserServiceMock.resolveUser).toHaveBeenCalledWith(
+        mockClientId,
+        mockExternalUserId,
+        'Andrea',
+      );
     });
 
     it('should throw BadRequestException for non-image file', async () => {
@@ -322,8 +328,8 @@ describe('ImageService', () => {
       mockPrismaService.image.create.mockResolvedValue(createdImage);
       mockPrismaService.image.findFirst.mockResolvedValue(createdImage);
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumImage.findFirst.mockResolvedValue({ order: 0 });
-      mockPrismaService.albumImage.create.mockResolvedValue({
+      mockPrismaService.albumItem.findFirst.mockResolvedValue({ order: 0 });
+      mockPrismaService.albumItem.create.mockResolvedValue({
         albumId,
         imageId: createdImage.id,
         order: 1,
@@ -337,7 +343,7 @@ describe('ImageService', () => {
       );
 
       expect(result).toBeDefined();
-      expect(mockPrismaService.albumImage.create).toHaveBeenCalled();
+      expect(mockPrismaService.albumItem.create).toHaveBeenCalled();
     });
 
     it('should upload image with tags and description', async () => {
