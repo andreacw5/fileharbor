@@ -146,7 +146,7 @@ export class ImagesAdminController {
 
     const where: any = buildClientWhere(adminUser, clientId);
     if (userId) where.user = { id: userId };
-    if (albumId) where.albumImages = { some: { albumId } };
+    if (albumId) where.albumItems = { some: { albumId, resourceType: 'IMAGE' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
     if (tagsArray && tagsArray.length > 0) {
       where.imageTags = {

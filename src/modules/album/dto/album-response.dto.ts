@@ -52,6 +52,12 @@ export class AlbumResponseDto {
   @ApiPropertyOptional({ description: 'Total items (images + videos) in the album', example: 24 })
   itemCount?: number;
 
+  @ApiPropertyOptional({ description: 'Number of images in the album', example: 20 })
+  imageCount?: number;
+
+  @ApiPropertyOptional({ description: 'Number of videos in the album', example: 4 })
+  videoCount?: number;
+
   @ApiPropertyOptional({
     description: 'Cover image URL (first image in the album)',
     example: 'http://localhost:3000/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423',

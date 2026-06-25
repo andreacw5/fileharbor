@@ -245,7 +245,8 @@ export class BookmarksService {
           },
           client: { select: { id: true, name: true, domain: true } },
           user: { select: { externalUserId: true, username: true } },
-          albumImages: {
+          albumItems: {
+            where: { resourceType: 'IMAGE' },
             include: {
               album: {
                 select: { id: true, name: true, externalAlbumId: true, isPublic: true },
@@ -291,7 +292,7 @@ export class BookmarksService {
         ...image,
         tags: extractTagNames(image),
         fullPath: this.route.fullUrl('images', image.id),
-        albums: (image.albumImages ?? []).map((albumImage: any) => albumImage.album),
+        albums: (image.albumItems ?? []).map((albumItem: any) => albumItem.album),
         activeShareLinks: image._count?.shareLinks ?? 0,
       },
     };

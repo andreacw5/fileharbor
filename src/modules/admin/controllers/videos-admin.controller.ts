@@ -117,6 +117,7 @@ export class VideosAdminController {
   @ApiOperation({ summary: 'List videos (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'albumId', required: false })
   @ApiQuery({ name: 'name', required: false })
   @ApiQuery({ name: 'tags', required: false, isArray: true })
   @ApiQuery({ name: 'sortBy', required: false, enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'] })
@@ -127,6 +128,7 @@ export class VideosAdminController {
     @AdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('userId') userId?: string,
+    @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
     @Query('sortBy') sortBy?: string,
@@ -148,6 +150,7 @@ export class VideosAdminController {
 
     const where: any = buildClientWhere(adminUser, clientId);
     if (userId) where.user = { id: userId };
+    if (albumId) where.albumItems = { some: { albumId, resourceType: 'VIDEO' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
     if (tagsArray && tagsArray.length > 0) {
       where.videoTags = {

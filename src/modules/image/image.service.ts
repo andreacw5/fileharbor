@@ -340,9 +340,10 @@ export class ImageService {
       where.userId = filters.userId;
     }
     if (filters.albumId) {
-      where.albumImages = {
+      where.albumItems = {
         some: {
           albumId: filters.albumId,
+          resourceType: 'IMAGE',
         },
       };
     }

@@ -46,6 +46,30 @@ export class AlbumService {
     return this.route.fullUrl('images', imageId);
   }
 
+  private async countItemsByType(albumId: string, total: number) {
+    const imageCount = await this.prisma.albumItem.count({
+      where: { albumId, resourceType: AlbumResourceType.IMAGE },
+    });
+    return { imageCount, videoCount: total - imageCount };
+  }
+
+  private async fetchItemCountMap(albumIds: string[]): Promise<Map<string, { imageCount: number; videoCount: number }>> {
+    if (albumIds.length === 0) return new Map();
+    const rows = await this.prisma.albumItem.groupBy({
+      by: ['albumId', 'resourceType'],
+      where: { albumId: { in: albumIds } },
+      _count: { _all: true },
+    });
+    const map = new Map<string, { imageCount: number; videoCount: number }>();
+    for (const row of rows) {
+      if (!map.has(row.albumId)) map.set(row.albumId, { imageCount: 0, videoCount: 0 });
+      const entry = map.get(row.albumId)!;
+      if (row.resourceType === AlbumResourceType.IMAGE) entry.imageCount = row._count._all;
+      else entry.videoCount = row._count._all;
+    }
+    return map;
+  }
+
   private mapAlbumItem(item: any) {
     const base = { id: item.id, resourceType: item.resourceType, order: item.order, addedAt: item.addedAt };
     if (item.resourceType === AlbumResourceType.IMAGE && item.image) {
@@ -144,9 +168,12 @@ export class AlbumService {
     if (!album.isPublic && album.userId !== userId) {
       throw new ForbiddenException('Access denied to private album');
     }
+    const { imageCount, videoCount } = await this.countItemsByType(albumId, album._count.albumItems);
     return {
       ...this.formatAlbumResponse(album),
       itemCount: album._count.albumItems,
+      imageCount,
+      videoCount,
       coverUrl: this.resolveCoverUrl(album),
     };
   }
@@ -161,11 +188,18 @@ export class AlbumService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return albums.map((album) => ({
-      ...this.formatAlbumResponse(album),
-      itemCount: album._count.albumItems,
-      coverUrl: this.resolveCoverUrl(album),
-    }));
+    const countMap = await this.fetchItemCountMap(albums.map((a) => a.id));
+
+    return albums.map((album) => {
+      const { imageCount = 0, videoCount = 0 } = countMap.get(album.id) ?? {};
+      return {
+        ...this.formatAlbumResponse(album),
+        itemCount: album._count.albumItems,
+        imageCount,
+        videoCount,
+        coverUrl: this.resolveCoverUrl(album),
+      };
+    });
   }
 
   async listAlbums(filters: {
@@ -200,12 +234,19 @@ export class AlbumService {
       this.prisma.album.count({ where }),
     ]);
 
+    const countMap = await this.fetchItemCountMap(albums.map((a) => a.id));
+
     return {
-      data: albums.map((album) => ({
-        ...this.formatAlbumResponse(album),
-        itemCount: album._count.albumItems,
-        coverUrl: this.resolveCoverUrl(album),
-      })),
+      data: albums.map((album) => {
+        const { imageCount = 0, videoCount = 0 } = countMap.get(album.id) ?? {};
+        return {
+          ...this.formatAlbumResponse(album),
+          itemCount: album._count.albumItems,
+          imageCount,
+          videoCount,
+          coverUrl: this.resolveCoverUrl(album),
+        };
+      }),
       pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
     };
   }
@@ -464,9 +505,12 @@ export class AlbumService {
     });
     if (!album) throw new NotFoundException('Album not found');
 
+    const { imageCount, videoCount } = await this.countItemsByType(album.id, album._count.albumItems);
     return {
       ...this.formatAlbumResponse(album),
       itemCount: album._count.albumItems,
+      imageCount,
+      videoCount,
       coverUrl: this.resolveCoverUrl(album),
     };
   }
@@ -505,9 +549,12 @@ export class AlbumService {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
     if (!album.isPublic && album.userId !== userId) throw new ForbiddenException('Access denied to private album');
 
+    const { imageCount, videoCount } = await this.countItemsByType(album.id, album._count.albumItems);
     return {
       ...this.formatAlbumResponse(album),
       itemCount: album._count.albumItems,
+      imageCount,
+      videoCount,
       coverUrl: album.coverImageId
         ? this.buildImageFullPath(album.coverImageId)
         : this.resolveCoverUrl(album),
@@ -588,42 +635,57 @@ export class AlbumService {
       this.prisma.album.count({ where }),
     ]);
 
-    return { albums, total };
+    const countMap = await this.fetchItemCountMap(albums.map((a) => a.id));
+    const albumsWithCounts = albums.map((a) => {
+      const { imageCount = 0, videoCount = 0 } = countMap.get(a.id) ?? {};
+      return { ...a, imageCount, videoCount };
+    });
+
+    return { albums: albumsWithCounts, total };
   }
 
   async findAdminAlbumById(albumId: string) {
     const now = new Date();
-    return this.prisma.album.findUnique({
-      where: { id: albumId },
-      include: {
-        client: { select: { id: true, name: true, domain: true } },
-        user: { select: { externalUserId: true, username: true } },
-        _count: {
-          select: {
-            albumItems: true,
-            albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+    const [album, imageCount] = await Promise.all([
+      this.prisma.album.findUnique({
+        where: { id: albumId },
+        include: {
+          client: { select: { id: true, name: true, domain: true } },
+          user: { select: { externalUserId: true, username: true } },
+          _count: {
+            select: {
+              albumItems: true,
+              albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.albumItem.count({ where: { albumId, resourceType: AlbumResourceType.IMAGE } }),
+    ]);
+    if (!album) return null;
+    return { ...album, imageCount, videoCount: album._count.albumItems - imageCount };
   }
 
   async adminUpdateAlbum(albumId: string, data: Record<string, any>) {
     const now = new Date();
-    return this.prisma.album.update({
-      where: { id: albumId },
-      data,
-      include: {
-        client: { select: { id: true, name: true, domain: true } },
-        user: { select: { externalUserId: true, username: true } },
-        _count: {
-          select: {
-            albumItems: true,
-            albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+    const [album, imageCount] = await Promise.all([
+      this.prisma.album.update({
+        where: { id: albumId },
+        data,
+        include: {
+          client: { select: { id: true, name: true, domain: true } },
+          user: { select: { externalUserId: true, username: true } },
+          _count: {
+            select: {
+              albumItems: true,
+              albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.albumItem.count({ where: { albumId, resourceType: AlbumResourceType.IMAGE } }),
+    ]);
+    return { ...album, imageCount, videoCount: album._count.albumItems - imageCount };
   }
 
   async getAlbumByIdUnscoped(albumId: string) {

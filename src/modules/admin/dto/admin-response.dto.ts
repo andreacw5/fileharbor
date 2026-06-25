@@ -102,6 +102,10 @@ export class AdminAlbumResponseDto {
 
   @ApiPropertyOptional({ description: 'Total items (images + videos) in the album' })
   @Expose() totalItems?: number;
+  @ApiPropertyOptional({ description: 'Number of images in the album' })
+  @Expose() imageCount?: number;
+  @ApiPropertyOptional({ description: 'Number of videos in the album' })
+  @Expose() videoCount?: number;
   @ApiPropertyOptional({ description: 'Number of active (non-expired) access tokens' })
   @Expose() activeTokens?: number;
 }
