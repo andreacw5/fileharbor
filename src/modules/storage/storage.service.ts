@@ -17,6 +17,16 @@ try {
   // ffmpeg-static not available; thumbnail extraction will fail at runtime
 }
 
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const ffprobeStatic = require('ffprobe-static');
+  if (ffprobeStatic?.path) {
+    fluentFfmpeg.setFfprobePath(ffprobeStatic.path);
+  }
+} catch {
+  // ffprobe-static not available; metadata extraction will fail at runtime
+}
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
