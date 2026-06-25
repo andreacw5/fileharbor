@@ -27,11 +27,13 @@ export class StatisticsService {
       totalImages,
       totalAvatars,
       totalAlbums,
+      totalVideos,
       totalUsers,
       storageAgg,
       newImages,
       newAvatars,
       newAlbums,
+      newVideos,
       newUsers,
       newStorageAgg,
     ] = await Promise.all([
@@ -43,11 +45,13 @@ export class StatisticsService {
       this.prisma.image.count({ where: clientWhere }),
       this.prisma.avatar.count({ where: clientWhere }),
       this.prisma.album.count({ where: clientWhere }),
+      this.prisma.video.count({ where: clientWhere }),
       this.prisma.user.count({ where: clientWhere }),
       this.prisma.image.aggregate({ where: clientWhere, _sum: { size: true } }),
       this.prisma.image.count({ where: clientWhere7d }),
       this.prisma.avatar.count({ where: clientWhere7d }),
       this.prisma.album.count({ where: clientWhere7d }),
+      this.prisma.video.count({ where: clientWhere7d }),
       this.prisma.user.count({ where: clientWhere7d }),
       this.prisma.image.aggregate({ where: clientWhere7d, _sum: { size: true } }),
     ]);
@@ -56,7 +60,7 @@ export class StatisticsService {
 
     const last7Days = plainToInstance(
       StatsTrendDto,
-      { newImages, newAvatars, newAlbums, newUsers, newStorage: newStorageAgg._sum.size || 0 },
+      { newImages, newAvatars, newAlbums, newVideos, newUsers, newStorage: newStorageAgg._sum.size || 0 },
       { excludeExtraneousValues: true },
     );
 
@@ -67,6 +71,7 @@ export class StatisticsService {
         totalImages,
         totalAvatars,
         totalAlbums,
+        totalVideos,
         totalUsers,
         totalStorage: storageAgg._sum.size || 0,
         last7Days,
@@ -96,10 +101,11 @@ export class StatisticsService {
 
     const timeWhere = { ...clientWhere, createdAt: { gte: from, lt: to } };
 
-    const [images, avatars, albums] = await Promise.all([
+    const [images, avatars, albums, videos] = await Promise.all([
       this.prisma.image.findMany({ where: timeWhere, select: { createdAt: true } }),
       this.prisma.avatar.findMany({ where: timeWhere, select: { createdAt: true } }),
       this.prisma.album.findMany({ where: timeWhere, select: { createdAt: true } }),
+      this.prisma.video.findMany({ where: timeWhere, select: { createdAt: true } }),
     ]);
 
     const countByDay = (records: { createdAt: Date }[], date: string) =>
@@ -113,6 +119,7 @@ export class StatisticsService {
           images: countByDay(images, date),
           avatars: countByDay(avatars, date),
           albums: countByDay(albums, date),
+          videos: countByDay(videos, date),
         },
         { excludeExtraneousValues: true },
       ),

@@ -20,6 +20,7 @@ export class UserResponseDto {
   @ApiPropertyOptional() @Expose() totalImages?: number;
   @ApiPropertyOptional() @Expose() totalAvatars?: number;
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
+  @ApiPropertyOptional() @Expose() totalVideos?: number;
   @ApiPropertyOptional({ description: 'Whether the requesting admin has bookmarked this user' }) @Expose() isBookmarked?: boolean;
   @ApiPropertyOptional() @Expose() avatarUrl?: string;
 
@@ -43,6 +44,7 @@ export class UserListResponseDto {
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() totalImages?: number;
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
+  @ApiPropertyOptional() @Expose() totalVideos?: number;
   @ApiPropertyOptional({ description: 'Whether the requesting admin has bookmarked this user' }) @Expose() isBookmarked?: boolean;
   @ApiPropertyOptional() @Expose() avatarUrl?: string;
 

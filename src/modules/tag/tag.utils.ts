@@ -43,4 +43,27 @@ export function extractTagNames(entity: TagContainer): string[] {
   );
 }
 
+type VideoTagContainer = {
+  videoTags?: Array<{ tag?: { name?: string | null } | null } | null> | null;
+};
+
+export function buildVideoTagCreateInput(clientId: string, tags?: string[] | null) {
+  return normalizeTagNames(tags).map((name) => ({
+    tag: {
+      connectOrCreate: {
+        where: { clientId_name: { clientId, name } },
+        create: { clientId, name },
+      },
+    },
+  }));
+}
+
+export function extractVideoTagNames(entity: VideoTagContainer): string[] {
+  return normalizeTagNames(
+    (entity.videoTags ?? [])
+      .map((videoTag) => videoTag?.tag?.name ?? null)
+      .filter((name): name is string => Boolean(name)),
+  );
+}
+
 

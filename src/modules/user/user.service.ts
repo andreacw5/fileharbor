@@ -58,6 +58,7 @@ export class UserService {
         totalImages: user._count?.images,
         totalAvatars: user._count?.avatars,
         totalAlbums: user._count?.albums,
+        totalVideos: user._count?.videos,
         ...extra,
       },
       { excludeExtraneousValues: true },
@@ -119,7 +120,7 @@ export class UserService {
         skip,
         take,
         include: {
-          _count: { select: { images: true, albums: true } },
+          _count: { select: { images: true, albums: true, videos: true } },
         },
       }),
       this.prisma.user.count({ where }),
@@ -170,7 +171,7 @@ export class UserService {
         ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       },
       include: {
-        _count: { select: { images: true, avatars: true } },
+        _count: { select: { images: true, avatars: true, videos: true } },
       },
     });
 
@@ -221,7 +222,7 @@ export class UserService {
         skip,
         take,
         include: {
-          _count: { select: { images: true, avatars: true } },
+          _count: { select: { images: true, avatars: true, videos: true } },
           client: { select: { id: true, name: true, domain: true } },
           avatars: {
             select: { id: true, userId: true },
@@ -270,7 +271,7 @@ export class UserService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        _count: { select: { images: true, avatars: true, albums: true } },
+        _count: { select: { images: true, avatars: true, albums: true, videos: true } },
         client: { select: { id: true, name: true, domain: true } },
         avatars: {
           select: { id: true, userId: true },
@@ -376,7 +377,7 @@ export class UserService {
         ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       },
       include: {
-        _count: { select: { images: true, avatars: true, albums: true } },
+        _count: { select: { images: true, avatars: true, albums: true, videos: true } },
         client: { select: { id: true, name: true, domain: true } },
       },
     });
