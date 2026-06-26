@@ -8,6 +8,10 @@ export class UploadVideoDto {
 
   @IsOptional()
   @IsString()
+  albumId?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()

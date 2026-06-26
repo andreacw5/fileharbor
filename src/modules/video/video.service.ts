@@ -45,6 +45,7 @@ export class VideoService {
     tags?: string[],
     description?: string,
     isPrivate?: boolean,
+    albumId?: string,
   ): Promise<VideoResponseDto> {
     const videoId = uuidv4();
     this.logger.debug(
@@ -119,6 +120,11 @@ export class VideoService {
         },
       });
 
+      if (albumId) {
+        this.logger.debug(`[uploadVideo] Adding to album - ID: ${videoId}, Album: ${albumId}`);
+        await this.addVideoToAlbum(videoId, albumId, clientId);
+      }
+
       this.webhook.sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
         videoId: video.id,
         originalName: video.originalName,
@@ -131,6 +137,23 @@ export class VideoService {
     } finally {
       await fs.unlink(file.path).catch(() => {});
     }
+  }
+
+  async addVideoToAlbum(videoId: string, albumId: string, clientId: string) {
+    const album = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+    });
+    if (!album) throw new NotFoundException(`Album ${albumId} not found`);
+
+    const maxItem = await this.prisma.albumItem.findFirst({
+      where: { albumId },
+      orderBy: { order: 'desc' },
+    });
+    const order = maxItem ? maxItem.order + 1 : 0;
+
+    return this.prisma.albumItem.create({
+      data: { albumId, videoId, resourceType: 'VIDEO', order },
+    });
   }
 
   async getVideoById(videoId: string, clientId?: string) {

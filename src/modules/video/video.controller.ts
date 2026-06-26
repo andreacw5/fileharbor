@@ -98,7 +98,7 @@ export class VideoController {
     if (!file) throw new BadRequestException('No file uploaded');
 
     const effectiveUserId = dto.userId || userId;
-    return this.videoService.uploadVideo(clientId, effectiveUserId, file, dto.tags, dto.description, dto.isPrivate);
+    return this.videoService.uploadVideo(clientId, effectiveUserId, file, dto.tags, dto.description, dto.isPrivate, dto.albumId);
   }
 
   @Get()
