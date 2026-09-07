@@ -54,11 +54,34 @@ const JWKS_TTL_MS = 60 * 60 * 1000; // 1 hour
 export class AdminJwtGuard implements CanActivate {
   private jwksCache: JwksCache | null = null;
 
+  /**
+   * App slugs whose Bastion-issued user tokens this service accepts.
+   *
+   * FileHarbor has no admin UI of its own — the console lives in Meridian, which
+   * signs its users in against Bastion with its own `appSlug`. Accepting a list
+   * lets one deployment serve several front-ends (Meridian plus any future one)
+   * without each needing a separate FileHarbor app registration in Bastion.
+   *
+   * Defaults to `BASTION_APP_SLUG` alone, so an unset variable keeps the previous
+   * single-slug behaviour rather than silently widening what is accepted.
+   */
+  private readonly acceptedAppSlugs: string[];
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    const configured = this.config.get<string>('adminAcceptedAppSlugs') ?? '';
+    const parsed = configured
+      .split(',')
+      .map((slug) => slug.trim())
+      .filter(Boolean);
+
+    this.acceptedAppSlugs = parsed.length
+      ? parsed
+      : [this.config.get<string>('bastionAppSlug') ?? 'fileharbor'];
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -71,8 +94,7 @@ export class AdminJwtGuard implements CanActivate {
     const token = authHeader.substring(7);
     const bastionPayload = await this.verifyToken(token);
 
-    const expectedSlug = this.config.get<string>('bastionAppSlug');
-    if (bastionPayload.appSlug !== expectedSlug) {
+    if (!this.acceptedAppSlugs.includes(bastionPayload.appSlug)) {
       throw new UnauthorizedException('Invalid app context');
     }
 

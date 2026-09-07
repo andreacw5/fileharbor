@@ -5,7 +5,7 @@
 - **Framework:** NestJS 10 (TypeScript, ES2021, CommonJS)
 - **Database:** PostgreSQL + Prisma ORM (client at `generated/prisma/`)
 - **Image Processing:** Sharp
-- **Auth:** JWT (admin), API Keys (client)
+- **Auth:** Bastion IdP RS256 JWT via JWKS (admin), API Keys (client)
 - **Package Manager:** pnpm (enforced — never use npm or yarn)
 - **Testing:** Jest
 - **API Docs:** Swagger/OpenAPI at `/docs`
@@ -25,7 +25,8 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 | `storage` | All disk I/O and Sharp image processing |
 | `webhook` | Fire-and-forget Discord webhook notifications |
 | `job` | Scheduled cleanup (cron jobs — currently commented out) |
-| `admin` | Admin portal: JWT auth, multi-role user management, cross-client ops |
+| `admin` | Admin portal API: multi-role user management, cross-client ops |
+| `admin-auth` | Admin auth delegated to Bastion IdP: login proxy, JWKS guard |
 | `prisma` | Database service wrapper |
 
 ## Auth & Request Context
@@ -82,22 +83,85 @@ Cron decorators are **currently commented out** in `image.cleanup.job.ts`, `avat
 
 ## Admin Module
 
-Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Uses JWT-based `Bearer` token flow:
+Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Admin identity is
+**delegated to Bastion IdP**; FileHarbor issues no tokens of its own and stores no admin passwords.
 
-- **`AdminJwtGuard`** (`guards/admin-jwt.guard.ts`) — validates `Authorization: Bearer <token>`, attaches `request.adminUser` (`AdminJwtPayload`)
-- **`@AdminUser()`** decorator (`decorators/admin-user.decorator.ts`) — extracts `AdminJwtPayload`
-- **`AdminInitService`** — creates first `SUPER_ADMIN` from `ADMIN_DEFAULT_EMAIL` / `ADMIN_DEFAULT_PASSWORD` on startup if no admins exist
+Two modules cooperate:
 
-Roles: `SUPER_ADMIN` / `ADMIN`. `allClientsAccess` flag controls scope; when `false`, access limited to `allowedClientIds` in JWT payload.
+- `src/modules/admin-auth/` — auth: controller, service, guard, decorator
+- `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`, `admin/albums`, `admin/users`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
 
-Auth flow: `POST /admin/auth/login` → `POST /admin/auth/refresh` → `POST /admin/auth/logout`.
+### Auth flow
+
+`AdminAuthService` (`admin-auth/admin-auth.service.ts`) proxies every credential operation to Bastion
+— login, OAuth code exchange, refresh, logout, profile, email change, password change/reset. The
+refresh token is returned to the browser as the httpOnly cookie `admin_rt` (30 days, `sameSite: strict`),
+never in the response body.
+
+```
+POST /admin/auth/login      → Bastion POST /auth/login
+POST /admin/auth/exchange   → Bastion POST /auth/exchange   (social login landing)
+POST /admin/auth/refresh    → Bastion POST /auth/refresh    (reads admin_rt cookie, rotates it)
+POST /admin/auth/logout     → Bastion POST /auth/logout
+GET  /admin/auth/me         → local AdminUser + Bastion claims
+```
+
+### Guard
+
+**`AdminJwtGuard`** (`admin-auth/guards/admin-jwt.guard.ts`) validates `Authorization: Bearer <token>`:
+
+1. Verifies RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`), cached 1h with one
+   forced re-fetch on failure to survive key rotation
+2. Checks `payload.appSlug` is in the accepted list (see below)
+3. Loads the local `AdminUser` by `bastionUserId`; rejects when missing or `active: false`
+4. Attaches `request.adminUser` (`AdminJwtPayload` — Bastion claims plus `adminUserId`,
+   `allClientsAccess`, `allowedClientIds`)
+5. Fire-and-forget `UserCache` upsert to keep cached Bastion profile data fresh
+
+**`@AdminUser()`** decorator (`admin-auth/decorators/admin-user.decorator.ts`) extracts the payload.
+
+### Accepted app slugs
+
+FileHarbor has no admin UI of its own — the console lives in **Meridian**, which signs users in
+against Bastion with `appSlug: meridian`. `ADMIN_ACCEPTED_APP_SLUGS` is the comma-separated list of
+slugs whose user tokens the guard accepts. When unset it falls back to `BASTION_APP_SLUG` alone, so
+an empty value never widens what is accepted.
+
+### Access control
+
+Roles come from the Bastion token (`SUPER_ADMIN` / `ADMIN`). Scope is local: `SUPER_ADMIN` or
+`allClientsAccess: true` → unrestricted; otherwise limited to `allowedClientIds`. Never filter by
+hand — use the helpers in `admin/helpers/admin-access.helper.ts`:
+
+```typescript
+resolveAllowedClients(admin)            // string[] | null (null = unrestricted)
+assertClientAccess(admin, clientId)     // throws ForbiddenException
+buildClientWhere(admin, extraClientId?) // Prisma where clause, validates extraClientId
+```
+
+### How an `AdminUser` row appears
+
+The guard rejects any token whose `bastionUserId` has no `admin_users` row with
+`401 Admin access not granted`. Rows are created two ways:
+
+- **`POST /admin/auth/login` or `/admin/auth/exchange`** — `buildLoginResponse()` upserts the row for
+  whoever authenticated, with `active: true` and `allClientsAccess: decoded.role === 'SUPER_ADMIN'`.
+  First login through FileHarbor's own endpoint therefore self-provisions admin access.
+- **`AdminAuthService.createAdminUser()`** — explicit provisioning with chosen client scope.
+
+**Meridian does not hit either.** It authenticates against Bastion directly and forwards the user's
+access token to FileHarbor, so `buildLoginResponse()` never runs. A Meridian user needs their
+`admin_users` row provisioned first (one login through FileHarbor's own endpoint, or an explicit
+`createAdminUser()` call) or every admin request 401s.
+
+`AdminInitService` is now only a startup log; it creates nothing.
 
 Required env vars:
 ```
-JWT_ADMIN_SECRET=
-JWT_ADMIN_EXPIRES_IN=         # e.g. 15m
-JWT_ADMIN_REFRESH_SECRET=
-JWT_ADMIN_REFRESH_EXPIRES_IN= # e.g. 7d
+BASTION_URL=http://localhost:3001
+BASTION_APP_SLUG=fileharbor
+BASTION_TENANT_SLUG=                        # optional default tenant
+ADMIN_ACCEPTED_APP_SLUGS=fileharbor,meridian  # empty → BASTION_APP_SLUG only
 ```
 
 ## Naming Conventions
@@ -190,3 +254,9 @@ Knowledge graph at `graphify-out/` with god nodes, community structure, and cros
 - If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of raw source browsing.
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain don't surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Docs
+
+- `../docs/FILEHARBOR_INTEGRATION.md` — integration guide per altri servizi (fonte di verità)
+- `../docs/BASTION_INTEGRATION.md` — Bastion JWT/JWKS guide
+- `../docs/CODING_STANDARDS.md` — NestJS conventions condivise
