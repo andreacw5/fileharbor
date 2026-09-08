@@ -14,7 +14,9 @@ import {
 import { TagService } from './tag.service';
 import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { TagsResponseDto } from './dto/tag-response.dto';
+import { TagPageParams, TagsResponseDto } from './dto/tag-response.dto';
+import { PaginatedResult } from '@/common/pagination';
+import { TagListItemDto } from './dto/tag-response.dto';
 
 @ApiTags('Admin - Tags')
 @Controller('admin/tags')
@@ -24,22 +26,17 @@ export class TagController {
   @Get()
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List distinct image tags (scoped to accessible clients)' })
+  @ApiOperation({ summary: 'List image tags (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
   @ApiQuery({ name: 'search', required: false, description: 'Filter tags by partial match' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max tags to return (default 200, max 500)' })
   @ApiResponse({ status: 200, type: TagsResponseDto })
   listTags(
     @AdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('search') search?: string,
-    @Query('limit') limit?: string,
-  ): Promise<TagsResponseDto> {
-    return this.tagAdminService.listTags(adminUser, {
-      clientId,
-      search,
-      limit: Number(limit) || undefined,
-    });
+    @Query() params: TagPageParams = new TagPageParams(),
+  ): Promise<PaginatedResult<TagListItemDto>> {
+    return this.tagAdminService.listTags(adminUser, { clientId, search }, params);
   }
 }
 

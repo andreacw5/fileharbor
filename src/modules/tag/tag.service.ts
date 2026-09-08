@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { plainToInstance } from 'class-transformer';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   resolveAllowedClients,
   assertClientAccess,
 } from '@/modules/admin/helpers/admin-access.helper';
-import { TagsResponseDto } from './dto/tag-response.dto';
+import { paginate, PaginatedResult } from '@/common/pagination';
+import { TagListItemDto, TagPageParams } from './dto/tag-response.dto';
 
 @Injectable()
 export class TagService {
@@ -15,22 +15,22 @@ export class TagService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-
-  // ─── Tags ─────────────────────────────────────────────────────────────────
-
   /**
-   * Returns distinct tags used across images, optionally scoped by clientId
-   * and filtered by a search string.
+   * Returns tags used across images, optionally scoped by clientId and filtered
+   * by a search string, ordered by name.
+   *
+   * Tags are stored per client (`@@unique([clientId, name])`), so a query that
+   * spans several accessible clients can return the same name more than once —
+   * one row per client, each with its own count.
    */
   async listTags(
     admin: AdminJwtPayload,
-    filters: { clientId?: string; search?: string; limit?: number } = {},
-  ): Promise<TagsResponseDto> {
+    filters: { clientId?: string; search?: string } = {},
+    params: TagPageParams = new TagPageParams(),
+  ): Promise<PaginatedResult<TagListItemDto>> {
     this.logger.log(
-      `listTags called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" limit=${filters.limit ?? 200}`,
+      `listTags called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" page=${params.page} limit=${params.limit}`,
     );
-
-    const limit = Math.min(filters.limit || 200, 500);
 
     const where: Record<string, any> = {};
 
@@ -45,39 +45,30 @@ export class TagService {
     }
 
     if (filters.search) {
-      where.name = {
-        contains: filters.search,
-        mode: 'insensitive',
-      };
+      where.name = { contains: filters.search, mode: 'insensitive' };
     }
 
-    const rows = await this.prisma.tag.findMany({
-      where,
-      orderBy: {
-        name: 'asc',
-      },
-      take: limit,
-      select: {
-        name: true,
-        _count: {
-          select: {
-            imageTags: true,
-          },
+    const [rows, total] = await Promise.all([
+      this.prisma.tag.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip: params.skip,
+        take: params.limit,
+        select: {
+          name: true,
+          _count: { select: { imageTags: true } },
         },
-      },
-    });
+      }),
+      this.prisma.tag.count({ where }),
+    ]);
 
-    const tags = rows.map((row) => ({
+    const data: TagListItemDto[] = rows.map((row) => ({
       name: row.name,
       imageCount: row._count.imageTags,
     }));
-    this.logger.debug(`listTags returned ${tags.length} distinct tags`);
 
-    return plainToInstance(
-      TagsResponseDto,
-      { tags, total: tags.length },
-      { excludeExtraneousValues: true },
-    );
+    this.logger.debug(`listTags returned ${data.length} of ${total} tags (page ${params.page})`);
+
+    return paginate(data, total, params);
   }
 }
-
