@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { StatusController } from './status.controller';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from "@nestjs/throttler";
 import { ScheduleModule } from "@nestjs/schedule";
@@ -14,13 +13,13 @@ import { VideoModule } from "@/modules/video/video.module";
 import { StatisticsModule } from "@/modules/statistics/statistics.module";
 import { UserModule } from "@/modules/user/user.module";
 import { TagModule } from "@/modules/tag/tag.module";
+import { HealthModule } from "@/modules/health/health.module";
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '@/configs/config.validation';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { RouteHelperModule } from '@/utils/route.utils';
 
 @Module({
-    controllers: [StatusController],
     imports: [
         // Configuration
         ConfigModule.forRoot({
@@ -59,6 +58,7 @@ import { RouteHelperModule } from '@/utils/route.utils';
         AlbumModule,
         UserModule,
         RouteHelperModule,
+        HealthModule,
 
         // Video module
         VideoModule,
