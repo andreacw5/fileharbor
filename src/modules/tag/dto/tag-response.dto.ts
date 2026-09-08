@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { PageParams } from '@/common/pagination';
 
 export class TagListItemDto {
@@ -11,7 +11,14 @@ export class TagListItemDto {
   imageCount: number;
 }
 
-/** Tag pages are wider than default: they feed autocompletes. */
+/**
+ * Tag pages are wider than default: they feed autocompletes.
+ *
+ * The filters live here rather than on separate `@Query('clientId')` params
+ * because the global ValidationPipe runs with `forbidNonWhitelisted: true`: a
+ * `@Query()` bound to a DTO is validated against the *whole* query string, so
+ * any field this class does not declare is rejected with a 400.
+ */
 export class TagPageParams extends PageParams {
   @ApiPropertyOptional({ minimum: 1, maximum: 500, default: 200 })
   @IsOptional()
@@ -20,6 +27,16 @@ export class TagPageParams extends PageParams {
   @Min(1)
   @Max(500)
   limit: number = 200;
+
+  @ApiPropertyOptional({ description: 'Scope to a specific client' })
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tags by partial match' })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 class TagMetaDto {

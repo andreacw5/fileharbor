@@ -9,7 +9,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { TagService } from './tag.service';
 import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
@@ -27,16 +26,16 @@ export class TagController {
   @UseGuards(AdminJwtGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List image tags (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
-  @ApiQuery({ name: 'search', required: false, description: 'Filter tags by partial match' })
   @ApiResponse({ status: 200, type: TagsResponseDto })
   listTags(
     @AdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
     @Query() params: TagPageParams = new TagPageParams(),
   ): Promise<PaginatedResult<TagListItemDto>> {
-    return this.tagAdminService.listTags(adminUser, { clientId, search }, params);
+    return this.tagAdminService.listTags(
+      adminUser,
+      { clientId: params.clientId, search: params.search },
+      params,
+    );
   }
 }
 
