@@ -47,19 +47,21 @@ describe('TagService', () => {
     service = module.get<TagService>(TagService);
   });
 
-  it('returns tag items with image counts', async () => {
+  it('returns tag items with their client and both counts', async () => {
     mockPrismaService.tag.findMany.mockResolvedValue([
       {
+        id: 'tag-1',
         name: 'nature',
-        _count: {
-          imageTags: 3,
-        },
+        clientId: 'client-a',
+        client: { id: 'client-a', name: 'Acme', domain: 'acme.test' },
+        _count: { imageTags: 3, videoTags: 2 },
       },
       {
+        id: 'tag-2',
         name: 'travel',
-        _count: {
-          imageTags: 1,
-        },
+        clientId: 'client-a',
+        client: { id: 'client-a', name: 'Acme', domain: null },
+        _count: { imageTags: 1, videoTags: 0 },
       },
     ]);
     mockPrismaService.tag.count.mockResolvedValue(2);
@@ -79,10 +81,14 @@ describe('TagService', () => {
       skip: 0,
       take: 100,
       select: {
+        id: true,
         name: true,
+        clientId: true,
+        client: { select: { id: true, name: true, domain: true } },
         _count: {
           select: {
             imageTags: true,
+            videoTags: true,
           },
         },
       },
@@ -90,11 +96,54 @@ describe('TagService', () => {
 
     expect(result).toEqual({
       data: [
-        { name: 'nature', imageCount: 3 },
-        { name: 'travel', imageCount: 1 },
+        {
+          id: 'tag-1',
+          name: 'nature',
+          clientId: 'client-a',
+          client: { id: 'client-a', name: 'Acme', domain: 'acme.test' },
+          imageCount: 3,
+          videoCount: 2,
+        },
+        {
+          id: 'tag-2',
+          name: 'travel',
+          clientId: 'client-a',
+          // A null domain becomes undefined, so the field is simply absent.
+          client: { id: 'client-a', name: 'Acme', domain: undefined },
+          imageCount: 1,
+          videoCount: 0,
+        },
       ],
       meta: { page: 1, limit: 100, total: 2, totalPages: 1 },
     });
+  });
+
+  it('keeps same-named rows from different clients distinct', async () => {
+    mockPrismaService.tag.findMany.mockResolvedValue([
+      {
+        id: 'tag-a',
+        name: 'nature',
+        clientId: 'client-a',
+        client: { id: 'client-a', name: 'Acme', domain: null },
+        _count: { imageTags: 3, videoTags: 0 },
+      },
+      {
+        id: 'tag-b',
+        name: 'nature',
+        clientId: 'client-b',
+        client: { id: 'client-b', name: 'Globex', domain: null },
+        _count: { imageTags: 9, videoTags: 1 },
+      },
+    ]);
+    mockPrismaService.tag.count.mockResolvedValue(2);
+
+    const result = await service.listTags(adminUser);
+
+    // Same name, two rows: the counts stay per client rather than being summed.
+    expect(result.data.map((t) => [t.name, t.clientId, t.imageCount])).toEqual([
+      ['nature', 'client-a', 3],
+      ['nature', 'client-b', 9],
+    ]);
   });
 
   it('defaults to the first page of 200', async () => {
