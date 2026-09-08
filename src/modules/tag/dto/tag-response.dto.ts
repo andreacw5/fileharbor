@@ -1,24 +1,38 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Expose, Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { PageParams } from '@/common/pagination';
 
 export class TagListItemDto {
   @ApiProperty({ description: 'Tag name', example: 'nature' })
-  @Expose()
   name: string;
 
   @ApiProperty({ description: 'Number of images associated with this tag', example: 42 })
-  @Expose()
   imageCount: number;
 }
 
-export class TagsResponseDto {
-  @ApiProperty({ description: 'List of distinct tags used across images', type: [TagListItemDto] })
-  @Expose()
-  @Type(() => TagListItemDto)
-  tags: TagListItemDto[];
-
-  @ApiProperty({ description: 'Total number of distinct tags returned' })
-  @Expose()
-  total: number;
+/** Tag pages are wider than default: they feed autocompletes. */
+export class TagPageParams extends PageParams {
+  @ApiPropertyOptional({ minimum: 1, maximum: 500, default: 200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit: number = 200;
 }
 
+class TagMetaDto {
+  @ApiProperty() total: number;
+  @ApiProperty() page: number;
+  @ApiProperty() limit: number;
+  @ApiProperty() totalPages: number;
+}
+
+export class TagsResponseDto {
+  @ApiProperty({ type: [TagListItemDto] })
+  data: TagListItemDto[];
+
+  @ApiProperty({ type: TagMetaDto })
+  meta: TagMetaDto;
+}

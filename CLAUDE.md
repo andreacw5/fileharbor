@@ -90,6 +90,7 @@ Two modules cooperate:
 
 - `src/modules/admin-auth/` — auth: controller, service, guard, decorator
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`, `admin/albums`, `admin/users`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
+- `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`: scoped totals, a 7-day trend and a per-day chart. `totalStorage` sums image bytes only.
 
 ### Auth flow
 

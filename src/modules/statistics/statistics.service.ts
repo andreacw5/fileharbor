@@ -8,6 +8,7 @@ import {
 } from '@/modules/admin/dto/admin-response.dto';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { buildClientWhere } from '@/modules/admin/helpers/admin-access.helper';
+import { APP_VERSION } from '@/common/version';
 
 @Injectable()
 export class StatisticsService {
@@ -67,6 +68,7 @@ export class StatisticsService {
     return plainToInstance(
       AdminStatsResponseDto,
       {
+        version: APP_VERSION,
         totalClients,
         totalImages,
         totalAvatars,

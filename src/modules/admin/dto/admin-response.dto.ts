@@ -48,6 +48,9 @@ export class StatsTrendDto {
 }
 
 export class AdminStatsResponseDto {
+  @ApiProperty({ description: 'FileHarbor version', example: '2.6.3' })
+  @Expose()
+  version: string;
   @ApiProperty() @Expose() totalClients: number;
   @ApiProperty() @Expose() totalImages: number;
   @ApiProperty() @Expose() totalAvatars: number;
