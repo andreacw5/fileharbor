@@ -84,7 +84,11 @@ export class AlbumService {
           size: item.image.size,
           tags: item.image.imageTags?.map((t: any) => t.tag.name) ?? [],
           fullPath: this.route.fullUrl('images', item.image.id),
-          thumbnailPath: this.route.fullUrl('images', item.image.id, 'thumb'),
+          // The thumbnail is a query on the unified image route, not a path
+          // segment: `image.controller.ts` declares only `@Get()` and
+          // `@Get(':imageId')`, so `/images/:id/thumb` is a 404. Appended as a
+          // string rather than passed to `fullUrl`, which joins with `/`.
+          thumbnailPath: `${this.route.fullUrl('images', item.image.id)}?thumb=true`,
         },
       };
     }
