@@ -16,12 +16,17 @@ export class TagService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Returns tags used across images, optionally scoped by clientId and filtered
-   * by a search string, ordered by name.
+   * Returns tags, optionally scoped by clientId and filtered by a search string,
+   * ordered by name.
    *
    * Tags are stored per client (`@@unique([clientId, name])`), so a query that
    * spans several accessible clients can return the same name more than once —
-   * one row per client, each with its own count.
+   * one row per client, each with its own counts. Rows carry their `client` so
+   * those repeats stay distinguishable; merging them by name would mean summing
+   * the counts and dropping the client, which is a different endpoint.
+   *
+   * Counts cover both images and videos: a tag applied only to videos is a real
+   * tag, and reporting it as `imageCount: 0` alone reads as broken data.
    */
   async listTags(
     admin: AdminJwtPayload,
@@ -55,16 +60,25 @@ export class TagService {
         skip: params.skip,
         take: params.limit,
         select: {
+          id: true,
           name: true,
-          _count: { select: { imageTags: true } },
+          clientId: true,
+          client: { select: { id: true, name: true, domain: true } },
+          _count: { select: { imageTags: true, videoTags: true } },
         },
       }),
       this.prisma.tag.count({ where }),
     ]);
 
     const data: TagListItemDto[] = rows.map((row) => ({
+      id: row.id,
       name: row.name,
+      clientId: row.clientId,
+      client: row.client
+        ? { id: row.client.id, name: row.client.name, domain: row.client.domain ?? undefined }
+        : undefined,
       imageCount: row._count.imageTags,
+      videoCount: row._count.videoTags,
     }));
 
     this.logger.debug(`listTags returned ${data.length} of ${total} tags (page ${params.page})`);

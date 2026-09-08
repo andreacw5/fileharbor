@@ -3,12 +3,35 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { PageParams } from '@/common/pagination';
 
+export class TagTagClientDto {
+  @ApiProperty() id: string;
+  @ApiProperty() name: string;
+  @ApiPropertyOptional() domain?: string;
+}
+
 export class TagListItemDto {
+  @ApiProperty({ description: 'Tag row id' })
+  id: string;
+
   @ApiProperty({ description: 'Tag name', example: 'nature' })
   name: string;
 
+  @ApiProperty({ description: 'Client this tag row belongs to' })
+  clientId: string;
+
+  /**
+   * A tag is unique per `(clientId, name)`, so a query spanning several clients
+   * returns the same name once per client. Without this the rows are
+   * indistinguishable.
+   */
+  @ApiPropertyOptional({ type: TagTagClientDto })
+  client?: TagTagClientDto;
+
   @ApiProperty({ description: 'Number of images associated with this tag', example: 42 })
   imageCount: number;
+
+  @ApiProperty({ description: 'Number of videos associated with this tag', example: 3 })
+  videoCount: number;
 }
 
 /**
