@@ -5,6 +5,7 @@ import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
 import * as cookieParser from 'cookie-parser';
+import { APP_VERSION } from '@/common/version';
 
 async function bootstrap() {
   try {
@@ -42,7 +43,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle('FileHarbor 2.0')
       .setDescription('Multi-tenant image management system API')
-      .setVersion(process?.env?.npm_package_version || '2.0.0')
+      .setVersion(APP_VERSION)
       .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
       .addBearerAuth()
       .setBasePath(apiPrefix ? `/${apiPrefix}` : '/')
