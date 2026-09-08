@@ -33,6 +33,9 @@ export const configValidationSchema = Joi.object({
   // Video Processing
   MAX_VIDEO_SIZE: Joi.number().positive().default(524288000),
   VIDEO_THUMBNAIL_QUALITY: Joi.number().min(1).max(100).default(80),
+  // Only enable behind an nginx that serves the `/internal-videos/` internal
+  // location; otherwise video responses come back empty.
+  VIDEO_X_ACCEL_REDIRECT: Joi.boolean().default(false),
 
   // Admin
   ADMIN_SECRET: Joi.string().required(),
