@@ -165,6 +165,43 @@ BASTION_TENANT_SLUG=                        # optional default tenant
 ADMIN_ACCEPTED_APP_SLUGS=fileharbor,meridian  # empty → BASTION_APP_SLUG only
 ```
 
+## Self-Service Module (`/me`)
+
+Separate from `admin/` — lets a Bastion-authenticated **end user** (not a console admin) manage their own
+avatar. `src/modules/me/` (`me.module.ts`, `me.controller.ts`, `me.service.ts`, `dto/`).
+
+### Guard: `BastionUserJwtGuard`
+
+`admin-auth/guards/bastion-user-jwt.guard.ts` verifies the Bastion user JWT the same way `AdminJwtGuard`
+does — signature against JWKS, `appSlug` in `ADMIN_ACCEPTED_APP_SLUGS` — but **does not** require a local
+`AdminUser` row. The shared verification (JWKS fetch/cache, RS256 verify, `appSlug` check) lives in
+`admin-auth/bastion-token-verifier.service.ts` (`BastionTokenVerifier`), injected by both guards so they
+can't drift apart. `BastionUserJwtGuard` attaches `request.bastionUser` (`sub`, `tenantId`, `tenantSlug`,
+`appSlug`, `email`, `username`) — read it with the `@BastionUser()` decorator
+(`admin-auth/decorators/bastion-user.decorator.ts`). Never reuse `BastionUserJwtGuard` for admin/console
+routes — it grants no role/permission check, only "this is *some* verified Bastion user of an accepted app".
+
+### `Client.bastionTenantSlug` — the tenant → client mapping
+
+Self-service endpoints resolve which FileHarbor `Client` owns the caller's data by looking up
+`Client.bastionTenantSlug` (nullable, `@unique`) against the token's `tenantSlug`. Bastion tenant slugs are
+immutable, so this is a safe join key. A tenant with **no** mapped client (e.g. a "personal" tenant with no
+dedicated FileHarbor client) never gets self-service avatars — there's no silent fallback to a default
+client. Set the mapping via `PATCH /admin/clients/:id` (`bastionTenantSlug`, admin-only, lowercase slug,
+`null`/`""` clears it); a slug already mapped to another client responds `409 Conflict`.
+
+### `GET/PUT/DELETE /me/avatar`
+
+- `GET /me/avatar` → `{ enabled, avatar }`. `enabled` reflects only whether the tenant has a mapped
+  **active** client — `avatar` is `null` (not a 404) when the mapping exists but the user hasn't uploaded
+  one yet.
+- `PUT /me/avatar` (multipart, field `file`, PNG/JPEG/WebP/GIF, 5 MB limit) and `DELETE /me/avatar` both
+  resolve the client first and respond `422 UnprocessableEntityException` ("No FileHarbor client mapped to
+  this tenant") when unmapped or inactive — **before** touching `AvatarService`.
+- `externalUserId` passed to `AvatarService` is always the verified token `sub`. It is never read from the
+  request body or a header — unlike the client-key `POST /avatars`, which trusts `externalUserId` from the
+  form body because the caller there is a trusted service, not an end user.
+
 ## Naming Conventions
 
 - Files: `kebab-case` (e.g., `album.service.ts`)

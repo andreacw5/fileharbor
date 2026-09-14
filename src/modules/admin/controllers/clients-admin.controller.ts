@@ -78,6 +78,7 @@ export class ClientsAdminController {
     if ('tinifyApiKey' in dto) data.tinifyApiKey = dto.tinifyApiKey ?? null;
     if (dto.currentTinifyUsage !== undefined) data.currentTinifyUsage = dto.currentTinifyUsage;
     if (dto.currentTinifyLimit !== undefined) data.currentTinifyLimit = dto.currentTinifyLimit;
+    if ('bastionTenantSlug' in dto) data.bastionTenantSlug = dto.bastionTenantSlug ?? null;
 
     const updated = await this.clientService.updateClientWithStats(id, data);
     this.logger.log(`[Admin] Client updated: ${id}`);

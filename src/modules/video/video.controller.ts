@@ -16,6 +16,7 @@ import {
   UploadedFile,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -70,6 +71,7 @@ export class VideoController {
   constructor(
     private readonly videoService: VideoService,
     private readonly storageService: StorageService,
+    private readonly config: ConfigService,
   ) {}
 
   @Post('upload')
@@ -174,7 +176,10 @@ export class VideoController {
       ? `attachment; filename="${safeName}"`
       : `inline; filename="${safeName}"`;
 
-    if (process.env.NODE_ENV === 'production') {
+    // See the admin stream route: X-Accel-Redirect sends an empty body and only
+    // works behind an nginx declaring the `/internal-videos/` internal location,
+    // so it is opt-in rather than inferred from NODE_ENV.
+    if (this.config.get<boolean>('video.xAccelRedirect')) {
       if (video.storagePath.includes('..') || video.storagePath.startsWith('/')) {
         throw new ForbiddenException('Invalid storage path');
       }

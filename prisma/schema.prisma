@@ -31,6 +31,11 @@ model Client {
   currentTinifyUsage Int     @default(0) // Track current month's usage for billing purposes
   currentTinifyLimit Int     @default(500) // Monthly compression limit (default: 500 for free tier)
 
+  // Bastion tenant this client is mapped to for self-service (user-JWT) endpoints,
+  // e.g. /me/avatar. Bastion tenant slugs are immutable, so this is a safe key.
+  // null = no mapping — that tenant has no self-service FileHarbor client (e.g. "personal").
+  bastionTenantSlug String? @unique
+
   // Relations
   users   User[]
   images  Image[]

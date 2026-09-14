@@ -1,4 +1,5 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
 import { GlobalStatsResponseDto } from './dto/global-stats-response.dto';
@@ -223,11 +224,22 @@ export class ClientService {
    * Update arbitrary client fields and return the enriched result (admin use).
    */
   async updateClientWithStats(clientId: string, data: Record<string, any>) {
-    const updated = await this.prisma.client.update({
-      where: { id: clientId },
-      data,
-      include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
-    });
+    let updated;
+    try {
+      updated = await this.prisma.client.update({
+        where: { id: clientId },
+        data,
+        include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = (error.meta?.target as string[] | undefined) ?? [];
+        if (target.includes('bastionTenantSlug')) {
+          throw new ConflictException('Tenant slug already mapped to another client');
+        }
+      }
+      throw error;
+    }
 
     const storageAgg = await this.prisma.image.aggregate({
       where: { clientId },

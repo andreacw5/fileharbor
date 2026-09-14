@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.7.0] – 2026-09-14
+
+### Added
+- **Self-service avatars (`/me/avatar`)** – Bastion user-JWT endpoints so Meridian console users can manage
+  their own avatar without an API key.
+  - `GET /me/avatar` – `{ enabled, avatar }`; `avatar` is `null` (not a 404) when none uploaded yet.
+  - `PUT /me/avatar` – multipart `file` field (PNG/JPEG/WebP/GIF, 5 MB limit) → `AvatarResponseDto`.
+  - `DELETE /me/avatar` – deletes the caller's own avatar.
+  - `externalUserId` is always the verified token `sub`, never taken from body/headers.
+  - `BastionUserJwtGuard` (new) – verifies the Bastion user JWT (signature + `appSlug`) but, unlike
+    `AdminJwtGuard`, does **not** require a local `AdminUser` row. Token verification itself was extracted
+    into a shared `BastionTokenVerifier` used by both guards.
+- `Client.bastionTenantSlug` (nullable, unique) – explicit mapping from a Bastion tenant slug to the
+  FileHarbor client that owns its self-service data. A tenant with no mapping (e.g. a "personal" client)
+  never gets self-service avatars — `/me/avatar` responds `422` for `PUT`/`DELETE`, and `enabled: false` for `GET`.
+  Settable via `PATCH /admin/clients/:id` (`bastionTenantSlug`, admin-only); a duplicate mapping responds `409`.
+
+### Changed
+- `AdminClientResponseDto` (admin client list/show) now includes `bastionTenantSlug`.
+
+---
+
 ## [2.2.3] – 2026-04-23
 
 ### Added

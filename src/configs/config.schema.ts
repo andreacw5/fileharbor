@@ -31,6 +31,13 @@ export default () => ({
   video: {
     maxVideoSize: parseInt(process.env.MAX_VIDEO_SIZE, 10) || 524288000,
     thumbnailQuality: parseInt(process.env.VIDEO_THUMBNAIL_QUALITY, 10) || 80,
+    // Hand video delivery to nginx via X-Accel-Redirect instead of streaming it
+    // from Node. Opt-in, and off by default: it only works behind an nginx that
+    // declares the `/internal-videos/` internal location. Anywhere else the
+    // response is headers with an empty body, and players report the file as an
+    // unsupported format. This used to be keyed off NODE_ENV, which says nothing
+    // about whether such an nginx is actually in front of the service.
+    xAccelRedirect: process.env.VIDEO_X_ACCEL_REDIRECT === 'true',
   },
 
   // Rate Limiting

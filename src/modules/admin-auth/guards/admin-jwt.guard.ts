@@ -1,30 +1,7 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
-import * as crypto from 'crypto';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-
-export interface BastionJwtPayload {
-  sub: string;
-  tenantId: string;
-  tenantSlug: string;
-  email: string;
-  username?: string;
-  image?: string;
-  preferredLocale?: string;
-  appSlug: string;
-  role: string;
-  permissions: string[];
-  iat: number;
-  exp: number;
-}
+import { BastionTokenVerifier, BastionJwtPayload } from '../bastion-token-verifier.service';
 
 export interface AdminJwtPayload {
   // From Bastion JWT
@@ -43,60 +20,16 @@ export interface AdminJwtPayload {
   allowedClientIds: string[];
 }
 
-interface JwksCache {
-  keys: crypto.KeyObject[];
-  expiresAt: number;
-}
-
-const JWKS_TTL_MS = 60 * 60 * 1000; // 1 hour
-
 @Injectable()
 export class AdminJwtGuard implements CanActivate {
-  private jwksCache: JwksCache | null = null;
-
-  /**
-   * App slugs whose Bastion-issued user tokens this service accepts.
-   *
-   * FileHarbor has no admin UI of its own — the console lives in Meridian, which
-   * signs its users in against Bastion with its own `appSlug`. Accepting a list
-   * lets one deployment serve several front-ends (Meridian plus any future one)
-   * without each needing a separate FileHarbor app registration in Bastion.
-   *
-   * Defaults to `BASTION_APP_SLUG` alone, so an unset variable keeps the previous
-   * single-slug behaviour rather than silently widening what is accepted.
-   */
-  private readonly acceptedAppSlugs: string[];
-
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
+    private readonly tokenVerifier: BastionTokenVerifier,
     private readonly prisma: PrismaService,
-  ) {
-    const configured = this.config.get<string>('adminAcceptedAppSlugs') ?? '';
-    const parsed = configured
-      .split(',')
-      .map((slug) => slug.trim())
-      .filter(Boolean);
-
-    this.acceptedAppSlugs = parsed.length
-      ? parsed
-      : [this.config.get<string>('bastionAppSlug') ?? 'fileharbor'];
-  }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const authHeader = request.headers['authorization'];
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid Authorization header');
-    }
-
-    const token = authHeader.substring(7);
-    const bastionPayload = await this.verifyToken(token);
-
-    if (!this.acceptedAppSlugs.includes(bastionPayload.appSlug)) {
-      throw new UnauthorizedException('Invalid app context');
-    }
+    const bastionPayload = await this.tokenVerifier.verifyAuthHeader(request.headers['authorization']);
 
     const adminUser = await this.prisma.adminUser.findUnique({
       where: { bastionUserId: bastionPayload.sub },
@@ -122,7 +55,7 @@ export class AdminJwtGuard implements CanActivate {
       allowedClientIds: adminUser.clientAccess.map((a) => a.clientId),
     } satisfies AdminJwtPayload;
 
-    // 5.6: fire-and-forget UserCache upsert — keeps Bastion profile data fresh
+    // fire-and-forget UserCache upsert — keeps cached Bastion profile data fresh
     this.upsertUserCache(bastionPayload).catch(() => undefined);
 
     return true;
@@ -143,59 +76,5 @@ export class AdminJwtGuard implements CanActivate {
         image: payload.image ?? null,
       },
     });
-  }
-
-  private async verifyToken(token: string): Promise<BastionJwtPayload> {
-    let lastAttemptWasRetry = false;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        if (attempt === 1) this.jwksCache = null; // force re-fetch on retry (key rotation)
-        const pem = await this.getPublicKeyPem();
-        return this.jwtService.verify<BastionJwtPayload>(token, {
-          secret: pem,
-          algorithms: ['RS256'],
-        });
-      } catch (error) {
-        lastAttemptWasRetry = attempt === 1;
-        if ((error as any)?.name === 'TokenExpiredError') break;
-      }
-    }
-    void lastAttemptWasRetry;
-    throw new UnauthorizedException('Invalid or expired token');
-  }
-
-  private async getPublicKeyPem(): Promise<string> {
-    const now = Date.now();
-    if (this.jwksCache && this.jwksCache.expiresAt > now) {
-      return this.keysToPem(this.jwksCache.keys);
-    }
-
-    const bastionUrl = this.config.get<string>('bastionUrl');
-    let response: Response;
-    try {
-      response = await fetch(`${bastionUrl}/.well-known/jwks.json`);
-    } catch {
-      throw new ServiceUnavailableException('Authentication service unreachable');
-    }
-
-    if (!response.ok) {
-      throw new ServiceUnavailableException('Authentication service unavailable');
-    }
-
-    const { keys: rawKeys } = (await response.json()) as { keys: JsonWebKey[] };
-    const keys = rawKeys
-      .filter((k) => k.use === 'sig' && k.kty === 'RSA')
-      .map((k) => crypto.createPublicKey({ key: k as crypto.JsonWebKeyInput['key'], format: 'jwk' }));
-
-    if (keys.length === 0) {
-      throw new ServiceUnavailableException('No valid signing keys found in JWKS');
-    }
-
-    this.jwksCache = { keys, expiresAt: now + JWKS_TTL_MS };
-    return this.keysToPem(keys);
-  }
-
-  private keysToPem(keys: crypto.KeyObject[]): string {
-    return keys[0].export({ type: 'spki', format: 'pem' }) as string;
   }
 }

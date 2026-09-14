@@ -9,6 +9,7 @@ import { ImageModule } from "@/modules/image/image.module";
 import { AvatarModule } from "@/modules/avatar/avatar.module";
 import { AlbumModule } from "@/modules/album/album.module";
 import { AdminModule } from "@/modules/admin/admin.module";
+import { MeModule } from "@/modules/me/me.module";
 import { VideoModule } from "@/modules/video/video.module";
 import { StatisticsModule } from "@/modules/statistics/statistics.module";
 import { UserModule } from "@/modules/user/user.module";
@@ -67,6 +68,9 @@ import { RouteHelperModule } from '@/utils/route.utils';
         AdminModule,
         StatisticsModule,
         TagModule,
+
+        // Self-service (Bastion user JWT) module
+        MeModule,
     ],
 })
 export class AppModule {}

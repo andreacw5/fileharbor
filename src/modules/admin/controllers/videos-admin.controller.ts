@@ -17,6 +17,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
@@ -66,6 +67,7 @@ export class VideosAdminController {
     private readonly videoService: VideoService,
     private readonly storage: StorageService,
     private readonly route: RouteHelperService,
+    private readonly config: ConfigService,
   ) {}
 
   @Post()
@@ -285,7 +287,11 @@ export class VideosAdminController {
       ? `attachment; filename="${safeName}"`
       : `inline; filename="${safeName}"`;
 
-    if (process.env.NODE_ENV === 'production') {
+    // Opt-in, not NODE_ENV: X-Accel-Redirect delegates delivery to nginx and
+    // sends an empty body, which only works behind an nginx that declares the
+    // `/internal-videos/` internal location. Everywhere else the caller gets
+    // `video/mp4` with zero bytes and the player reports an unsupported format.
+    if (this.config.get<boolean>('video.xAccelRedirect')) {
       if ((video as any).storagePath.includes('..') || (video as any).storagePath.startsWith('/')) {
         throw new ForbiddenException('Invalid storage path');
       }

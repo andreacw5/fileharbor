@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ClientService } from './client.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
@@ -39,12 +40,16 @@ describe('ClientService', () => {
     client: {
       findUnique: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     },
     user: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
       create: jest.fn(),
       count: jest.fn(),
+    },
+    image: {
+      aggregate: jest.fn(),
     },
   };
 
@@ -377,6 +382,57 @@ describe('ClientService', () => {
 
       // Should be at least 60 characters
       expect(apiKey.length).toBeGreaterThanOrEqual(60);
+    });
+  });
+
+  describe('updateClientWithStats', () => {
+    const updatedClient = {
+      ...mockClient,
+      bastionTenantSlug: 'heyatom',
+      _count: { images: 0, avatars: 0, albums: 0, videos: 0 },
+    };
+
+    it('updates the client and returns it enriched with stats', async () => {
+      mockPrismaService.client.update.mockResolvedValue(updatedClient);
+      mockPrismaService.image.aggregate.mockResolvedValue({ _sum: { size: 1024 } });
+
+      const result = await service.updateClientWithStats('client-123', {
+        bastionTenantSlug: 'heyatom',
+      });
+
+      expect(mockPrismaService.client.update).toHaveBeenCalledWith({
+        where: { id: 'client-123' },
+        data: { bastionTenantSlug: 'heyatom' },
+        include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
+      });
+      expect(result.bastionTenantSlug).toBe('heyatom');
+      expect(result.totalStorage).toBe(1024);
+    });
+
+    it('maps a bastionTenantSlug unique constraint violation to a ConflictException', async () => {
+      mockPrismaService.client.update.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (`bastionTenantSlug`)', {
+          code: 'P2002',
+          clientVersion: '7.10.0',
+          meta: { target: ['bastionTenantSlug'] },
+        }),
+      );
+
+      await expect(
+        service.updateClientWithStats('client-123', { bastionTenantSlug: 'heyatom' }),
+      ).rejects.toThrow(new ConflictException('Tenant slug already mapped to another client'));
+    });
+
+    it('rethrows unrelated Prisma errors unchanged', async () => {
+      const otherError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: '7.10.0',
+      });
+      mockPrismaService.client.update.mockRejectedValue(otherError);
+
+      await expect(service.updateClientWithStats('client-123', { name: 'New name' })).rejects.toBe(
+        otherError,
+      );
     });
   });
 });

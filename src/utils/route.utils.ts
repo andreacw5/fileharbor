@@ -26,7 +26,12 @@ export function buildRoutePath(
  *
  *   this.route.path('images', id)            // → '/v2/images/123'
  *   this.route.fullUrl('images', id)         // → 'https://cdn.example.com/v2/images/123'
- *   this.route.fullUrl('images', id, '?thumb=true')  // append query manually if needed
+ *
+ * Segments are joined with `/`, so a query string cannot be passed as one —
+ * `fullUrl('images', id, '?thumb=true')` yields `.../images/123/?thumb=true`.
+ * Append it to the result instead:
+ *
+ *   `${this.route.fullUrl('images', id)}?thumb=true`
  */
 @Injectable()
 export class RouteHelperService {

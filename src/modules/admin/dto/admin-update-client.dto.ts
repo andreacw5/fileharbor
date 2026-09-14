@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUrl, MaxLength, IsInt, Min } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUrl, Matches, MaxLength, IsInt, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class AdminUpdateClientDto {
   @ApiPropertyOptional({ description: 'Client display name' })
@@ -44,5 +45,20 @@ export class AdminUpdateClientDto {
   @IsInt()
   @Min(1)
   currentTinifyLimit?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar. ' +
+      'Set to null (or an empty string) to remove the mapping — a client without one never gets self-service avatars.',
+    example: 'heyatom',
+    nullable: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
+  @IsString()
+  @Matches(/^[a-z0-9][a-z0-9-]{0,62}$/, {
+    message: 'bastionTenantSlug must be a lowercase slug (letters, digits and hyphens, starting with a letter or digit)',
+  })
+  bastionTenantSlug?: string | null;
 }
 

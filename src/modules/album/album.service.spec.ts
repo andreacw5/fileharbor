@@ -810,6 +810,85 @@ describe('AlbumService', () => {
 
   // ---------------------------------------------------------------------------
 
+  describe('listAlbumItems', () => {
+    it('builds the image thumbnail as a query on the unified image route', async () => {
+      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
+      mockPrismaService.$transaction.mockResolvedValue([
+        [
+          {
+            id: 'album-item-123',
+            resourceType: AlbumResourceType.IMAGE,
+            order: 0,
+            addedAt: new Date('2024-01-01'),
+            image: {
+              id: mockImageId,
+              originalName: 'test.jpg',
+              mimeType: 'image/jpeg',
+              width: 1920,
+              height: 1080,
+              size: 1024000,
+              imageTags: [],
+            },
+          },
+        ],
+        1,
+      ]);
+
+      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
+        page: 1,
+        perPage: 20,
+      });
+
+      // mapAlbumItem returns a union whose base variant carries neither image
+      // nor video, so the payload is narrowed here rather than in the assertion.
+      const { image } = result.data[0] as { image: { fullPath: string; thumbnailPath: string } };
+
+      // `/images/:id/thumb` does not exist — image.controller.ts declares only
+      // `@Get()` and `@Get(':imageId')`, and the thumbnail is a query on it.
+      expect(image.thumbnailPath).toBe(
+        `http://localhost:3000/v2/images/${mockImageId}?thumb=true`,
+      );
+      expect(image.fullPath).toBe(`http://localhost:3000/v2/images/${mockImageId}`);
+    });
+
+    it('keeps the video thumbnail on the path segment that does exist', async () => {
+      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
+      mockPrismaService.$transaction.mockResolvedValue([
+        [
+          {
+            id: 'album-item-456',
+            resourceType: AlbumResourceType.VIDEO,
+            order: 1,
+            addedAt: new Date('2024-01-01'),
+            video: {
+              id: mockVideoId,
+              originalName: 'test.mp4',
+              mimeType: 'video/mp4',
+              duration: 120,
+              width: 1920,
+              height: 1080,
+              size: 5000000,
+              videoTags: [],
+            },
+          },
+        ],
+        1,
+      ]);
+
+      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
+        page: 1,
+        perPage: 20,
+      });
+
+      const { video } = result.data[0] as { video: { url: string; thumbnailUrl: string } };
+
+      // Unlike images, the video controller really does declare `@Get(':id/thumb')`,
+      // so here the path segment is correct and must stay that way.
+      expect(video.url).toBe(`http://localhost:3000/v2/videos/${mockVideoId}`);
+      expect(video.thumbnailUrl).toBe(`http://localhost:3000/v2/videos/${mockVideoId}/thumb`);
+    });
+  });
+
   describe('formatAlbumResponse (via createAlbum)', () => {
     it('should include expected fields and exclude updatedAt', async () => {
       mockPrismaService.album.create.mockResolvedValue(mockAlbum);

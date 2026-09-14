@@ -17,7 +17,8 @@ import {
   AdminRefreshResponseDto,
   AdminUserResponseDto,
 } from './dto/admin-response.dto';
-import { AdminJwtPayload, BastionJwtPayload } from './guards/admin-jwt.guard';
+import { AdminJwtPayload } from './guards/admin-jwt.guard';
+import { BastionJwtPayload } from './bastion-token-verifier.service';
 
 interface BastionTokenResponse {
   accessToken: string;
