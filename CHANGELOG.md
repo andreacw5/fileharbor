@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.7.1] – 2026-09-15
+
+### Fixed
+- Fixed application startup when loading `StatisticsModule` by consuming the `AdminJwtGuard` exported by
+  `AdminAuthModule`, including its `BastionTokenVerifier` dependency.
+
+---
+
 ## [2.7.0] – 2026-09-14
 
 ### Added
@@ -202,4 +210,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [2.0.2]: https://github.com/atombolato/fileharbor/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/atombolato/fileharbor/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/atombolato/fileharbor/releases/tag/v2.0.0
-

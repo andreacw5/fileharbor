@@ -2,15 +2,12 @@ import { Module } from '@nestjs/common';
 import { StatisticsController } from './statistics.controller';
 import { StatisticsService } from './statistics.service';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule } from '@nestjs/config';
+import { AdminAuthModule } from '@/modules/admin-auth/admin-auth.module';
 
 @Module({
-  imports: [PrismaModule, ConfigModule, JwtModule.register({})],
+  imports: [PrismaModule, AdminAuthModule],
   controllers: [StatisticsController],
-  providers: [StatisticsService, AdminJwtGuard],
+  providers: [StatisticsService],
   exports: [StatisticsService],
 })
 export class StatisticsModule {}
-
