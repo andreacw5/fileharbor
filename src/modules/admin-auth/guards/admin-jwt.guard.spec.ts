@@ -2,7 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { AdminJwtGuard, BastionJwtPayload } from './admin-jwt.guard';
+import { AdminJwtGuard } from './admin-jwt.guard';
+import { BastionTokenVerifier, BastionJwtPayload } from '../bastion-token-verifier.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
 describe('AdminJwtGuard', () => {
@@ -31,6 +32,7 @@ describe('AdminJwtGuard', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminJwtGuard,
+        BastionTokenVerifier,
         { provide: JwtService, useValue: mockJwtService },
         { provide: PrismaService, useValue: mockPrismaService },
         {
@@ -53,8 +55,9 @@ describe('AdminJwtGuard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Bypass JWKS by stubbing the network-bound key fetch; slug logic is what matters here.
+    // getPublicKeyPem now lives on BastionTokenVerifier, shared with BastionUserJwtGuard.
     jest
-      .spyOn(AdminJwtGuard.prototype as any, 'getPublicKeyPem')
+      .spyOn(BastionTokenVerifier.prototype as any, 'getPublicKeyPem')
       .mockResolvedValue('pem');
     mockJwtService.verify.mockReturnValue(bastionPayload);
     mockPrismaService.adminUser.findUnique.mockResolvedValue({

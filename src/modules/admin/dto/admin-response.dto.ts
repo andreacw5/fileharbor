@@ -20,6 +20,11 @@ export class AdminClientResponseDto {
   @Expose() currentTinifyUsage: number;
   @ApiProperty({ description: 'Monthly Tinify compression limit (default: 500 for free tier)', default: 500 })
   @Expose() currentTinifyLimit: number;
+  @ApiPropertyOptional({
+    description: 'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar',
+    nullable: true,
+  })
+  @Expose() bastionTenantSlug?: string | null;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() totalImages?: number;
