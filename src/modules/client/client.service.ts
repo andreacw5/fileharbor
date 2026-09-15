@@ -79,19 +79,30 @@ export class ClientService {
   /**
    * Create a new client and ensure a default admin user exists if no users are present
    */
-  async createClient(data: { name: string; domain?: string; active?: boolean }) {
+  async createClient(data: {
+    name: string;
+    domain?: string | null;
+    active?: boolean;
+    bastionTenantSlug?: string | null;
+  }) {
     // Generate secure API key
     const apiKey = this.generateApiKey();
 
     // Create the client
-    const client = await this.prisma.client.create({
-      data: {
-        name: data.name,
-        apiKey,
-        domain: data.domain,
-        active: data.active ?? true,
-      },
-    });
+    let client;
+    try {
+      client = await this.prisma.client.create({
+        data: {
+          name: data.name,
+          apiKey,
+          domain: data.domain,
+          active: data.active ?? true,
+          bastionTenantSlug: data.bastionTenantSlug,
+        },
+      });
+    } catch (error) {
+      this.mapUniqueConstraintViolation(error);
+    }
 
     // Check if users exist for this client
     const userCount = await this.prisma.user.count({
@@ -120,6 +131,36 @@ export class ClientService {
     }
 
     return client;
+  }
+
+  /**
+   * Maps a Prisma unique-constraint violation (P2002) on a known client field to a
+   * ConflictException with a user-facing message. `meta.target` is normally a string[]
+   * of field names, but with Prisma 7 driver adapters it can also be absent or a single
+   * string (sometimes the constraint name rather than the bare field name) — handled
+   * defensively here. Any other error (or an unrecognized target) is rethrown unchanged.
+   */
+  private mapUniqueConstraintViolation(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const rawTarget = error.meta?.target;
+      const targets: string[] = Array.isArray(rawTarget)
+        ? rawTarget
+        : typeof rawTarget === 'string'
+          ? [rawTarget]
+          : [];
+
+      const messages: Record<string, string> = {
+        bastionTenantSlug: 'Tenant slug already mapped to another client',
+        domain: 'Domain already used by another client',
+      };
+
+      for (const [field, message] of Object.entries(messages)) {
+        if (targets.some((t) => t === field || t.includes(field))) {
+          throw new ConflictException(message);
+        }
+      }
+    }
+    throw error;
   }
 
   /**
@@ -232,13 +273,7 @@ export class ClientService {
         include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const target = (error.meta?.target as string[] | undefined) ?? [];
-        if (target.includes('bastionTenantSlug')) {
-          throw new ConflictException('Tenant slug already mapped to another client');
-        }
-      }
-      throw error;
+      this.mapUniqueConstraintViolation(error);
     }
 
     const storageAgg = await this.prisma.image.aggregate({

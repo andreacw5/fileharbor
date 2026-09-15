@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.8.0] – 2026-09-15
+
+### Added
+- **`POST /admin/clients`** – create a new client from the admin console (SUPER_ADMIN only; other
+  roles get `403 Forbidden`). Accepts `name` (required), `domain`, `active` and `bastionTenantSlug`
+  (all optional). Response is `AdminClientResponseDto` plus the plaintext `apiKey`, returned **only**
+  on this endpoint — every other client response masks or omits it. A `domain` or `bastionTenantSlug`
+  already used by another client responds `409 Conflict`.
+
+---
+
 ## [2.7.1] – 2026-09-15
 
 ### Fixed

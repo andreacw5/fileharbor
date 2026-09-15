@@ -1,10 +1,12 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Body,
   UseGuards,
+  ForbiddenException,
   NotFoundException,
   Logger,
 } from '@nestjs/common';
@@ -17,8 +19,9 @@ import {
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminCreateClientDto } from '../dto/admin-create-client.dto';
 import { AdminUpdateClientDto } from '../dto/admin-update-client.dto';
-import { AdminClientResponseDto } from '../dto/admin-response.dto';
+import { AdminClientResponseDto, AdminClientCreatedResponseDto } from '../dto/admin-response.dto';
 import { ClientService } from '@/modules/client/client.service';
 import { plainToInstance } from 'class-transformer';
 import { assertClientAccess, resolveAllowedClients } from '../helpers/admin-access.helper';
@@ -54,6 +57,31 @@ export class ClientsAdminController {
     const client = await this.clientService.getClientWithStats(id);
     if (!client) throw new NotFoundException('Client not found');
     return plainToInstance(AdminClientResponseDto, client, { excludeExtraneousValues: true });
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create a new client (SUPER_ADMIN only)' })
+  @ApiResponse({ status: 201, type: AdminClientCreatedResponseDto })
+  async createClient(
+    @Body() dto: AdminCreateClientDto,
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminClientCreatedResponseDto> {
+    if (adminUser.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Only SUPER_ADMIN can create clients');
+    }
+
+    const created = await this.clientService.createClient({
+      name: dto.name,
+      domain: dto.domain,
+      active: dto.active,
+      bastionTenantSlug: dto.bastionTenantSlug,
+    });
+
+    const withStats = await this.clientService.getClientWithStats(created.id);
+    this.logger.log(`[Admin] Client created: ${created.id}`);
+    return plainToInstance(AdminClientCreatedResponseDto, withStats, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Patch(':id')

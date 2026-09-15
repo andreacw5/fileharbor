@@ -188,7 +188,10 @@ Self-service endpoints resolve which FileHarbor `Client` owns the caller's data 
 immutable, so this is a safe join key. A tenant with **no** mapped client (e.g. a "personal" tenant with no
 dedicated FileHarbor client) never gets self-service avatars — there's no silent fallback to a default
 client. Set the mapping via `PATCH /admin/clients/:id` (`bastionTenantSlug`, admin-only, lowercase slug,
-`null`/`""` clears it); a slug already mapped to another client responds `409 Conflict`.
+`null`/`""` clears it), or at creation time via `POST /admin/clients` (`SUPER_ADMIN` only — every other
+role gets `403`); either way a slug already mapped to another client responds `409 Conflict`. Creation
+also enforces a unique `domain` the same way. `POST /admin/clients` is the only client response that
+ever returns the plaintext `apiKey` — every other read/update masks or omits it.
 
 ### `GET/PUT/DELETE /me/avatar`
 

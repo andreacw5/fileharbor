@@ -35,6 +35,12 @@ export class AdminClientResponseDto {
   @ApiPropertyOptional() @Expose() totalStorage?: number;
 }
 
+export class AdminClientCreatedResponseDto extends AdminClientResponseDto {
+  @ApiProperty({ description: 'Client API key — returned only on creation' })
+  @Expose()
+  apiKey: string;
+}
+
 export class DailyDataPointDto {
   @ApiProperty({ description: 'Date in YYYY-MM-DD format' }) @Expose() date: string;
   @ApiProperty() @Expose() images: number;
