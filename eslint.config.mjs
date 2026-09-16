@@ -34,13 +34,14 @@ export default [
       },
 
       parser: tsParser,
-      ecmaVersion: 5,
+      ecmaVersion: 'latest',
       sourceType: 'module',
 
       parserOptions: {
         project: 'tsconfig.json',
-        tsconfigRootDir:
-          '/Users/atombolato/Documents/Repository/Personal.nosync/fileharbor',
+        // Resolve against this config's own directory: an absolute path pinned
+        // to one machine breaks the lint everywhere else.
+        tsconfigRootDir: __dirname,
       },
     },
 

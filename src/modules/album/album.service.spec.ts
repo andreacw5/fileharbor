@@ -106,6 +106,7 @@ describe('AlbumService', () => {
     albumItem: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
+      groupBy: jest.fn(),
       upsert: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
@@ -146,6 +147,8 @@ describe('AlbumService', () => {
     service = module.get<AlbumService>(AlbumService);
     jest.clearAllMocks();
     mockWebhookService.sendWebhook.mockResolvedValue(undefined);
+    // Album listings fold in per-album item counts; no rows means zero of each.
+    mockPrismaService.albumItem.groupBy.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
