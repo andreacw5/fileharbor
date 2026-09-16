@@ -10,8 +10,13 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
 @Module({
   imports: [PrismaModule],
   controllers: [ClientController],
-  providers: [ClientService, ClientInitService, ClientInterceptor, AdminGuard, Reflector],
+  providers: [
+    ClientService,
+    ClientInitService,
+    ClientInterceptor,
+    AdminGuard,
+    Reflector,
+  ],
   exports: [ClientService],
 })
 export class ClientModule {}
-

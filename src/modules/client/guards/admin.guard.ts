@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -11,10 +16,11 @@ export class AdminGuard implements CanActivate {
     const expected = this.config.get<string>('adminSecret');
 
     if (!secret || secret !== expected) {
-      throw new UnauthorizedException('Invalid or missing admin secret (X-Admin-Secret header)');
+      throw new UnauthorizedException(
+        'Invalid or missing admin secret (X-Admin-Secret header)',
+      );
     }
 
     return true;
   }
 }
-

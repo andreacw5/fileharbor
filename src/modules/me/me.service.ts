@@ -1,7 +1,14 @@
-import { Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { AvatarService } from '@/modules/avatar/avatar.service';
-import { AvatarResponseDto, DeleteAvatarResponseDto } from '@/modules/avatar/dto';
+import {
+  AvatarResponseDto,
+  DeleteAvatarResponseDto,
+} from '@/modules/avatar/dto';
 import { Client } from '@prisma/client';
 import { MeAvatarStatusDto } from './dto';
 
@@ -32,7 +39,9 @@ export class MeService {
   private async requireClient(tenantSlug: string): Promise<Client> {
     const client = await this.resolveClient(tenantSlug);
     if (!client) {
-      throw new UnprocessableEntityException('No FileHarbor client mapped to this tenant');
+      throw new UnprocessableEntityException(
+        'No FileHarbor client mapped to this tenant',
+      );
     }
     return client;
   }
@@ -49,7 +58,10 @@ export class MeService {
 
     try {
       const avatar = await this.avatarService.getAvatarByExternalUserId(sub);
-      return { enabled: true, avatar: this.avatarService.getAvatarMetadata(avatar, sub) };
+      return {
+        enabled: true,
+        avatar: this.avatarService.getAvatarMetadata(avatar, sub),
+      };
     } catch {
       // No user record yet, or no avatar uploaded — not an error for a status check.
       return { enabled: true, avatar: null };
@@ -62,13 +74,20 @@ export class MeService {
     file: Express.Multer.File,
   ): Promise<AvatarResponseDto> {
     const client = await this.requireClient(tenantSlug);
-    this.logger.log(`[uploadAvatar] Self-service upload - tenant: ${tenantSlug}, client: ${client.id}`);
+    this.logger.log(
+      `[uploadAvatar] Self-service upload - tenant: ${tenantSlug}, client: ${client.id}`,
+    );
     return this.avatarService.uploadAvatar(client.id, file, sub);
   }
 
-  async deleteAvatar(tenantSlug: string, sub: string): Promise<DeleteAvatarResponseDto> {
+  async deleteAvatar(
+    tenantSlug: string,
+    sub: string,
+  ): Promise<DeleteAvatarResponseDto> {
     const client = await this.requireClient(tenantSlug);
-    this.logger.log(`[deleteAvatar] Self-service delete - tenant: ${tenantSlug}, client: ${client.id}`);
+    this.logger.log(
+      `[deleteAvatar] Self-service delete - tenant: ${tenantSlug}, client: ${client.id}`,
+    );
     return this.avatarService.deleteAvatar(client.id, sub);
   }
 }

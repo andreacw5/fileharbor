@@ -28,7 +28,8 @@ export class AlbumItemVideoDataDto {
 
 export class AlbumItemDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty({ enum: ['IMAGE', 'VIDEO'] }) @Expose() resourceType: 'IMAGE' | 'VIDEO';
+  @ApiProperty({ enum: ['IMAGE', 'VIDEO'] }) @Expose() resourceType:
+    'IMAGE' | 'VIDEO';
   @ApiProperty() @Expose() order: number;
   @ApiProperty() @Expose() @Type(() => Date) addedAt: Date;
 

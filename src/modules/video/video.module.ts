@@ -11,7 +11,15 @@ import { RouteHelperModule } from '@/utils/route.utils';
 import { VideoCleanupJob } from './jobs/video.cleanup.job';
 
 @Module({
-  imports: [StorageModule, PrismaModule, WebhookModule, HttpModule, UserModule, ClientModule, RouteHelperModule],
+  imports: [
+    StorageModule,
+    PrismaModule,
+    WebhookModule,
+    HttpModule,
+    UserModule,
+    ClientModule,
+    RouteHelperModule,
+  ],
   controllers: [VideoController],
   providers: [VideoService, VideoCleanupJob],
   exports: [VideoService],

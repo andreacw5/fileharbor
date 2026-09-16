@@ -16,4 +16,3 @@ export class DeleteResponseDto {
   @Expose()
   message: string;
 }
-

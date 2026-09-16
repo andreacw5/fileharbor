@@ -3,7 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { BastionUserJwtGuard } from './bastion-user-jwt.guard';
-import { BastionTokenVerifier, BastionJwtPayload } from '../bastion-token-verifier.service';
+import {
+  BastionTokenVerifier,
+  BastionJwtPayload,
+} from '../bastion-token-verifier.service';
 
 describe('BastionUserJwtGuard', () => {
   const bastionPayload: BastionJwtPayload = {
@@ -22,7 +25,9 @@ describe('BastionUserJwtGuard', () => {
   const mockJwtService = { verify: jest.fn() };
 
   /** Builds a guard whose ConfigService returns the supplied env values. */
-  const buildGuard = async (config: Record<string, string>): Promise<BastionUserJwtGuard> => {
+  const buildGuard = async (
+    config: Record<string, string>,
+  ): Promise<BastionUserJwtGuard> => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BastionUserJwtGuard,
@@ -39,7 +44,9 @@ describe('BastionUserJwtGuard', () => {
   };
 
   /** Returns a context whose getRequest() is stable across calls, so bastionUser set by the guard is observable. */
-  const contextWithHeaders = (headers: Record<string, string>): { context: ExecutionContext; request: any } => {
+  const contextWithHeaders = (
+    headers: Record<string, string>,
+  ): { context: ExecutionContext; request: any } => {
     const request: any = { headers };
     const context = {
       switchToHttp: () => ({
@@ -64,7 +71,9 @@ describe('BastionUserJwtGuard', () => {
       adminAcceptedAppSlugs: 'fileharbor,meridian',
     });
 
-    const { context, request } = contextWithHeaders({ authorization: 'Bearer token' });
+    const { context, request } = contextWithHeaders({
+      authorization: 'Bearer token',
+    });
     await expect(guard.canActivate(context)).resolves.toBe(true);
 
     expect(request.bastionUser).toEqual({

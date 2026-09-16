@@ -5,7 +5,7 @@ import { Type } from 'class-transformer';
 export class ListImagesDto {
   @ApiPropertyOptional({
     description: 'Filter by user ID',
-    example: 'user-123'
+    example: 'user-123',
   })
   @IsOptional()
   @IsString()
@@ -13,7 +13,7 @@ export class ListImagesDto {
 
   @ApiPropertyOptional({
     description: 'Filter by album ID',
-    example: 'album-456'
+    example: 'album-456',
   })
   @IsOptional()
   @IsString()
@@ -23,7 +23,7 @@ export class ListImagesDto {
     description: 'Page number',
     minimum: 1,
     default: 1,
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -36,7 +36,7 @@ export class ListImagesDto {
     minimum: 1,
     maximum: 100,
     default: 20,
-    example: 20
+    example: 20,
   })
   @IsOptional()
   @Type(() => Number)
@@ -45,4 +45,3 @@ export class ListImagesDto {
   @Max(100)
   perPage?: number;
 }
-

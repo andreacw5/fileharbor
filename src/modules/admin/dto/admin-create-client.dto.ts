@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class AdminCreateClientDto {
@@ -10,7 +17,8 @@ export class AdminCreateClientDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'Client domain (unique across clients). Set to null or an empty string for none.',
+    description:
+      'Client domain (unique across clients). Set to null or an empty string for none.',
     nullable: true,
   })
   @IsOptional()
@@ -19,7 +27,10 @@ export class AdminCreateClientDto {
   @MaxLength(255)
   domain?: string | null;
 
-  @ApiPropertyOptional({ description: 'Enable or disable the client', default: true })
+  @ApiPropertyOptional({
+    description: 'Enable or disable the client',
+    default: true,
+  })
   @IsOptional()
   @IsBoolean()
   active?: boolean;
@@ -35,7 +46,8 @@ export class AdminCreateClientDto {
   @Transform(({ value }) => (value === '' ? null : value))
   @IsString()
   @Matches(/^[a-z0-9][a-z0-9-]{0,62}$/, {
-    message: 'bastionTenantSlug must be a lowercase slug (letters, digits and hyphens, starting with a letter or digit)',
+    message:
+      'bastionTenantSlug must be a lowercase slug (letters, digits and hyphens, starting with a letter or digit)',
   })
   bastionTenantSlug?: string | null;
 }

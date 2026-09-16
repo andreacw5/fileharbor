@@ -59,7 +59,7 @@ export class WebhookService {
       // Check if webhooks are enabled for this client
       if (!client || !client.webhookEnabled || !client.webhookUrl) {
         this.logger.debug(
-          `[sendWebhook] Webhooks disabled for client ${clientId} or URL not configured`
+          `[sendWebhook] Webhooks disabled for client ${clientId} or URL not configured`,
         );
         return;
       }
@@ -74,11 +74,13 @@ export class WebhookService {
 
       // Send to Discord webhook
       await this.sendDiscordWebhook(client.webhookUrl, event, payload);
-      this.logger.log(`[sendWebhook] Notification sent for event ${event} to client ${clientId}`);
+      this.logger.log(
+        `[sendWebhook] Notification sent for event ${event} to client ${clientId}`,
+      );
     } catch (error) {
       this.logger.error(
         `[sendWebhook] Error sending webhook for event ${event} to client ${clientId}:`,
-        error instanceof Error ? error.message : error
+        error instanceof Error ? error.message : error,
       );
       // Don't throw - webhook failures shouldn't break the main operation
     }
@@ -107,16 +109,16 @@ export class WebhookService {
           catchError((error) => {
             this.logger.error(
               `[sendDiscordWebhook] Failed to post to Discord webhook:`,
-              error instanceof Error ? error.message : error
+              error instanceof Error ? error.message : error,
             );
             return of(null);
-          })
-        )
+          }),
+        ),
       );
     } catch (error) {
       this.logger.error(
         `[sendDiscordWebhook] Error:`,
-        error instanceof Error ? error.message : error
+        error instanceof Error ? error.message : error,
       );
     }
   }
@@ -124,7 +126,10 @@ export class WebhookService {
   /**
    * Builds a Discord embed based on the event type
    */
-  private buildDiscordEmbed(event: WebhookEvent, payload: WebhookPayload): Record<string, any> {
+  private buildDiscordEmbed(
+    event: WebhookEvent,
+    payload: WebhookPayload,
+  ): Record<string, any> {
     const eventConfig = this.getEventConfig(event);
 
     const embed: Record<string, any> = {
@@ -135,7 +140,8 @@ export class WebhookService {
       timestamp: payload.timestamp,
       footer: {
         text: 'FileHarbor Monitoring',
-        icon_url: 'https://fileharbor.heyatom.dev/v2/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
+        icon_url:
+          'https://fileharbor.heyatom.dev/v2/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
       },
     };
 
@@ -163,14 +169,19 @@ export class WebhookService {
   /**
    * Gets configuration for an event type
    */
-  private getEventConfig(
-    event: WebhookEvent
-  ): { title: string; description: string; color: number } {
-    const configs: Record<WebhookEvent, { title: string; description: string; color: number }> = {
+  private getEventConfig(event: WebhookEvent): {
+    title: string;
+    description: string;
+    color: number;
+  } {
+    const configs: Record<
+      WebhookEvent,
+      { title: string; description: string; color: number }
+    > = {
       [WebhookEvent.IMAGE_UPLOADED]: {
         title: 'New Image Uploaded!',
         description: 'A new image has been successfully uploaded.',
-        color: 0xFFAD58, // Orange color from your example
+        color: 0xffad58, // Orange color from your example
       },
       [WebhookEvent.IMAGE_DELETED]: {
         title: 'Image Deleted',
@@ -180,7 +191,7 @@ export class WebhookService {
       [WebhookEvent.AVATAR_UPLOADED]: {
         title: 'New Avatar Uploaded!',
         description: 'A new avatar has been successfully uploaded.',
-        color: 0xFFAD58,
+        color: 0xffad58,
       },
       [WebhookEvent.AVATAR_DELETED]: {
         title: 'Avatar Deleted',
@@ -215,7 +226,7 @@ export class WebhookService {
       [WebhookEvent.VIDEO_UPLOADED]: {
         title: 'New Video Uploaded!',
         description: 'A new video has been successfully uploaded.',
-        color: 0xFFAD58,
+        color: 0xffad58,
       },
       [WebhookEvent.VIDEO_DELETED]: {
         title: 'Video Deleted',
@@ -230,7 +241,10 @@ export class WebhookService {
   /**
    * Builds embed fields based on event data
    */
-  private buildEmbedFields(event: WebhookEvent, data: Record<string, any>): Array<Record<string, any>> {
+  private buildEmbedFields(
+    event: WebhookEvent,
+    data: Record<string, any>,
+  ): Array<Record<string, any>> {
     const fields: Array<Record<string, any>> = [];
 
     switch (event) {
@@ -238,7 +252,7 @@ export class WebhookService {
         fields.push(
           { name: 'ID', value: data.imageId || 'N/A' },
           { name: 'Size', value: formatFileSize(data.size), inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true }
+          { name: 'User', value: data.userId || 'System', inline: true },
         );
         break;
 
@@ -246,7 +260,7 @@ export class WebhookService {
         fields.push(
           { name: 'ID', value: data.avatarId || 'N/A' },
           { name: 'Size', value: formatFileSize(data.size), inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true }
+          { name: 'User', value: data.userId || 'System', inline: true },
         );
         break;
 
@@ -256,7 +270,7 @@ export class WebhookService {
           { name: 'ID', value: data.albumId || 'N/A' },
           { name: 'Name', value: data.name || 'N/A' },
           { name: 'Public', value: data.isPublic ? 'Yes' : 'No', inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true }
+          { name: 'User', value: data.userId || 'System', inline: true },
         );
         if (data.description) {
           fields.push({ name: 'Description', value: data.description });
@@ -266,7 +280,7 @@ export class WebhookService {
       case WebhookEvent.IMAGE_ADDED_TO_ALBUM:
         fields.push(
           { name: 'Album', value: data.albumName || 'N/A' },
-          { name: 'Image', value: data.imageId || 'N/A' }
+          { name: 'Image', value: data.imageId || 'N/A' },
         );
         break;
 
@@ -276,7 +290,12 @@ export class WebhookService {
       case WebhookEvent.IMAGE_REMOVED_FROM_ALBUM:
         fields.push(
           { name: 'ID', value: data.id || 'N/A' },
-          { name: 'Timestamp', value: new Date(data.timestamp || Date.now()).toLocaleString('en-US') }
+          {
+            name: 'Timestamp',
+            value: new Date(data.timestamp || Date.now()).toLocaleString(
+              'en-US',
+            ),
+          },
         );
         break;
 
@@ -284,14 +303,19 @@ export class WebhookService {
         fields.push(
           { name: 'ID', value: data.videoId || 'N/A' },
           { name: 'Size', value: formatFileSize(data.size), inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true }
+          { name: 'User', value: data.userId || 'System', inline: true },
         );
         break;
 
       case WebhookEvent.VIDEO_DELETED:
         fields.push(
           { name: 'ID', value: data.id || 'N/A' },
-          { name: 'Timestamp', value: new Date(data.timestamp || Date.now()).toLocaleString('en-US') }
+          {
+            name: 'Timestamp',
+            value: new Date(data.timestamp || Date.now()).toLocaleString(
+              'en-US',
+            ),
+          },
         );
         break;
     }

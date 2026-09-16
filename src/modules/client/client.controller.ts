@@ -1,5 +1,10 @@
 import { Controller, Get, UseGuards, UseInterceptors } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 
 import { ClientService } from './client.service';
 import { ClientId } from './decorators/client.decorator';
@@ -17,10 +22,13 @@ export class ClientController {
   @Get('stats')
   @ApiOperation({
     summary: 'Get client statistics',
-    description: 'Get statistics for the authenticated client including image count, album count, storage usage, and top downloaded images.'
+    description:
+      'Get statistics for the authenticated client including image count, album count, storage usage, and top downloaded images.',
   })
   @ApiResponse({ status: 200, type: ClientStatsResponseDto })
-  async getStats(@ClientId() clientId: string): Promise<ClientStatsResponseDto> {
+  async getStats(
+    @ClientId() clientId: string,
+  ): Promise<ClientStatsResponseDto> {
     return this.clientService.getStats(clientId);
   }
 
@@ -28,7 +36,8 @@ export class ClientController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Get global statistics (admin)',
-    description: 'Get aggregated statistics across all clients: total image count and total disk usage. Requires X-Admin-Secret header.',
+    description:
+      'Get aggregated statistics across all clients: total image count and total disk usage. Requires X-Admin-Secret header.',
   })
   @ApiSecurity('x-admin-secret')
   @ApiResponse({ status: 200, type: GlobalStatsResponseDto })

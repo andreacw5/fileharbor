@@ -30,11 +30,23 @@ import { RequirePermission } from '@/modules/admin-auth/decorators/require-permi
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUpdateAlbumDto } from '../dto/admin-update-album.dto';
 import { AdminCreateAlbumDto } from '../dto/admin-create-album.dto';
-import { AdminDeleteResponseDto, AdminAlbumResponseDto } from '../dto/admin-response.dto';
-import { AddAlbumItemsDto, AddAlbumItemsResponseDto, RemoveAlbumItemsDto, ListAlbumItemsDto, AlbumItemListResponseDto } from '@/modules/album/dto';
+import {
+  AdminDeleteResponseDto,
+  AdminAlbumResponseDto,
+} from '../dto/admin-response.dto';
+import {
+  AddAlbumItemsDto,
+  AddAlbumItemsResponseDto,
+  RemoveAlbumItemsDto,
+  ListAlbumItemsDto,
+  AlbumItemListResponseDto,
+} from '@/modules/album/dto';
 import { AlbumService } from '@/modules/album/album.service';
 import { ClientService } from '@/modules/client/client.service';
-import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
+import {
+  assertClientAccess,
+  buildClientWhere,
+} from '../helpers/admin-access.helper';
 
 @ApiTags('Admin - Albums')
 @Controller('admin/albums')
@@ -61,7 +73,10 @@ export class AlbumsAdminController {
     assertClientAccess(adminUser, dto.clientId);
 
     const externalUserId = dto.externalUserId || 'system';
-    const user = await this.clientService.getOrCreateUser(dto.clientId, externalUserId);
+    const user = await this.clientService.getOrCreateUser(
+      dto.clientId,
+      externalUserId,
+    );
 
     const album = await this.albumService.createAlbum(dto.clientId, user.id, {
       name: dto.name,
@@ -73,10 +88,16 @@ export class AlbumsAdminController {
     const enriched = await this.albumService.findAdminAlbumById(album.id);
     if (!enriched) throw new NotFoundException('Album not found');
 
-    this.logger.log(`[Admin] Album created: ${album.id} for client: ${dto.clientId}`);
+    this.logger.log(
+      `[Admin] Album created: ${album.id} for client: ${dto.clientId}`,
+    );
     return plainToInstance(
       AdminAlbumResponseDto,
-      { ...enriched, totalItems: enriched._count.albumItems, activeTokens: enriched._count.albumTokens },
+      {
+        ...enriched,
+        totalItems: enriched._count.albumItems,
+        activeTokens: enriched._count.albumTokens,
+      },
       { excludeExtraneousValues: true },
     );
   }
@@ -106,19 +127,34 @@ export class AlbumsAdminController {
     if (userId) where.user = { externalUserId: userId };
     if (search) where.name = { contains: search, mode: 'insensitive' };
     if (publicFilter !== undefined) {
-      where.isPublic = publicFilter === 'true' ? true : publicFilter === 'false' ? false : undefined;
+      where.isPublic =
+        publicFilter === 'true'
+          ? true
+          : publicFilter === 'false'
+            ? false
+            : undefined;
     }
 
-    const { albums, total } = await this.albumService.findAdminAlbums(where, { skip, take });
+    const { albums, total } = await this.albumService.findAdminAlbums(where, {
+      skip,
+      take,
+    });
 
     return {
       data: albums.map((a) => ({
         ...a,
         totalItems: a._count.albumItems,
         activeTokens: a._count.albumTokens,
-        coverImageUrl: a.coverImageId ? this.buildImageFullPath(a.coverImageId) : undefined,
+        coverImageUrl: a.coverImageId
+          ? this.buildImageFullPath(a.coverImageId)
+          : undefined,
       })),
-      pagination: { page: pageNum, perPage: take, total, totalPages: Math.ceil(total / take) },
+      pagination: {
+        page: pageNum,
+        perPage: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
     };
   }
 
@@ -139,7 +175,9 @@ export class AlbumsAdminController {
         ...album,
         totalItems: album._count.albumItems,
         activeTokens: album._count.albumTokens,
-        coverImageUrl: album.coverImageId ? this.buildImageFullPath(album.coverImageId) : undefined,
+        coverImageUrl: album.coverImageId
+          ? this.buildImageFullPath(album.coverImageId)
+          : undefined,
       },
       { excludeExtraneousValues: true },
     );
@@ -161,7 +199,8 @@ export class AlbumsAdminController {
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.isPublic !== undefined) data.isPublic = dto.isPublic;
-    if ('externalAlbumId' in dto) data.externalAlbumId = dto.externalAlbumId ?? null;
+    if ('externalAlbumId' in dto)
+      data.externalAlbumId = dto.externalAlbumId ?? null;
     if ('coverImageId' in dto) data.coverImageId = dto.coverImageId ?? null;
 
     const updated = await this.albumService.adminUpdateAlbum(id, data);
@@ -173,7 +212,9 @@ export class AlbumsAdminController {
         ...updated,
         totalItems: updated._count.albumItems,
         activeTokens: updated._count.albumTokens,
-        coverImageUrl: updated.coverImageId ? this.buildImageFullPath(updated.coverImageId) : undefined,
+        coverImageUrl: updated.coverImageId
+          ? this.buildImageFullPath(updated.coverImageId)
+          : undefined,
       },
       { excludeExtraneousValues: true },
     );
@@ -185,7 +226,9 @@ export class AlbumsAdminController {
 
   @Post(':id/items')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Add images and/or videos to album (admin, bypasses ownership)' })
+  @ApiOperation({
+    summary: 'Add images and/or videos to album (admin, bypasses ownership)',
+  })
   @ApiResponse({ status: 200, type: AddAlbumItemsResponseDto })
   async addItems(
     @Param('id') id: string,
@@ -196,7 +239,12 @@ export class AlbumsAdminController {
     if (!album) throw new NotFoundException('Album not found');
     assertClientAccess(adminUser, album.clientId);
 
-    const result = await this.albumService.addItemsToAlbum(id, album.clientId, dto.items, { force: true });
+    const result = await this.albumService.addItemsToAlbum(
+      id,
+      album.clientId,
+      dto.items,
+      { force: true },
+    );
     this.logger.log(`[Admin] Added ${result.count} items to album: ${id}`);
     return result;
   }
@@ -214,8 +262,15 @@ export class AlbumsAdminController {
     if (!album) throw new NotFoundException('Album not found');
     assertClientAccess(adminUser, album.clientId);
 
-    const result = await this.albumService.removeItemsFromAlbum(id, album.clientId, dto.items, { force: true });
-    this.logger.log(`[Admin] Removed ${result.removed} items from album: ${id}`);
+    const result = await this.albumService.removeItemsFromAlbum(
+      id,
+      album.clientId,
+      dto.items,
+      { force: true },
+    );
+    this.logger.log(
+      `[Admin] Removed ${result.removed} items from album: ${id}`,
+    );
     return result;
   }
 

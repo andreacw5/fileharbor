@@ -10,5 +10,3 @@ export * from './list-images-response.dto';
 export * from './pagination-meta.dto';
 export * from './delete-response.dto';
 export * from './tinify-compression-response.dto';
-
-

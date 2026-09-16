@@ -2,9 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AdminJwtGuard, AdminJwtPayload } from './admin-jwt.guard';
-import { BastionTokenVerifier, BastionJwtPayload } from '../bastion-token-verifier.service';
+import {
+  BastionTokenVerifier,
+  BastionJwtPayload,
+} from '../bastion-token-verifier.service';
 import { REQUIRE_PERMISSION_KEY } from '../decorators/require-permission.decorator';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
@@ -30,7 +37,9 @@ describe('AdminJwtGuard', () => {
   const mockJwtService = { verify: jest.fn() };
 
   /** Builds a guard whose ConfigService returns the supplied env values. */
-  const buildGuard = async (config: Record<string, string>): Promise<AdminJwtGuard> => {
+  const buildGuard = async (
+    config: Record<string, string>,
+  ): Promise<AdminJwtGuard> => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminJwtGuard,
@@ -49,7 +58,10 @@ describe('AdminJwtGuard', () => {
   };
 
   const acceptingGuard = () =>
-    buildGuard({ bastionAppSlug: 'fileharbor', adminAcceptedAppSlugs: 'fileharbor,meridian' });
+    buildGuard({
+      bastionAppSlug: 'fileharbor',
+      adminAcceptedAppSlugs: 'fileharbor,meridian',
+    });
 
   /**
    * A context carrying a request plus a handler that may declare a required
@@ -57,12 +69,23 @@ describe('AdminJwtGuard', () => {
    */
   const contextWithToken = (
     requiredPermission?: string,
-  ): { context: ExecutionContext; request: { adminUser?: AdminJwtPayload } } => {
-    const request: { headers: Record<string, string>; adminUser?: AdminJwtPayload } = {
+  ): {
+    context: ExecutionContext;
+    request: { adminUser?: AdminJwtPayload };
+  } => {
+    const request: {
+      headers: Record<string, string>;
+      adminUser?: AdminJwtPayload;
+    } = {
       headers: { authorization: 'Bearer token' },
     };
     const handler = () => undefined;
-    if (requiredPermission) Reflect.defineMetadata(REQUIRE_PERMISSION_KEY, requiredPermission, handler);
+    if (requiredPermission)
+      Reflect.defineMetadata(
+        REQUIRE_PERMISSION_KEY,
+        requiredPermission,
+        handler,
+      );
 
     const context = {
       switchToHttp: () => ({ getRequest: () => request }),
@@ -77,7 +100,9 @@ describe('AdminJwtGuard', () => {
     jest.clearAllMocks();
     // Bypass JWKS by stubbing the network-bound key fetch; slug logic is what matters here.
     // getPublicKeyPem lives on BastionTokenVerifier, shared with BastionUserJwtGuard.
-    jest.spyOn(BastionTokenVerifier.prototype as any, 'getPublicKeyPem').mockResolvedValue('pem');
+    jest
+      .spyOn(BastionTokenVerifier.prototype as any, 'getPublicKeyPem')
+      .mockResolvedValue('pem');
     mockJwtService.verify.mockReturnValue(bastionPayload);
     mockPrismaService.adminIdentity.findUnique.mockResolvedValue(null);
     mockPrismaService.client.findMany.mockResolvedValue([{ id: 'client-a' }]);
@@ -86,7 +111,9 @@ describe('AdminJwtGuard', () => {
   describe('app context', () => {
     it('accepts a token whose appSlug is in ADMIN_ACCEPTED_APP_SLUGS', async () => {
       const guard = await acceptingGuard();
-      await expect(guard.canActivate(contextWithToken().context)).resolves.toBe(true);
+      await expect(guard.canActivate(contextWithToken().context)).resolves.toBe(
+        true,
+      );
     });
 
     it('rejects a token whose appSlug is not listed', async () => {
@@ -95,40 +122,50 @@ describe('AdminJwtGuard', () => {
         adminAcceptedAppSlugs: 'fileharbor,gatherly',
       });
 
-      await expect(guard.canActivate(contextWithToken().context)).rejects.toThrow(
-        new UnauthorizedException('Invalid app context'),
-      );
+      await expect(
+        guard.canActivate(contextWithToken().context),
+      ).rejects.toThrow(new UnauthorizedException('Invalid app context'));
     });
 
     it('falls back to BASTION_APP_SLUG alone when the list is unset', async () => {
-      const guard = await buildGuard({ bastionAppSlug: 'fileharbor', adminAcceptedAppSlugs: '' });
+      const guard = await buildGuard({
+        bastionAppSlug: 'fileharbor',
+        adminAcceptedAppSlugs: '',
+      });
 
-      await expect(guard.canActivate(contextWithToken().context)).rejects.toThrow(
-        new UnauthorizedException('Invalid app context'),
-      );
+      await expect(
+        guard.canActivate(contextWithToken().context),
+      ).rejects.toThrow(new UnauthorizedException('Invalid app context'));
 
       const ownSlugGuard = await buildGuard({
         bastionAppSlug: 'meridian',
         adminAcceptedAppSlugs: '',
       });
 
-      await expect(ownSlugGuard.canActivate(contextWithToken().context)).resolves.toBe(true);
+      await expect(
+        ownSlugGuard.canActivate(contextWithToken().context),
+      ).resolves.toBe(true);
     });
   });
 
   describe('permissions', () => {
     it('lets SUPER_ADMIN through a route that declares no permission', async () => {
       const guard = await acceptingGuard();
-      await expect(guard.canActivate(contextWithToken().context)).resolves.toBe(true);
+      await expect(guard.canActivate(contextWithToken().context)).resolves.toBe(
+        true,
+      );
     });
 
     it('refuses a non-super caller on a route with no permission metadata', async () => {
-      mockJwtService.verify.mockReturnValue({ ...bastionPayload, role: 'ADMIN' });
+      mockJwtService.verify.mockReturnValue({
+        ...bastionPayload,
+        role: 'ADMIN',
+      });
       const guard = await acceptingGuard();
 
-      await expect(guard.canActivate(contextWithToken().context)).rejects.toThrow(
-        new ForbiddenException('Insufficient permissions'),
-      );
+      await expect(
+        guard.canActivate(contextWithToken().context),
+      ).rejects.toThrow(new ForbiddenException('Insufficient permissions'));
     });
 
     it('refuses a non-super caller lacking the declared permission', async () => {
@@ -140,7 +177,9 @@ describe('AdminJwtGuard', () => {
       const guard = await acceptingGuard();
 
       await expect(
-        guard.canActivate(contextWithToken('fileharbor-library.manage').context),
+        guard.canActivate(
+          contextWithToken('fileharbor-library.manage').context,
+        ),
       ).rejects.toThrow(new ForbiddenException('Insufficient permissions'));
     });
 
@@ -187,10 +226,15 @@ describe('AdminJwtGuard', () => {
       await guard.canActivate(context);
 
       expect(mockPrismaService.client.findMany).toHaveBeenCalledWith({
-        where: { OR: [{ ownerPrincipalId: null }, { ownerPrincipalId: 'principal-1' }] },
+        where: {
+          OR: [{ ownerPrincipalId: null }, { ownerPrincipalId: 'principal-1' }],
+        },
         select: { id: true },
       });
-      expect(request.adminUser).toMatchObject({ actorId: 'principal-1', fullAccess: true });
+      expect(request.adminUser).toMatchObject({
+        actorId: 'principal-1',
+        fullAccess: true,
+      });
     });
 
     it('adds a linked caller’s own personal clients to their tenant’s', async () => {
@@ -203,7 +247,10 @@ describe('AdminJwtGuard', () => {
 
       expect(mockPrismaService.client.findMany).toHaveBeenCalledWith({
         where: {
-          OR: [{ bastionTenantSlug: 'heyatom' }, { ownerPrincipalId: 'principal-2' }],
+          OR: [
+            { bastionTenantSlug: 'heyatom' },
+            { ownerPrincipalId: 'principal-2' },
+          ],
         },
         select: { id: true },
       });

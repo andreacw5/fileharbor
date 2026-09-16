@@ -15,7 +15,10 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
-import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import {
+  AdminJwtGuard,
+  AdminJwtPayload,
+} from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -25,7 +28,10 @@ import {
   AdminImageShareLinkResponseDto,
   AdminImageShareLinksListResponseDto,
 } from '../dto/admin-response.dto';
-import { assertClientAccess, resolveAllowedClients } from '../helpers/admin-access.helper';
+import {
+  assertClientAccess,
+  resolveAllowedClients,
+} from '../helpers/admin-access.helper';
 
 @ApiTags('Admin - Image Share Links')
 @Controller('admin/image-share-links')
@@ -39,9 +45,19 @@ export class ImageShareLinksAdminController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'List image share links (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Filter by client ID' })
-  @ApiQuery({ name: 'imageId', required: false, description: 'Filter by image ID' })
+  @ApiOperation({
+    summary: 'List image share links (scoped to accessible clients)',
+  })
+  @ApiQuery({
+    name: 'clientId',
+    required: false,
+    description: 'Filter by client ID',
+  })
+  @ApiQuery({
+    name: 'imageId',
+    required: false,
+    description: 'Filter by image ID',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminImageShareLinksListResponseDto })
@@ -73,10 +89,17 @@ export class ImageShareLinksAdminController {
 
       if (clientId && image.clientId !== clientId) {
         total = 0;
-      } else if (allowedClients !== null && !allowedClients.includes(image.clientId)) {
+      } else if (
+        allowedClients !== null &&
+        !allowedClients.includes(image.clientId)
+      ) {
         total = 0;
       } else {
-        const links = await this.imageService.getShareLinks(image.id, image.clientId, image.userId);
+        const links = await this.imageService.getShareLinks(
+          image.id,
+          image.clientId,
+          image.userId,
+        );
         const mapped = links.map((link) => ({
           id: link.id,
           imageId: link.imageId,
@@ -162,7 +185,10 @@ export class ImageShareLinksAdminController {
   @ApiOperation({ summary: 'Delete an image share link (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
   @ApiResponse({ status: 404, description: 'Share link not found' })
-  @ApiResponse({ status: 403, description: 'Admin has no access to the related client' })
+  @ApiResponse({
+    status: 403,
+    description: 'Admin has no access to the related client',
+  })
   async deleteShareLink(
     @Param('id') id: string,
     @AdminUser() adminUser: AdminJwtPayload,
@@ -185,7 +211,11 @@ export class ImageShareLinksAdminController {
 
     assertClientAccess(adminUser, shareLink.image.clientId);
 
-    await this.imageService.deleteShareLink(id, shareLink.image.clientId, shareLink.image.userId);
+    await this.imageService.deleteShareLink(
+      id,
+      shareLink.image.clientId,
+      shareLink.image.userId,
+    );
 
     return plainToInstance(
       AdminDeleteResponseDto,
@@ -194,4 +224,3 @@ export class ImageShareLinksAdminController {
     );
   }
 }
-

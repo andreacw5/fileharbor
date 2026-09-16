@@ -23,10 +23,16 @@ import { RequirePermission } from '@/modules/admin-auth/decorators/require-permi
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminCreateClientDto } from '../dto/admin-create-client.dto';
 import { AdminUpdateClientDto } from '../dto/admin-update-client.dto';
-import { AdminClientResponseDto, AdminClientCreatedResponseDto } from '../dto/admin-response.dto';
+import {
+  AdminClientResponseDto,
+  AdminClientCreatedResponseDto,
+} from '../dto/admin-response.dto';
 import { ClientService } from '@/modules/client/client.service';
 import { plainToInstance } from 'class-transformer';
-import { assertClientAccess, resolveAllowedClients } from '../helpers/admin-access.helper';
+import {
+  assertClientAccess,
+  resolveAllowedClients,
+} from '../helpers/admin-access.helper';
 
 @ApiTags('Admin - Clients')
 @Controller('admin/clients')
@@ -41,11 +47,15 @@ export class ClientsAdminController {
   @Get()
   @ApiOperation({ summary: 'List accessible clients with their stats' })
   @ApiResponse({ status: 200, type: [AdminClientResponseDto] })
-  async listClients(@AdminUser() adminUser: AdminJwtPayload): Promise<AdminClientResponseDto[]> {
+  async listClients(
+    @AdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminClientResponseDto[]> {
     const allowed = resolveAllowedClients(adminUser);
     const clients = await this.clientService.listClientsWithStats(allowed);
     return clients.map((c) =>
-      plainToInstance(AdminClientResponseDto, c, { excludeExtraneousValues: true }),
+      plainToInstance(AdminClientResponseDto, c, {
+        excludeExtraneousValues: true,
+      }),
     );
   }
 
@@ -59,7 +69,9 @@ export class ClientsAdminController {
     assertClientAccess(adminUser, id);
     const client = await this.clientService.getClientWithStats(id);
     if (!client) throw new NotFoundException('Client not found');
-    return plainToInstance(AdminClientResponseDto, client, { excludeExtraneousValues: true });
+    return plainToInstance(AdminClientResponseDto, client, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Post()
@@ -78,7 +90,9 @@ export class ClientsAdminController {
     // invisible to its own creator. Default it to the caller's tenant, and let
     // only a fullAccess principal deliberately create one with no mapping.
     const tenantSlug =
-      'bastionTenantSlug' in dto ? dto.bastionTenantSlug || null : adminUser.tenantSlug;
+      'bastionTenantSlug' in dto
+        ? dto.bastionTenantSlug || null
+        : adminUser.tenantSlug;
 
     if (!tenantSlug && !adminUser.fullAccess) {
       throw new BadRequestException(
@@ -102,7 +116,9 @@ export class ClientsAdminController {
 
   @Patch(':id')
   @RequirePermission('fileharbor-config.manage')
-  @ApiOperation({ summary: 'Update client name, status, webhook and Tinify settings' })
+  @ApiOperation({
+    summary: 'Update client name, status, webhook and Tinify settings',
+  })
   @ApiResponse({ status: 200, type: AdminClientResponseDto })
   async updateClient(
     @Param('id') id: string,
@@ -117,17 +133,22 @@ export class ClientsAdminController {
     const data: Record<string, any> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.active !== undefined) data.active = dto.active;
-    if (dto.webhookEnabled !== undefined) data.webhookEnabled = dto.webhookEnabled;
+    if (dto.webhookEnabled !== undefined)
+      data.webhookEnabled = dto.webhookEnabled;
     if ('webhookUrl' in dto) data.webhookUrl = dto.webhookUrl ?? null;
     if (dto.tinifyActive !== undefined) data.tinifyActive = dto.tinifyActive;
     if ('tinifyApiKey' in dto) data.tinifyApiKey = dto.tinifyApiKey ?? null;
-    if (dto.currentTinifyUsage !== undefined) data.currentTinifyUsage = dto.currentTinifyUsage;
-    if (dto.currentTinifyLimit !== undefined) data.currentTinifyLimit = dto.currentTinifyLimit;
-    if ('bastionTenantSlug' in dto) data.bastionTenantSlug = dto.bastionTenantSlug ?? null;
+    if (dto.currentTinifyUsage !== undefined)
+      data.currentTinifyUsage = dto.currentTinifyUsage;
+    if (dto.currentTinifyLimit !== undefined)
+      data.currentTinifyLimit = dto.currentTinifyLimit;
+    if ('bastionTenantSlug' in dto)
+      data.bastionTenantSlug = dto.bastionTenantSlug ?? null;
 
     const updated = await this.clientService.updateClientWithStats(id, data);
     this.logger.log(`[Admin] Client updated: ${id}`);
-    return plainToInstance(AdminClientResponseDto, updated, { excludeExtraneousValues: true });
+    return plainToInstance(AdminClientResponseDto, updated, {
+      excludeExtraneousValues: true,
+    });
   }
 }
-

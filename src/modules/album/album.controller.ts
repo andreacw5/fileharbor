@@ -57,7 +57,8 @@ export class AlbumController {
     @UserId() userId: string,
     @Body() dto: CreateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
     return this.albumService.createAlbum(clientId, userId, dto);
   }
 
@@ -82,7 +83,9 @@ export class AlbumController {
   @Get('shared/:token')
   @ApiOperation({ summary: 'Access album via shared token (public)' })
   @ApiResponse({ status: 200, type: AlbumResponseDto })
-  async getAlbumByToken(@Param('token') token: string): Promise<AlbumResponseDto> {
+  async getAlbumByToken(
+    @Param('token') token: string,
+  ): Promise<AlbumResponseDto> {
     return this.albumService.getAlbumBySharedToken(token);
   }
 
@@ -106,7 +109,8 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
     return this.albumService.updateAlbum(albumId, clientId, userId, dto);
   }
 
@@ -118,7 +122,8 @@ export class AlbumController {
     @UserId() userId: string,
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
     return this.albumService.deleteAlbum(albumId, clientId, userId);
   }
 
@@ -135,8 +140,11 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto: AddAlbumItemsDto,
   ): Promise<AddAlbumItemsResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.addItemsToAlbum(albumId, clientId, dto.items, { userId });
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    return this.albumService.addItemsToAlbum(albumId, clientId, dto.items, {
+      userId,
+    });
   }
 
   @Delete(':albumId/items')
@@ -148,8 +156,14 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto: RemoveAlbumItemsDto,
   ) {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.removeItemsFromAlbum(albumId, clientId, dto.items, { userId });
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    return this.albumService.removeItemsFromAlbum(
+      albumId,
+      clientId,
+      dto.items,
+      { userId },
+    );
   }
 
   @Get(':albumId/items')
@@ -183,8 +197,14 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto?: CreateAlbumTokenDto,
   ): Promise<AlbumTokenResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.generateAlbumToken(albumId, clientId, userId, dto?.expiresInDays);
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    return this.albumService.generateAlbumToken(
+      albumId,
+      clientId,
+      userId,
+      dto?.expiresInDays,
+    );
   }
 
   @Delete(':albumId/token')
@@ -195,7 +215,8 @@ export class AlbumController {
     @UserId() userId: string,
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
     return this.albumService.revokeAlbumToken(albumId, clientId, userId);
   }
 
@@ -211,7 +232,11 @@ export class AlbumController {
     @UserId() userId: string,
     @Param('externalAlbumId') externalAlbumId: string,
   ): Promise<AlbumResponseDto> {
-    return this.albumService.getAlbumWithItemsByExternalId(externalAlbumId, clientId, userId);
+    return this.albumService.getAlbumWithItemsByExternalId(
+      externalAlbumId,
+      clientId,
+      userId,
+    );
   }
 
   @Patch('external/:externalAlbumId')
@@ -223,8 +248,14 @@ export class AlbumController {
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.updateAlbumByExternalId(externalAlbumId, clientId, userId, dto);
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    return this.albumService.updateAlbumByExternalId(
+      externalAlbumId,
+      clientId,
+      userId,
+      dto,
+    );
   }
 
   @Post('external/:externalAlbumId/items')
@@ -236,8 +267,14 @@ export class AlbumController {
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: AddAlbumItemsDto,
   ): Promise<AddAlbumItemsResponseDto> {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.addItemsToAlbumByExternalId(externalAlbumId, clientId, dto.items, { userId });
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    return this.albumService.addItemsToAlbumByExternalId(
+      externalAlbumId,
+      clientId,
+      dto.items,
+      { userId },
+    );
   }
 
   @Delete('external/:externalAlbumId/items')
@@ -249,7 +286,13 @@ export class AlbumController {
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: RemoveAlbumItemsDto,
   ) {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.removeItemsFromAlbumByExternalId(externalAlbumId, clientId, dto.items, { userId });
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
+    return this.albumService.removeItemsFromAlbumByExternalId(
+      externalAlbumId,
+      clientId,
+      dto.items,
+      { userId },
+    );
   }
 }

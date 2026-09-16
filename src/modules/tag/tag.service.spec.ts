@@ -67,7 +67,11 @@ describe('TagService', () => {
     ]);
     mockPrismaService.tag.count.mockResolvedValue(2);
 
-    const result = await service.listTags(adminUser, { search: 'na' }, makeParams({ limit: 100 }));
+    const result = await service.listTags(
+      adminUser,
+      { search: 'na' },
+      makeParams({ limit: 100 }),
+    );
 
     expect(mockPrismaService.tag.findMany).toHaveBeenCalledWith({
       where: {
@@ -157,7 +161,12 @@ describe('TagService', () => {
     expect(mockPrismaService.tag.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: 200 }),
     );
-    expect(result.meta).toEqual({ page: 1, limit: 200, total: 0, totalPages: 0 });
+    expect(result.meta).toEqual({
+      page: 1,
+      limit: 200,
+      total: 0,
+      totalPages: 0,
+    });
   });
 
   it('skips by page and reports the total across all pages', async () => {
@@ -166,14 +175,23 @@ describe('TagService', () => {
     ]);
     mockPrismaService.tag.count.mockResolvedValue(451);
 
-    const result = await service.listTags(adminUser, {}, makeParams({ page: 3, limit: 50 }));
+    const result = await service.listTags(
+      adminUser,
+      {},
+      makeParams({ page: 3, limit: 50 }),
+    );
 
     expect(mockPrismaService.tag.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 100, take: 50 }),
     );
     // `meta.total` is the whole matching set, not the single row on this page.
     expect(result.meta.total).toBe(451);
-    expect(result.meta).toEqual({ page: 3, limit: 50, total: 451, totalPages: 10 });
+    expect(result.meta).toEqual({
+      page: 3,
+      limit: 50,
+      total: 451,
+      totalPages: 10,
+    });
   });
 
   it('caps perPage at 500 and floors page at 1', async () => {
@@ -182,7 +200,11 @@ describe('TagService', () => {
 
     // class-validator enforces @Min(1) / @Max(500) at the DTO level;
     // TagPageParams defaults cap limit at 500 and page at 1.
-    const result = await service.listTags(adminUser, {}, makeParams({ limit: 500 }));
+    const result = await service.listTags(
+      adminUser,
+      {},
+      makeParams({ limit: 500 }),
+    );
 
     expect(mockPrismaService.tag.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: 500 }),

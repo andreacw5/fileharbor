@@ -27,7 +27,12 @@ async function bootstrap() {
     app.enableCors({
       origin: process.env.CORS_ORIGIN || '*',
       methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'X-API-Key', 'X-User-Id', 'Authorization'],
+      allowedHeaders: [
+        'Content-Type',
+        'X-API-Key',
+        'X-User-Id',
+        'Authorization',
+      ],
       credentials: true,
     });
 
@@ -65,18 +70,24 @@ async function bootstrap() {
     logger.log(`📚 API Documentation: http://localhost:${port}/docs`);
     logger.log(`📈 Metrics endpoint: http://localhost:${port}/metrics`);
     logger.log(`📝 Logging enabled for: log, error, warn, debug, verbose`);
-    logger.log(`Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`);
-
+    logger.log(
+      `Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`,
+    );
   } catch (error) {
-
     Logger.error('❌ Failed to start the application', 'Bootstrap');
 
     if (error.message.includes('Database connection failed')) {
       Logger.error('Database connection issue detected', 'Bootstrap');
     } else if (error.message.includes('EADDRINUSE')) {
-      Logger.error(`Port is already in use. Another service might be running on the same port`, 'Bootstrap');
+      Logger.error(
+        `Port is already in use. Another service might be running on the same port`,
+        'Bootstrap',
+      );
     } else if (error.message.includes('EACCES')) {
-      Logger.error(`Permission denied. You might not have permission to bind to this port`, 'Bootstrap');
+      Logger.error(
+        `Permission denied. You might not have permission to bind to this port`,
+        'Bootstrap',
+      );
     } else {
       Logger.error(`Unexpected error: ${error.message}`, 'Bootstrap');
     }

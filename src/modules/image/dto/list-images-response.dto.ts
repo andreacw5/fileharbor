@@ -20,4 +20,3 @@ export class ListImagesResponseDto {
   @Type(() => PaginationMetaDto)
   pagination: PaginationMetaDto;
 }
-

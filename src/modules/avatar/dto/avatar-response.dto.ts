@@ -9,7 +9,6 @@ export class AvatarResponseDto {
   @Expose()
   id: string;
 
-
   @ApiProperty({
     description: 'User identifier who owns the avatar',
     example: 'user-123',
@@ -88,4 +87,3 @@ export class AvatarResponseDto {
   @Expose()
   fullPath: string;
 }
-

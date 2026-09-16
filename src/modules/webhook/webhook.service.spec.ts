@@ -10,7 +10,8 @@ describe('WebhookService', () => {
 
   // Mock data
   const mockClientId = 'client-123';
-  const mockWebhookUrl = 'https://discord.com/api/webhooks/123456789/test-webhook';
+  const mockWebhookUrl =
+    'https://discord.com/api/webhooks/123456789/test-webhook';
   const mockBaseUrl = 'http://localhost:3000';
 
   const mockClient = {
@@ -88,7 +89,11 @@ describe('WebhookService', () => {
         userId: 'user-123',
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.IMAGE_UPLOADED,
+        eventData,
+      );
 
       expect(mockPrismaService.client.findUnique).toHaveBeenCalledWith({
         where: { id: mockClientId },
@@ -100,7 +105,7 @@ describe('WebhookService', () => {
           embeds: expect.arrayContaining([
             expect.objectContaining({
               title: 'New Image Uploaded!',
-              color: 0xFFAD58,
+              color: 0xffad58,
             }),
           ]),
           timestamp: expect.any(String),
@@ -117,7 +122,9 @@ describe('WebhookService', () => {
     });
 
     it('should not send webhook when webhooks are disabled', async () => {
-      mockPrismaService.client.findUnique.mockResolvedValue(mockClientWithoutWebhook);
+      mockPrismaService.client.findUnique.mockResolvedValue(
+        mockClientWithoutWebhook,
+      );
 
       await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {});
 
@@ -170,7 +177,11 @@ describe('WebhookService', () => {
         userId: 'user-123',
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.IMAGE_UPLOADED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -179,7 +190,7 @@ describe('WebhookService', () => {
             expect.objectContaining({
               title: 'New Image Uploaded!',
               description: 'A new image has been successfully uploaded.',
-              color: 0xFFAD58,
+              color: 0xffad58,
               fields: expect.arrayContaining([
                 { name: 'ID', value: 'image-123' },
                 { name: 'Size', value: '1.95 MB', inline: true },
@@ -210,7 +221,11 @@ describe('WebhookService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_DELETED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.IMAGE_DELETED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -244,7 +259,11 @@ describe('WebhookService', () => {
         userId: 'user-123',
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.AVATAR_UPLOADED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.AVATAR_UPLOADED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -253,7 +272,7 @@ describe('WebhookService', () => {
             expect.objectContaining({
               title: 'New Avatar Uploaded!',
               description: 'A new avatar has been successfully uploaded.',
-              color: 0xFFAD58,
+              color: 0xffad58,
               fields: expect.arrayContaining([
                 { name: 'ID', value: 'avatar-123' },
                 { name: 'Size', value: '500.00 KB', inline: true },
@@ -284,7 +303,11 @@ describe('WebhookService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.AVATAR_DELETED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.AVATAR_DELETED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -316,7 +339,11 @@ describe('WebhookService', () => {
         userId: 'user-123',
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.ALBUM_CREATED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.ALBUM_CREATED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -347,12 +374,20 @@ describe('WebhookService', () => {
         userId: 'user-123',
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.ALBUM_CREATED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.ALBUM_CREATED,
+        eventData,
+      );
 
       const call = mockHttpService.post.mock.calls[0];
       const embedFields = call[1].embeds[0].fields;
 
-      expect(embedFields).toContainEqual({ name: 'Public', value: 'No', inline: true });
+      expect(embedFields).toContainEqual({
+        name: 'Public',
+        value: 'No',
+        inline: true,
+      });
       expect(embedFields).not.toContainEqual(
         expect.objectContaining({ name: 'Description' }),
       );
@@ -374,7 +409,11 @@ describe('WebhookService', () => {
         userId: 'user-123',
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.ALBUM_UPDATED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.ALBUM_UPDATED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -403,7 +442,11 @@ describe('WebhookService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      await service.sendWebhook(mockClientId, WebhookEvent.ALBUM_DELETED, eventData);
+      await service.sendWebhook(
+        mockClientId,
+        WebhookEvent.ALBUM_DELETED,
+        eventData,
+      );
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -535,7 +578,11 @@ describe('WebhookService', () => {
       const embed = call[1].embeds[0];
 
       expect(embed.fields).toContainEqual({ name: 'ID', value: 'N/A' });
-      expect(embed.fields).toContainEqual({ name: 'User', value: 'System', inline: true });
+      expect(embed.fields).toContainEqual({
+        name: 'User',
+        value: 'System',
+        inline: true,
+      });
     });
   });
 

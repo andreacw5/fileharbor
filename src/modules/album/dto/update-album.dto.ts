@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsBoolean, IsUUID, ValidateIf } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsUUID,
+  ValidateIf,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateAlbumDto {
@@ -35,7 +41,8 @@ export class UpdateAlbumDto {
   isPublic?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Cover image ID (must be an image already in the album). Set to null to remove.',
+    description:
+      'Cover image ID (must be an image already in the album). Set to null to remove.',
     example: 'image-uuid-123',
     nullable: true,
   })
@@ -44,4 +51,3 @@ export class UpdateAlbumDto {
   @IsUUID()
   coverImageId?: string | null;
 }
-

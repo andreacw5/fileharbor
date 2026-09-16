@@ -27,11 +27,13 @@ export class TinifyResetJob {
       });
 
       this.logger.log(
-        `Tinify usage counter reset completed - ${result.count} clients updated`
+        `Tinify usage counter reset completed - ${result.count} clients updated`,
       );
     } catch (error) {
-      this.logger.error('Tinify usage counter reset job failed:', error.message);
+      this.logger.error(
+        'Tinify usage counter reset job failed:',
+        error.message,
+      );
     }
   }
 }
-

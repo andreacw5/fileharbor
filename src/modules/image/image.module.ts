@@ -16,4 +16,3 @@ import { TinifyResetJob } from '@/modules/image/jobs/tinify-reset.job';
   exports: [ImageService],
 })
 export class ImageModule {}
-

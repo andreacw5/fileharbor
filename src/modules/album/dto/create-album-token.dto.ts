@@ -4,7 +4,8 @@ import { Type } from 'class-transformer';
 
 export class CreateAlbumTokenDto {
   @ApiPropertyOptional({
-    description: 'Token expiration in days (default: 7, null for no expiration)',
+    description:
+      'Token expiration in days (default: 7, null for no expiration)',
     minimum: 1,
     example: 7,
   })
@@ -14,4 +15,3 @@ export class CreateAlbumTokenDto {
   @Min(1)
   expiresInDays?: number;
 }
-

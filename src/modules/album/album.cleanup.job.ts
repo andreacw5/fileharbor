@@ -20,7 +20,10 @@ export class AlbumCleanupJob {
       this.logger.log(`Deleted ${deletedCount} expired album tokens`);
       this.logger.log('Expired album tokens cleanup job completed');
     } catch (error) {
-      this.logger.error('Expired album tokens cleanup job failed:', error.message);
+      this.logger.error(
+        'Expired album tokens cleanup job failed:',
+        error.message,
+      );
     }
   }
 }

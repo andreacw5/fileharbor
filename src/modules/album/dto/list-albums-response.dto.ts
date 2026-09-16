@@ -23,4 +23,3 @@ export class ListAlbumsResponseDto {
     totalPages: number;
   };
 }
-

@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class AdminUpdateImageDto {
   @ApiPropertyOptional({ description: 'Original filename' })
@@ -13,16 +19,20 @@ export class AdminUpdateImageDto {
   @IsBoolean()
   isPrivate?: boolean;
 
-  @ApiPropertyOptional({ description: 'Tags associated with the image', type: [String] })
+  @ApiPropertyOptional({
+    description: 'Tags associated with the image',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
 
-  @ApiPropertyOptional({ description: 'Image description (set to null to remove)' })
+  @ApiPropertyOptional({
+    description: 'Image description (set to null to remove)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   description?: string | null;
 }
-

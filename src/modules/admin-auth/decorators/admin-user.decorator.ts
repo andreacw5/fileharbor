@@ -7,4 +7,3 @@ export const AdminUser = createParamDecorator(
     return request.adminUser;
   },
 );
-

@@ -31,7 +31,9 @@ export class BastionUserJwtGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const payload = await this.tokenVerifier.verifyAuthHeader(request.headers['authorization']);
+    const payload = await this.tokenVerifier.verifyAuthHeader(
+      request.headers['authorization'],
+    );
 
     (request as any).bastionUser = {
       sub: payload.sub,

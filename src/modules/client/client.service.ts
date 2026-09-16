@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
@@ -141,7 +145,10 @@ export class ClientService {
    * defensively here. Any other error (or an unrecognized target) is rethrown unchanged.
    */
   private mapUniqueConstraintViolation(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       const rawTarget = error.meta?.target;
       const targets: string[] = Array.isArray(rawTarget)
         ? rawTarget
@@ -179,17 +186,21 @@ export class ClientService {
    * Get aggregated statistics for a client
    */
   async getStats(clientId: string): Promise<ClientStatsResponseDto> {
-    const [totalImages, totalAlbums, totalStorage, uploadedLast7Days] = await Promise.all([
-      this.prisma.image.count({ where: { clientId } }),
-      this.prisma.album.count({ where: { clientId } }),
-      this.prisma.image.aggregate({
-        where: { clientId },
-        _sum: { size: true },
-      }),
-      this.prisma.image.count({
-        where: { clientId, createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-      }),
-    ]);
+    const [totalImages, totalAlbums, totalStorage, uploadedLast7Days] =
+      await Promise.all([
+        this.prisma.image.count({ where: { clientId } }),
+        this.prisma.album.count({ where: { clientId } }),
+        this.prisma.image.aggregate({
+          where: { clientId },
+          _sum: { size: true },
+        }),
+        this.prisma.image.count({
+          where: {
+            clientId,
+            createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          },
+        }),
+      ]);
 
     return {
       totalImages,
@@ -212,7 +223,15 @@ export class ClientService {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { images: true, avatars: true, albums: true, videos: true, users: true } },
+        _count: {
+          select: {
+            images: true,
+            avatars: true,
+            albums: true,
+            videos: true,
+            users: true,
+          },
+        },
       },
     });
 
@@ -222,7 +241,9 @@ export class ClientService {
       _sum: { size: true },
     });
 
-    const storageMap = new Map(storagePerClient.map((s) => [s.clientId, s._sum.size || 0]));
+    const storageMap = new Map(
+      storagePerClient.map((s) => [s.clientId, s._sum.size || 0]),
+    );
 
     return clients.map((c) => ({
       ...c,
@@ -242,7 +263,17 @@ export class ClientService {
   async getClientWithStats(clientId: string) {
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      include: { _count: { select: { images: true, avatars: true, albums: true, videos: true, users: true } } },
+      include: {
+        _count: {
+          select: {
+            images: true,
+            avatars: true,
+            albums: true,
+            videos: true,
+            users: true,
+          },
+        },
+      },
     });
 
     if (!client) return null;
@@ -272,7 +303,11 @@ export class ClientService {
       updated = await this.prisma.client.update({
         where: { id: clientId },
         data,
-        include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
+        include: {
+          _count: {
+            select: { images: true, avatars: true, albums: true, videos: true },
+          },
+        },
       });
     } catch (error) {
       this.mapUniqueConstraintViolation(error);

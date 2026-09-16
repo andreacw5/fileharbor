@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -33,7 +37,8 @@ export class StorageService {
   private readonly storagePath: string;
 
   constructor(private configService: ConfigService) {
-    this.storagePath = this.configService.get<string>('STORAGE_PATH') || './storage';
+    this.storagePath =
+      this.configService.get<string>('STORAGE_PATH') || './storage';
   }
 
   /**
@@ -45,7 +50,9 @@ export class StorageService {
     const normalizedStorage = path.resolve(this.storagePath);
 
     if (!normalizedTarget.startsWith(normalizedStorage)) {
-      this.logger.error(`[validatePath] Path traversal attempt detected: ${targetPath}`);
+      this.logger.error(
+        `[validatePath] Path traversal attempt detected: ${targetPath}`,
+      );
       throw new InternalServerErrorException('Invalid path: Access denied');
     }
   }
@@ -59,8 +66,8 @@ export class StorageService {
     // Remove path separators, parent directory references, and null bytes
     // Allow dots for domain names but block ".." sequences
     return component
-      .replace(/\.\./g, '_')  // Block parent directory traversal
-      .replace(/[/\\\0]/g, '_');  // Block path separators and null bytes
+      .replace(/\.\./g, '_') // Block parent directory traversal
+      .replace(/[/\\\0]/g, '_'); // Block path separators and null bytes
   }
 
   /**
@@ -71,8 +78,13 @@ export class StorageService {
       this.validatePath(dirPath);
       await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
-      this.logger.error(`[ensureDirectory] Failed to create directory: ${dirPath}`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to create directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[ensureDirectory] Failed to create directory: ${dirPath}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to create directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -96,21 +108,27 @@ export class StorageService {
    * Get default fallback image path
    */
   getDefaultImagePath(type: 'not_found' | 'permission_denied'): string {
-    const filename = type === 'not_found'
-      ? 'fileharbor_not_found.webp'
-      : 'fileharbor_permission_denided.webp';
+    const filename =
+      type === 'not_found'
+        ? 'fileharbor_not_found.webp'
+        : 'fileharbor_permission_denided.webp';
     return path.join(this.storagePath, 'defaults.fileharbor', filename);
   }
 
   /**
    * Get default fallback image buffer
    */
-  async getDefaultImage(type: 'not_found' | 'permission_denied'): Promise<Buffer> {
+  async getDefaultImage(
+    type: 'not_found' | 'permission_denied',
+  ): Promise<Buffer> {
     const imagePath = this.getDefaultImagePath(type);
     try {
       return await fs.readFile(imagePath);
     } catch (error) {
-      this.logger.error(`[getDefaultImage] Failed to read default image: ${imagePath}`, error instanceof Error ? error.stack : error);
+      this.logger.error(
+        `[getDefaultImage] Failed to read default image: ${imagePath}`,
+        error instanceof Error ? error.stack : error,
+      );
       throw new InternalServerErrorException('Failed to load default image');
     }
   }
@@ -121,7 +139,7 @@ export class StorageService {
   getImageFilePath(
     domain: string,
     imageId: string,
-    variant: 'original' | 'thumb' = 'original'
+    variant: 'original' | 'thumb' = 'original',
   ): string {
     return `${this.getImagePath(domain, imageId)}/${variant}.webp`;
   }
@@ -140,7 +158,7 @@ export class StorageService {
   getAvatarFilePath(
     domain: string,
     userId: string,
-    variant: 'original' | 'thumb' = 'original'
+    variant: 'original' | 'thumb' = 'original',
   ): string {
     return `${this.getAvatarPath(domain, userId)}/${variant}.webp`;
   }
@@ -155,8 +173,13 @@ export class StorageService {
       await this.ensureDirectory(dir);
       await fs.writeFile(filePath, buffer);
     } catch (error) {
-      this.logger.error(`[saveFile] Failed to save file: ${filePath}`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[saveFile] Failed to save file: ${filePath}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -168,8 +191,13 @@ export class StorageService {
       this.validatePath(filePath);
       return await fs.readFile(filePath);
     } catch (error) {
-      this.logger.error(`[readFile] Failed to read file: ${filePath}`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[readFile] Failed to read file: ${filePath}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -182,8 +210,13 @@ export class StorageService {
       this.validatePath(dirPath);
       await fs.rm(dirPath, { recursive: true, force: true });
     } catch (error) {
-      this.logger.error(`[deleteDirectory] Failed to delete directory: ${dirPath}`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to delete directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[deleteDirectory] Failed to delete directory: ${dirPath}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to delete directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -206,8 +239,8 @@ export class StorageService {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
       return entries
-        .filter(entry => entry.isDirectory())
-        .map(entry => entry.name);
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
     } catch (error) {
       // If directory doesn't exist or is not accessible, return empty array
       return [];
@@ -242,7 +275,11 @@ export class StorageService {
     return path.join(this.getClientPath(domain), 'videos', sanitizedVideoId);
   }
 
-  getVideoFilePath(domain: string, videoId: string, variant: 'original' | 'thumb' = 'original'): string {
+  getVideoFilePath(
+    domain: string,
+    videoId: string,
+    variant: 'original' | 'thumb' = 'original',
+  ): string {
     const ext = variant === 'original' ? 'mp4' : 'webp';
     return `${this.getVideoPath(domain, videoId)}/${variant}.${ext}`;
   }
@@ -259,12 +296,21 @@ export class StorageService {
       await this.ensureDirectory(dir);
       await fs.copyFile(srcPath, destPath);
     } catch (error) {
-      this.logger.error(`[copyFromTemp] Failed: ${destPath}`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to store file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[copyFromTemp] Failed: ${destPath}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to store file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
-  async extractVideoThumbnail(videoPath: string, outputPath: string, quality: number = 80): Promise<void> {
+  async extractVideoThumbnail(
+    videoPath: string,
+    outputPath: string,
+    quality: number = 80,
+  ): Promise<void> {
     const tmpJpeg = path.join(os.tmpdir(), `${uuidv4()}.jpg`);
     const FFMPEG_TIMEOUT_MS = 30_000;
 
@@ -282,7 +328,10 @@ export class StorageService {
             .on('error', (err: Error) => reject(err));
         }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('ffmpeg thumbnail extraction timed out')), FFMPEG_TIMEOUT_MS),
+          setTimeout(
+            () => reject(new Error('ffmpeg thumbnail extraction timed out')),
+            FFMPEG_TIMEOUT_MS,
+          ),
         ),
       ]);
 
@@ -290,18 +339,26 @@ export class StorageService {
       const webpBuffer = await sharp(jpegBuffer).webp({ quality }).toBuffer();
       await this.saveFile(outputPath, webpBuffer);
     } catch (error) {
-      this.logger.error(`[extractVideoThumbnail] Failed: ${error instanceof Error ? error.message : error}`);
-      throw new InternalServerErrorException(`Failed to extract thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[extractVideoThumbnail] Failed: ${error instanceof Error ? error.message : error}`,
+      );
+      throw new InternalServerErrorException(
+        `Failed to extract thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     } finally {
       await fs.unlink(tmpJpeg).catch(() => {});
     }
   }
 
-  async getVideoMetadata(videoPath: string): Promise<{ duration: number; width: number; height: number }> {
+  async getVideoMetadata(
+    videoPath: string,
+  ): Promise<{ duration: number; width: number; height: number }> {
     return new Promise((resolve, reject) => {
       fluentFfmpeg.ffprobe(videoPath, (err: Error | null, data: any) => {
         if (err) return reject(err);
-        const videoStream = data.streams?.find((s: any) => s.codec_type === 'video');
+        const videoStream = data.streams?.find(
+          (s: any) => s.codec_type === 'video',
+        );
         resolve({
           duration: Math.round(data.format?.duration ?? 0),
           width: videoStream?.width ?? 0,
@@ -314,14 +371,20 @@ export class StorageService {
   /**
    * Convert image to WebP
    */
-  async convertToWebP(inputBuffer: Buffer, quality: number = 85): Promise<Buffer> {
+  async convertToWebP(
+    inputBuffer: Buffer,
+    quality: number = 85,
+  ): Promise<Buffer> {
     try {
-      return await sharp(inputBuffer)
-        .webp({ quality })
-        .toBuffer();
+      return await sharp(inputBuffer).webp({ quality }).toBuffer();
     } catch (error) {
-      this.logger.error(`[convertToWebP] Failed to convert image to WebP`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to convert image to WebP: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[convertToWebP] Failed to convert image to WebP`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to convert image to WebP: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -337,14 +400,14 @@ export class StorageService {
       height?: number;
       format?: 'webp' | 'jpeg' | 'png';
       maintainAspectRatio?: boolean;
-    } = {}
+    } = {},
   ): Promise<Buffer> {
     try {
       const {
         width = maxSize,
         height = maxSize,
         format = 'webp',
-        maintainAspectRatio = true
+        maintainAspectRatio = true,
       } = options;
 
       let pipeline = sharp(inputBuffer);
@@ -353,32 +416,46 @@ export class StorageService {
       pipeline = pipeline.resize(width, height, {
         fit: maintainAspectRatio ? 'inside' : 'fill',
         withoutEnlargement: true,
-        background: format === 'jpeg' ? { r: 255, g: 255, b: 255, alpha: 1 } : { r: 0, g: 0, b: 0, alpha: 0 }
+        background:
+          format === 'jpeg'
+            ? { r: 255, g: 255, b: 255, alpha: 1 }
+            : { r: 0, g: 0, b: 0, alpha: 0 },
       });
 
       // Apply format-specific compression
       switch (format) {
         case 'jpeg':
-          return await pipeline.jpeg({
-            quality,
-            progressive: true,
-            mozjpeg: true // Better compression
-          }).toBuffer();
+          return await pipeline
+            .jpeg({
+              quality,
+              progressive: true,
+              mozjpeg: true, // Better compression
+            })
+            .toBuffer();
         case 'png':
-          return await pipeline.png({
-            quality,
-            progressive: true,
-            compressionLevel: 9
-          }).toBuffer();
+          return await pipeline
+            .png({
+              quality,
+              progressive: true,
+              compressionLevel: 9,
+            })
+            .toBuffer();
         default:
-          return await pipeline.webp({
-            quality,
-            effort: 6 // Better compression
-          }).toBuffer();
+          return await pipeline
+            .webp({
+              quality,
+              effort: 6, // Better compression
+            })
+            .toBuffer();
       }
     } catch (error) {
-      this.logger.error(`[createThumbnail] Failed to create thumbnail`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to create thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[createThumbnail] Failed to create thumbnail`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to create thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -400,8 +477,13 @@ export class StorageService {
         size: buffer.length,
       };
     } catch (error) {
-      this.logger.error(`[getImageMetadata] Failed to get image metadata`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to get image metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[getImageMetadata] Failed to get image metadata`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to get image metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -454,9 +536,10 @@ export class StorageService {
         .toBuffer();
     } catch (error) {
       // Provide more detailed error information
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new InternalServerErrorException(
-        `Failed to optimize image: ${errorMessage}. The image may be corrupted or in an unsupported format.`
+        `Failed to optimize image: ${errorMessage}. The image may be corrupted or in an unsupported format.`,
       );
     }
   }
@@ -469,7 +552,7 @@ export class StorageService {
     width?: number,
     height?: number,
     format: 'webp' | 'jpeg' | 'png' = 'webp',
-    quality: number = 85
+    quality: number = 85,
   ): Promise<Buffer> {
     try {
       let pipeline = sharp(buffer);
@@ -490,8 +573,13 @@ export class StorageService {
           return await pipeline.webp({ quality }).toBuffer();
       }
     } catch (error) {
-      this.logger.error(`[resizeImage] Failed to resize image`, error instanceof Error ? error.stack : error);
-      throw new InternalServerErrorException(`Failed to resize image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `[resizeImage] Failed to resize image`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to resize image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 }

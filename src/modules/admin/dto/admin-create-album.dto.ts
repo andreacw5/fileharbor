@@ -12,7 +12,8 @@ export class AdminCreateAlbumDto {
   clientId: string;
 
   @ApiPropertyOptional({
-    description: 'External user ID to associate the album with (defaults to "system")',
+    description:
+      'External user ID to associate the album with (defaults to "system")',
     example: 'user-456',
   })
   @IsOptional()
@@ -35,7 +36,8 @@ export class AdminCreateAlbumDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Whether the album is public (accessible without authentication)',
+    description:
+      'Whether the album is public (accessible without authentication)',
     default: false,
     example: false,
   })
@@ -65,4 +67,3 @@ export class AdminCreateAlbumDto {
   @IsUUID()
   coverImageId?: string;
 }
-

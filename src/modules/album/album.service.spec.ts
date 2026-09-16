@@ -131,7 +131,10 @@ describe('AlbumService', () => {
   };
 
   const mockRouteService = {
-    fullUrl: jest.fn((...segments: string[]) => `http://localhost:3000/v2/${segments.join('/')}`),
+    fullUrl: jest.fn(
+      (...segments: string[]) =>
+        `http://localhost:3000/v2/${segments.join('/')}`,
+    ),
   };
 
   beforeEach(async () => {
@@ -167,7 +170,11 @@ describe('AlbumService', () => {
 
       mockPrismaService.album.create.mockResolvedValue(mockAlbum);
 
-      const result = await service.createAlbum(mockClientId, mockUserId, createDto);
+      const result = await service.createAlbum(
+        mockClientId,
+        mockUserId,
+        createDto,
+      );
 
       expect(result).toEqual({
         id: mockAlbum.id,
@@ -196,24 +203,37 @@ describe('AlbumService', () => {
     });
 
     it('should create a public album when isPublic is true', async () => {
-      const createDto: CreateAlbumDto = { name: 'Public Album', isPublic: true };
+      const createDto: CreateAlbumDto = {
+        name: 'Public Album',
+        isPublic: true,
+      };
       mockPrismaService.album.create.mockResolvedValue(mockPublicAlbum);
 
       await service.createAlbum(mockClientId, mockUserId, createDto);
 
       expect(mockPrismaService.album.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ isPublic: true }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ isPublic: true }),
+        }),
       );
     });
 
     it('should create album with externalAlbumId when provided', async () => {
-      const createDto: CreateAlbumDto = { externalAlbumId: 'ext-album-456', name: 'External Album' };
-      mockPrismaService.album.create.mockResolvedValue({ ...mockAlbum, externalAlbumId: 'ext-album-456' });
+      const createDto: CreateAlbumDto = {
+        externalAlbumId: 'ext-album-456',
+        name: 'External Album',
+      };
+      mockPrismaService.album.create.mockResolvedValue({
+        ...mockAlbum,
+        externalAlbumId: 'ext-album-456',
+      });
 
       await service.createAlbum(mockClientId, mockUserId, createDto);
 
       expect(mockPrismaService.album.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ externalAlbumId: 'ext-album-456' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ externalAlbumId: 'ext-album-456' }),
+        }),
       );
     });
   });
@@ -228,15 +248,21 @@ describe('AlbumService', () => {
 
       expect(result).toEqual(mockAlbumWithItems);
       expect(mockPrismaService.album.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: mockAlbumId, clientId: mockClientId } }),
+        expect.objectContaining({
+          where: { id: mockAlbumId, clientId: mockClientId },
+        }),
       );
     });
 
     it('should throw NotFoundException when album not found', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(null);
 
-      await expect(service.getAlbumById('non-existent', mockClientId)).rejects.toThrow(NotFoundException);
-      await expect(service.getAlbumById('non-existent', mockClientId)).rejects.toThrow('Album not found');
+      await expect(
+        service.getAlbumById('non-existent', mockClientId),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getAlbumById('non-existent', mockClientId),
+      ).rejects.toThrow('Album not found');
     });
   });
 
@@ -244,9 +270,15 @@ describe('AlbumService', () => {
 
   describe('getAlbumWithItems', () => {
     it('should return public album for any user', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockPublicAlbumWithItems);
+      mockPrismaService.album.findFirst.mockResolvedValue(
+        mockPublicAlbumWithItems,
+      );
 
-      const result = await service.getAlbumWithItems(mockPublicAlbum.id, mockClientId, 'different-user');
+      const result = await service.getAlbumWithItems(
+        mockPublicAlbum.id,
+        mockClientId,
+        'different-user',
+      );
 
       expect(result.itemCount).toBe(1);
       expect(result.isPublic).toBe(true);
@@ -255,7 +287,11 @@ describe('AlbumService', () => {
     it('should return private album for owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
-      const result = await service.getAlbumWithItems(mockAlbumId, mockClientId, mockUserId);
+      const result = await service.getAlbumWithItems(
+        mockAlbumId,
+        mockClientId,
+        mockUserId,
+      );
 
       expect(result.itemCount).toBe(1);
     });
@@ -276,7 +312,10 @@ describe('AlbumService', () => {
 
   describe('getUserAlbums', () => {
     it('should return all albums for a user', async () => {
-      const albums = [mockAlbumWithItems, { ...mockAlbumWithItems, id: 'album-456' }];
+      const albums = [
+        mockAlbumWithItems,
+        { ...mockAlbumWithItems, id: 'album-456' },
+      ];
       mockPrismaService.album.findMany.mockResolvedValue(albums);
 
       const result = await service.getUserAlbums(mockClientId, mockUserId);
@@ -301,7 +340,11 @@ describe('AlbumService', () => {
       mockPrismaService.album.findMany.mockResolvedValue([mockAlbumWithItems]);
       mockPrismaService.album.count.mockResolvedValue(1);
 
-      const result = await service.listAlbums({ clientId: mockClientId, page: 1, perPage: 20 });
+      const result = await service.listAlbums({
+        clientId: mockClientId,
+        page: 1,
+        perPage: 20,
+      });
 
       expect(result.data).toHaveLength(1);
       expect(result.pagination.page).toBe(1);
@@ -311,25 +354,33 @@ describe('AlbumService', () => {
     });
 
     it('should filter albums by public status', async () => {
-      mockPrismaService.album.findMany.mockResolvedValue([{ ...mockPublicAlbumWithItems }]);
+      mockPrismaService.album.findMany.mockResolvedValue([
+        { ...mockPublicAlbumWithItems },
+      ]);
       mockPrismaService.album.count.mockResolvedValue(1);
 
       await service.listAlbums({ clientId: mockClientId, public: true });
 
       expect(mockPrismaService.album.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ isPublic: true }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ isPublic: true }),
+        }),
       );
     });
 
     it('should filter albums by search term', async () => {
-      mockPrismaService.album.findMany.mockResolvedValue([{ ...mockAlbumWithItems }]);
+      mockPrismaService.album.findMany.mockResolvedValue([
+        { ...mockAlbumWithItems },
+      ]);
       mockPrismaService.album.count.mockResolvedValue(1);
 
       await service.listAlbums({ clientId: mockClientId, search: 'Test' });
 
       expect(mockPrismaService.album.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ name: { contains: 'Test', mode: 'insensitive' } }),
+          where: expect.objectContaining({
+            name: { contains: 'Test', mode: 'insensitive' },
+          }),
         }),
       );
     });
@@ -350,12 +401,23 @@ describe('AlbumService', () => {
 
   describe('updateAlbum', () => {
     it('should update album when user is owner', async () => {
-      const updateDto: UpdateAlbumDto = { name: 'Updated Album', description: 'Updated Description' };
+      const updateDto: UpdateAlbumDto = {
+        name: 'Updated Album',
+        description: 'Updated Description',
+      };
 
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
-      mockPrismaService.album.update.mockResolvedValue({ ...mockAlbum, ...updateDto });
+      mockPrismaService.album.update.mockResolvedValue({
+        ...mockAlbum,
+        ...updateDto,
+      });
 
-      const result = await service.updateAlbum(mockAlbumId, mockClientId, mockUserId, updateDto);
+      const result = await service.updateAlbum(
+        mockAlbumId,
+        mockClientId,
+        mockUserId,
+        updateDto,
+      );
 
       expect(result.name).toBe('Updated Album');
       expect(result.description).toBe('Updated Description');
@@ -368,10 +430,20 @@ describe('AlbumService', () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.updateAlbum(mockAlbumId, mockClientId, 'different-user', updateDto),
+        service.updateAlbum(
+          mockAlbumId,
+          mockClientId,
+          'different-user',
+          updateDto,
+        ),
       ).rejects.toThrow(ForbiddenException);
       await expect(
-        service.updateAlbum(mockAlbumId, mockClientId, 'different-user', updateDto),
+        service.updateAlbum(
+          mockAlbumId,
+          mockClientId,
+          'different-user',
+          updateDto,
+        ),
       ).rejects.toThrow('You can only update your own albums');
     });
   });
@@ -383,11 +455,17 @@ describe('AlbumService', () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.album.delete.mockResolvedValue(mockAlbum);
 
-      const result = await service.deleteAlbum(mockAlbumId, mockClientId, mockUserId);
+      const result = await service.deleteAlbum(
+        mockAlbumId,
+        mockClientId,
+        mockUserId,
+      );
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Album deleted successfully');
-      expect(mockPrismaService.album.delete).toHaveBeenCalledWith({ where: { id: mockAlbumId } });
+      expect(mockPrismaService.album.delete).toHaveBeenCalledWith({
+        where: { id: mockAlbumId },
+      });
       expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
@@ -406,7 +484,11 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('addItemsToAlbum', () => {
-    const mockUpsertResult = { id: 'album-item-123', resourceType: AlbumResourceType.IMAGE, order: 0 };
+    const mockUpsertResult = {
+      id: 'album-item-123',
+      resourceType: AlbumResourceType.IMAGE,
+      order: 0,
+    };
 
     it('should add an image to album', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
@@ -428,11 +510,17 @@ describe('AlbumService', () => {
     });
 
     it('should add a video to album', async () => {
-      const mockVideoUpsertResult = { id: 'album-item-456', resourceType: AlbumResourceType.VIDEO, order: 0 };
+      const mockVideoUpsertResult = {
+        id: 'album-item-456',
+        resourceType: AlbumResourceType.VIDEO,
+        order: 0,
+      };
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
       mockPrismaService.albumItem.findFirst.mockResolvedValue(null);
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.albumItem.upsert.mockResolvedValue(mockVideoUpsertResult);
+      mockPrismaService.albumItem.upsert.mockResolvedValue(
+        mockVideoUpsertResult,
+      );
 
       const result = await service.addItemsToAlbum(
         mockAlbumId,
@@ -507,13 +595,19 @@ describe('AlbumService', () => {
       expect(result.success).toBe(true);
       expect(result.removed).toBe(1);
       expect(mockPrismaService.albumItem.delete).toHaveBeenCalledWith({
-        where: { albumId_imageId: { albumId: mockAlbumId, imageId: mockImageId } },
+        where: {
+          albumId_imageId: { albumId: mockAlbumId, imageId: mockImageId },
+        },
       });
     });
 
     it('should remove a video from album', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.delete.mockResolvedValue({ ...mockAlbumItem, videoId: mockVideoId, imageId: null });
+      mockPrismaService.albumItem.delete.mockResolvedValue({
+        ...mockAlbumItem,
+        videoId: mockVideoId,
+        imageId: null,
+      });
 
       const result = await service.removeItemsFromAlbum(
         mockAlbumId,
@@ -524,7 +618,9 @@ describe('AlbumService', () => {
 
       expect(result.removed).toBe(1);
       expect(mockPrismaService.albumItem.delete).toHaveBeenCalledWith({
-        where: { albumId_videoId: { albumId: mockAlbumId, videoId: mockVideoId } },
+        where: {
+          albumId_videoId: { albumId: mockAlbumId, videoId: mockVideoId },
+        },
       });
     });
 
@@ -543,7 +639,9 @@ describe('AlbumService', () => {
 
     it('should silently skip items not found (no throw)', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.delete.mockRejectedValue(new Error('Record not found'));
+      mockPrismaService.albumItem.delete.mockRejectedValue(
+        new Error('Record not found'),
+      );
 
       const result = await service.removeItemsFromAlbum(
         mockAlbumId,
@@ -564,7 +662,12 @@ describe('AlbumService', () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.albumToken.create.mockResolvedValue(mockAlbumToken);
 
-      const result = await service.generateAlbumToken(mockAlbumId, mockClientId, mockUserId, 7);
+      const result = await service.generateAlbumToken(
+        mockAlbumId,
+        mockClientId,
+        mockUserId,
+        7,
+      );
 
       expect(result.token).toBeDefined();
       expect(result.albumId).toBe(mockAlbumId);
@@ -575,13 +678,19 @@ describe('AlbumService', () => {
     it('should generate token without expiration when expiresInDays not provided', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.albumToken.create.mockImplementation((params) =>
-        Promise.resolve({ ...mockAlbumToken, token: params.data.token, expiresAt: params.data.expiresAt }),
+        Promise.resolve({
+          ...mockAlbumToken,
+          token: params.data.token,
+          expiresAt: params.data.expiresAt,
+        }),
       );
 
       await service.generateAlbumToken(mockAlbumId, mockClientId, mockUserId);
 
       expect(mockPrismaService.albumToken.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ expiresAt: null }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ expiresAt: null }),
+        }),
       );
     });
 
@@ -589,7 +698,12 @@ describe('AlbumService', () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.generateAlbumToken(mockAlbumId, mockClientId, 'different-user', 7),
+        service.generateAlbumToken(
+          mockAlbumId,
+          mockClientId,
+          'different-user',
+          7,
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -608,22 +722,35 @@ describe('AlbumService', () => {
     it('should throw ForbiddenException for invalid token', async () => {
       mockPrismaService.albumToken.findUnique.mockResolvedValue(null);
 
-      await expect(service.validateAlbumToken(mockAlbumId, 'invalid-token')).rejects.toThrow(ForbiddenException);
-      await expect(service.validateAlbumToken(mockAlbumId, 'invalid-token')).rejects.toThrow('Invalid token');
+      await expect(
+        service.validateAlbumToken(mockAlbumId, 'invalid-token'),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.validateAlbumToken(mockAlbumId, 'invalid-token'),
+      ).rejects.toThrow('Invalid token');
     });
 
     it('should throw ForbiddenException for token with wrong albumId', async () => {
       mockPrismaService.albumToken.findUnique.mockResolvedValue(mockAlbumToken);
 
-      await expect(service.validateAlbumToken('wrong-album-id', mockToken)).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.validateAlbumToken('wrong-album-id', mockToken),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw ForbiddenException for expired token', async () => {
-      const expiredToken = { ...mockAlbumToken, expiresAt: new Date(Date.now() - 1000) };
+      const expiredToken = {
+        ...mockAlbumToken,
+        expiresAt: new Date(Date.now() - 1000),
+      };
       mockPrismaService.albumToken.findUnique.mockResolvedValue(expiredToken);
 
-      await expect(service.validateAlbumToken(mockAlbumId, mockToken)).rejects.toThrow(ForbiddenException);
-      await expect(service.validateAlbumToken(mockAlbumId, mockToken)).rejects.toThrow('Token expired');
+      await expect(
+        service.validateAlbumToken(mockAlbumId, mockToken),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.validateAlbumToken(mockAlbumId, mockToken),
+      ).rejects.toThrow('Token expired');
     });
   });
 
@@ -644,20 +771,26 @@ describe('AlbumService', () => {
 
       expect(result.id).toBe(mockAlbumId);
       expect(result.itemCount).toBe(1);
-      expect(result.coverUrl).toBe(`http://localhost:3000/v2/images/${mockImageId}`);
+      expect(result.coverUrl).toBe(
+        `http://localhost:3000/v2/images/${mockImageId}`,
+      );
     });
 
     it('should throw ForbiddenException for invalid token', async () => {
       mockPrismaService.albumToken.findUnique.mockResolvedValue(null);
 
-      await expect(service.getAlbumBySharedToken('invalid-token')).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.getAlbumBySharedToken('invalid-token'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException when album not found', async () => {
       mockPrismaService.albumToken.findUnique.mockResolvedValue(mockAlbumToken);
       mockPrismaService.album.findUnique.mockResolvedValue(null);
 
-      await expect(service.getAlbumBySharedToken(mockToken)).rejects.toThrow(NotFoundException);
+      await expect(service.getAlbumBySharedToken(mockToken)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -668,11 +801,17 @@ describe('AlbumService', () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.albumToken.deleteMany.mockResolvedValue({ count: 2 });
 
-      const result = await service.revokeAlbumToken(mockAlbumId, mockClientId, mockUserId);
+      const result = await service.revokeAlbumToken(
+        mockAlbumId,
+        mockClientId,
+        mockUserId,
+      );
 
       expect(result.success).toBe(true);
       expect(result.count).toBe(2);
-      expect(mockPrismaService.albumToken.deleteMany).toHaveBeenCalledWith({ where: { albumId: mockAlbumId } });
+      expect(mockPrismaService.albumToken.deleteMany).toHaveBeenCalledWith({
+        where: { albumId: mockAlbumId },
+      });
     });
 
     it('should throw ForbiddenException when user is not owner', async () => {
@@ -705,12 +844,20 @@ describe('AlbumService', () => {
     it('should return album by external ID', async () => {
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
 
-      const result = await service.getAlbumByExternalId('ext-album-123', mockClientId);
+      const result = await service.getAlbumByExternalId(
+        'ext-album-123',
+        mockClientId,
+      );
 
       expect(result).toEqual(mockAlbumWithItems);
       expect(mockPrismaService.album.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { clientId_externalAlbumId: { clientId: mockClientId, externalAlbumId: 'ext-album-123' } },
+          where: {
+            clientId_externalAlbumId: {
+              clientId: mockClientId,
+              externalAlbumId: 'ext-album-123',
+            },
+          },
         }),
       );
     });
@@ -718,7 +865,9 @@ describe('AlbumService', () => {
     it('should throw NotFoundException when album not found', async () => {
       mockPrismaService.album.findUnique.mockResolvedValue(null);
 
-      await expect(service.getAlbumByExternalId('non-existent', mockClientId)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getAlbumByExternalId('non-existent', mockClientId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -726,9 +875,15 @@ describe('AlbumService', () => {
 
   describe('getAlbumWithItemsByExternalId', () => {
     it('should return public album by external ID for any user', async () => {
-      mockPrismaService.album.findUnique.mockResolvedValue(mockPublicAlbumWithItems);
+      mockPrismaService.album.findUnique.mockResolvedValue(
+        mockPublicAlbumWithItems,
+      );
 
-      const result = await service.getAlbumWithItemsByExternalId('ext-album-123', mockClientId, 'any-user');
+      const result = await service.getAlbumWithItemsByExternalId(
+        'ext-album-123',
+        mockClientId,
+        'any-user',
+      );
 
       expect(result.isPublic).toBe(true);
       expect(result.itemCount).toBe(1);
@@ -738,7 +893,11 @@ describe('AlbumService', () => {
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.getAlbumWithItemsByExternalId('ext-album-123', mockClientId, 'different-user'),
+        service.getAlbumWithItemsByExternalId(
+          'ext-album-123',
+          mockClientId,
+          'different-user',
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -750,9 +909,17 @@ describe('AlbumService', () => {
       const updateDto: UpdateAlbumDto = { name: 'Updated Name' };
 
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
-      mockPrismaService.album.update.mockResolvedValue({ ...mockAlbum, name: 'Updated Name' });
+      mockPrismaService.album.update.mockResolvedValue({
+        ...mockAlbum,
+        name: 'Updated Name',
+      });
 
-      const result = await service.updateAlbumByExternalId('ext-album-123', mockClientId, mockUserId, updateDto);
+      const result = await service.updateAlbumByExternalId(
+        'ext-album-123',
+        mockClientId,
+        mockUserId,
+        updateDto,
+      );
 
       expect(result.name).toBe('Updated Name');
       expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
@@ -762,7 +929,12 @@ describe('AlbumService', () => {
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.updateAlbumByExternalId('ext-album-123', mockClientId, 'different-user', {}),
+        service.updateAlbumByExternalId(
+          'ext-album-123',
+          mockClientId,
+          'different-user',
+          {},
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -771,7 +943,11 @@ describe('AlbumService', () => {
 
   describe('addItemsToAlbumByExternalId', () => {
     it('should add items to album by external ID', async () => {
-      const mockUpsertResult = { id: 'album-item-123', resourceType: AlbumResourceType.IMAGE, order: 0 };
+      const mockUpsertResult = {
+        id: 'album-item-123',
+        resourceType: AlbumResourceType.IMAGE,
+        order: 0,
+      };
 
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
@@ -844,14 +1020,18 @@ describe('AlbumService', () => {
 
       // mapAlbumItem returns a union whose base variant carries neither image
       // nor video, so the payload is narrowed here rather than in the assertion.
-      const { image } = result.data[0] as { image: { fullPath: string; thumbnailPath: string } };
+      const { image } = result.data[0] as {
+        image: { fullPath: string; thumbnailPath: string };
+      };
 
       // `/images/:id/thumb` does not exist — image.controller.ts declares only
       // `@Get()` and `@Get(':imageId')`, and the thumbnail is a query on it.
       expect(image.thumbnailPath).toBe(
         `http://localhost:3000/v2/images/${mockImageId}?thumb=true`,
       );
-      expect(image.fullPath).toBe(`http://localhost:3000/v2/images/${mockImageId}`);
+      expect(image.fullPath).toBe(
+        `http://localhost:3000/v2/images/${mockImageId}`,
+      );
     });
 
     it('keeps the video thumbnail on the path segment that does exist', async () => {
@@ -883,12 +1063,16 @@ describe('AlbumService', () => {
         perPage: 20,
       });
 
-      const { video } = result.data[0] as { video: { url: string; thumbnailUrl: string } };
+      const { video } = result.data[0] as {
+        video: { url: string; thumbnailUrl: string };
+      };
 
       // Unlike images, the video controller really does declare `@Get(':id/thumb')`,
       // so here the path segment is correct and must stay that way.
       expect(video.url).toBe(`http://localhost:3000/v2/videos/${mockVideoId}`);
-      expect(video.thumbnailUrl).toBe(`http://localhost:3000/v2/videos/${mockVideoId}/thumb`);
+      expect(video.thumbnailUrl).toBe(
+        `http://localhost:3000/v2/videos/${mockVideoId}/thumb`,
+      );
     });
   });
 
@@ -896,7 +1080,9 @@ describe('AlbumService', () => {
     it('should include expected fields and exclude updatedAt', async () => {
       mockPrismaService.album.create.mockResolvedValue(mockAlbum);
 
-      const result = await service.createAlbum(mockClientId, mockUserId, { name: 'Test' });
+      const result = await service.createAlbum(mockClientId, mockUserId, {
+        name: 'Test',
+      });
 
       expect(result).toHaveProperty('id');
       expect(result).toHaveProperty('externalAlbumId');

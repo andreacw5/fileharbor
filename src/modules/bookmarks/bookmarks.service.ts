@@ -1,8 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { assertClientAccess, buildClientWhere } from '@/modules/admin/helpers/admin-access.helper';
-import { extractTagNames, extractVideoTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
+import {
+  assertClientAccess,
+  buildClientWhere,
+} from '@/modules/admin/helpers/admin-access.helper';
+import {
+  extractTagNames,
+  extractVideoTagNames,
+  normalizeTagNames,
+} from '@/modules/tag/tag.utils';
 import { RouteHelperService } from '@/utils/route.utils';
 
 export type AdminVideoBookmarksListParams = {
@@ -34,7 +45,10 @@ export class BookmarksService {
     private readonly route: RouteHelperService,
   ) {}
 
-  async listBookmarks(adminUser: AdminJwtPayload, params: AdminBookmarksListParams) {
+  async listBookmarks(
+    adminUser: AdminJwtPayload,
+    params: AdminBookmarksListParams,
+  ) {
     const page = Math.max(Number(params.page) || 1, 1);
     const perPage = Math.min(Math.max(Number(params.perPage) || 20, 1), 100);
     const skip = (page - 1) * perPage;
@@ -46,7 +60,10 @@ export class BookmarksService {
     };
 
     if (params.search) {
-      where.image.originalName = { contains: params.search, mode: 'insensitive' };
+      where.image.originalName = {
+        contains: params.search,
+        mode: 'insensitive',
+      };
     }
 
     const tags = normalizeTagNames(params.tags);
@@ -146,7 +163,10 @@ export class BookmarksService {
     return this.getBookmarkByAdminAndUser(adminUser.actorId, userId);
   }
 
-  async removeBookmark(adminUser: AdminJwtPayload, imageId: string): Promise<{ removed: number }> {
+  async removeBookmark(
+    adminUser: AdminJwtPayload,
+    imageId: string,
+  ): Promise<{ removed: number }> {
     const image = await this.prisma.image.findUnique({
       where: { id: imageId },
       select: { id: true, clientId: true },
@@ -170,7 +190,10 @@ export class BookmarksService {
     return { removed: result.count };
   }
 
-  async removeUserBookmark(adminUser: AdminJwtPayload, userId: string): Promise<{ removed: number }> {
+  async removeUserBookmark(
+    adminUser: AdminJwtPayload,
+    userId: string,
+  ): Promise<{ removed: number }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, clientId: true },
@@ -249,13 +272,22 @@ export class BookmarksService {
             where: { resourceType: 'IMAGE' },
             include: {
               album: {
-                select: { id: true, name: true, externalAlbumId: true, isPublic: true },
+                select: {
+                  id: true,
+                  name: true,
+                  externalAlbumId: true,
+                  isPublic: true,
+                },
               },
             },
           },
           _count: {
             select: {
-              shareLinks: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+              shareLinks: {
+                where: {
+                  OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                },
+              },
             },
           },
         },
@@ -292,13 +324,18 @@ export class BookmarksService {
         ...image,
         tags: extractTagNames(image),
         fullPath: this.route.fullUrl('images', image.id),
-        albums: (image.albumItems ?? []).map((albumItem: any) => albumItem.album),
+        albums: (image.albumItems ?? []).map(
+          (albumItem: any) => albumItem.album,
+        ),
         activeShareLinks: image._count?.shareLinks ?? 0,
       },
     };
   }
 
-  async listVideoBookmarks(adminUser: AdminJwtPayload, params: AdminVideoBookmarksListParams) {
+  async listVideoBookmarks(
+    adminUser: AdminJwtPayload,
+    params: AdminVideoBookmarksListParams,
+  ) {
     const page = Math.max(Number(params.page) || 1, 1);
     const perPage = Math.min(Math.max(Number(params.perPage) || 20, 1), 100);
     const skip = (page - 1) * perPage;
@@ -309,7 +346,10 @@ export class BookmarksService {
     };
 
     if (params.search) {
-      where.video.originalName = { contains: params.search, mode: 'insensitive' };
+      where.video.originalName = {
+        contains: params.search,
+        mode: 'insensitive',
+      };
     }
 
     const prisma = this.prisma as any;
@@ -327,7 +367,12 @@ export class BookmarksService {
 
     return {
       data: rows.map((b: any) => this.mapVideoBookmark(b)),
-      pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
+      pagination: {
+        page,
+        perPage,
+        total,
+        totalPages: Math.ceil(total / perPage),
+      },
     };
   }
 
@@ -351,7 +396,10 @@ export class BookmarksService {
     return this.getBookmarkByAdminAndVideo(adminUser.actorId, videoId);
   }
 
-  async removeVideoBookmark(adminUser: AdminJwtPayload, videoId: string): Promise<{ removed: number }> {
+  async removeVideoBookmark(
+    adminUser: AdminJwtPayload,
+    videoId: string,
+  ): Promise<{ removed: number }> {
     const video = await this.prisma.video.findUnique({
       where: { id: videoId },
       select: { id: true, clientId: true },
@@ -376,7 +424,8 @@ export class BookmarksService {
       include: this.buildVideoBookmarkInclude(),
     });
 
-    if (!bookmark) throw new BadRequestException('Bookmark could not be created');
+    if (!bookmark)
+      throw new BadRequestException('Bookmark could not be created');
     return this.mapVideoBookmark(bookmark);
   }
 
@@ -403,7 +452,12 @@ export class BookmarksService {
         ...video,
         tags: extractVideoTagNames(video),
         fullPath: this.route.fullUrl('admin', 'videos', video.id, 'stream'),
-        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', video.id, 'thumb'),
+        fullThumbnailUrl: this.route.fullUrl(
+          'admin',
+          'videos',
+          video.id,
+          'thumb',
+        ),
       },
     };
   }
@@ -425,4 +479,3 @@ export class BookmarksService {
     };
   }
 }
-

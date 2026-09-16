@@ -6,6 +6,6 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
 @Module({
   providers: [WebhookService],
   exports: [WebhookService],
-  imports: [HttpModule, PrismaModule]
+  imports: [HttpModule, PrismaModule],
 })
 export class WebhookModule {}

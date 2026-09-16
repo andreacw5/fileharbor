@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -56,7 +61,9 @@ export class AdminJwtGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const payload = await this.tokenVerifier.verifyAuthHeader(request.headers['authorization']);
+    const payload = await this.tokenVerifier.verifyAuthHeader(
+      request.headers['authorization'],
+    );
 
     const isSuperAdmin = payload.role === CONSOLE_SUPER_ROLE;
     this.assertPermission(context, payload.permissions ?? [], isSuperAdmin);
@@ -80,7 +87,10 @@ export class AdminJwtGuard implements CanActivate {
       principalId: principal?.id ?? null,
       fullAccess: principal?.fullAccess ?? false,
       actorId: principal?.id ?? `sub:${payload.sub}`,
-      allowedClientIds: await this.resolveVisibleClients(payload.tenantSlug, principal),
+      allowedClientIds: await this.resolveVisibleClients(
+        payload.tenantSlug,
+        principal,
+      ),
     } satisfies AdminJwtPayload;
 
     return true;
@@ -98,10 +108,9 @@ export class AdminJwtGuard implements CanActivate {
   ): void {
     if (isSuperAdmin) return;
 
-    const required = this.reflector.getAllAndOverride<ConsolePermission | undefined>(
-      REQUIRE_PERMISSION_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const required = this.reflector.getAllAndOverride<
+      ConsolePermission | undefined
+    >(REQUIRE_PERMISSION_KEY, [context.getHandler(), context.getClass()]);
 
     if (!required || !granted.includes(required)) {
       throw new ForbiddenException('Insufficient permissions');
@@ -129,7 +138,10 @@ export class AdminJwtGuard implements CanActivate {
     // No tenant match and no principal: nothing to look at, and no query to run.
     if (!where.OR.length) return [];
 
-    const clients = await this.prisma.client.findMany({ where, select: { id: true } });
+    const clients = await this.prisma.client.findMany({
+      where,
+      select: { id: true },
+    });
     return clients.map((client) => client.id);
   }
 }

@@ -42,7 +42,9 @@ export class StorageCleanupJob {
 
           // Clean orphaned images
           const imageIds = await this.storage.getClientImageIds(domain);
-          this.logger.log(`Checking ${imageIds.length} images for client ${domain}`);
+          this.logger.log(
+            `Checking ${imageIds.length} images for client ${domain}`,
+          );
 
           for (const imageId of imageIds) {
             const image = await this.prisma.image.findFirst({
@@ -57,13 +59,18 @@ export class StorageCleanupJob {
               const imagePath = this.storage.getImagePath(domain, imageId);
               await this.storage.deleteDirectory(imagePath);
               orphanedImagesCount++;
-              this.logger.log(`Deleted orphaned image: ${domain}/images/${imageId}`);
+              this.logger.log(
+                `Deleted orphaned image: ${domain}/images/${imageId}`,
+              );
             }
           }
 
           // Clean orphaned avatars
-          const avatarUserIds = await this.storage.getClientAvatarUserIds(domain);
-          this.logger.log(`Checking ${avatarUserIds.length} avatars for client ${domain}`);
+          const avatarUserIds =
+            await this.storage.getClientAvatarUserIds(domain);
+          this.logger.log(
+            `Checking ${avatarUserIds.length} avatars for client ${domain}`,
+          );
 
           for (const userId of avatarUserIds) {
             const avatar = await this.prisma.avatar.findFirst({
@@ -78,7 +85,9 @@ export class StorageCleanupJob {
               const avatarPath = this.storage.getAvatarPath(domain, userId);
               await this.storage.deleteDirectory(avatarPath);
               orphanedAvatarsCount++;
-              this.logger.log(`Deleted orphaned avatar: ${domain}/avatars/${userId}`);
+              this.logger.log(
+                `Deleted orphaned avatar: ${domain}/avatars/${userId}`,
+              );
             }
           }
         } catch (error) {
@@ -97,4 +106,3 @@ export class StorageCleanupJob {
     }
   }
 }
-

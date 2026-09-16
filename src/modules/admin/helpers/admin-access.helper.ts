@@ -19,7 +19,10 @@ export function resolveAllowedClients(admin: AdminJwtPayload): string[] {
  * Asserts that `clientId` is one the admin may see.
  * Throws ForbiddenException if access is denied.
  */
-export function assertClientAccess(admin: AdminJwtPayload, clientId: string): void {
+export function assertClientAccess(
+  admin: AdminJwtPayload,
+  clientId: string,
+): void {
   if (!admin.allowedClientIds.includes(clientId)) {
     throw new ForbiddenException('You do not have access to this client');
   }

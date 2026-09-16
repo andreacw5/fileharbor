@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsNumber, Min, Max, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  Min,
+  Max,
+  IsBoolean,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 
@@ -6,7 +13,7 @@ export class GetImageDto {
   @ApiPropertyOptional({
     description: 'Return pre-generated thumbnail instead of full image',
     example: false,
-    type: Boolean
+    type: Boolean,
   })
   @IsOptional()
   @Transform(({ value }) => {
@@ -18,9 +25,10 @@ export class GetImageDto {
   thumb?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Force download with Content-Disposition header and increment download counter',
+    description:
+      'Force download with Content-Disposition header and increment download counter',
     example: false,
-    type: Boolean
+    type: Boolean,
   })
   @IsOptional()
   @Transform(({ value }) => {
@@ -34,7 +42,7 @@ export class GetImageDto {
   @ApiPropertyOptional({
     description: 'Return JSON metadata instead of image file',
     example: false,
-    type: Boolean
+    type: Boolean,
   })
   @IsOptional()
   @Transform(({ value }) => {
@@ -46,9 +54,10 @@ export class GetImageDto {
   info?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Target width in pixels (maintains aspect ratio if height not specified)',
+    description:
+      'Target width in pixels (maintains aspect ratio if height not specified)',
     example: 800,
-    minimum: 1
+    minimum: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -57,9 +66,10 @@ export class GetImageDto {
   width?: number;
 
   @ApiPropertyOptional({
-    description: 'Target height in pixels (maintains aspect ratio if width not specified)',
+    description:
+      'Target height in pixels (maintains aspect ratio if width not specified)',
     example: 600,
-    minimum: 1
+    minimum: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -70,7 +80,7 @@ export class GetImageDto {
   @ApiPropertyOptional({
     description: 'Output format',
     enum: ['webp', 'jpeg', 'png'],
-    example: 'webp'
+    example: 'webp',
   })
   @IsOptional()
   @IsString()
@@ -80,7 +90,7 @@ export class GetImageDto {
     description: 'Image quality (1-100)',
     minimum: 1,
     maximum: 100,
-    example: 85
+    example: 85,
   })
   @IsOptional()
   @Type(() => Number)
@@ -90,15 +100,17 @@ export class GetImageDto {
   quality?: number;
 
   @ApiPropertyOptional({
-    description: 'Share token for accessing private images or read token for public share links',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    description:
+      'Share token for accessing private images or read token for public share links',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   @IsOptional()
   @IsString()
   token?: string;
 
   @ApiPropertyOptional({
-    description: 'Timestamp for cache busting (ignored by server, used by browser to force reload)',
+    description:
+      'Timestamp for cache busting (ignored by server, used by browser to force reload)',
     example: '1768848792396',
     type: String,
   })
@@ -106,4 +118,3 @@ export class GetImageDto {
   @IsString()
   t?: string;
 }
-

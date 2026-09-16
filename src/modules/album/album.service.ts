@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { AlbumResourceType } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import {
+  WebhookService,
+  WebhookEvent,
+} from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 import { RouteHelperService } from '@/utils/route.utils';
@@ -53,7 +56,9 @@ export class AlbumService {
     return { imageCount, videoCount: total - imageCount };
   }
 
-  private async fetchItemCountMap(albumIds: string[]): Promise<Map<string, { imageCount: number; videoCount: number }>> {
+  private async fetchItemCountMap(
+    albumIds: string[],
+  ): Promise<Map<string, { imageCount: number; videoCount: number }>> {
     if (albumIds.length === 0) return new Map();
     const rows = await this.prisma.albumItem.groupBy({
       by: ['albumId', 'resourceType'],
@@ -62,16 +67,23 @@ export class AlbumService {
     });
     const map = new Map<string, { imageCount: number; videoCount: number }>();
     for (const row of rows) {
-      if (!map.has(row.albumId)) map.set(row.albumId, { imageCount: 0, videoCount: 0 });
+      if (!map.has(row.albumId))
+        map.set(row.albumId, { imageCount: 0, videoCount: 0 });
       const entry = map.get(row.albumId)!;
-      if (row.resourceType === AlbumResourceType.IMAGE) entry.imageCount = row._count._all;
+      if (row.resourceType === AlbumResourceType.IMAGE)
+        entry.imageCount = row._count._all;
       else entry.videoCount = row._count._all;
     }
     return map;
   }
 
   private mapAlbumItem(item: any) {
-    const base = { id: item.id, resourceType: item.resourceType, order: item.order, addedAt: item.addedAt };
+    const base = {
+      id: item.id,
+      resourceType: item.resourceType,
+      order: item.order,
+      addedAt: item.addedAt,
+    };
     if (item.resourceType === AlbumResourceType.IMAGE && item.image) {
       return {
         ...base,
@@ -142,14 +154,18 @@ export class AlbumService {
       },
     });
 
-    this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_CREATED, {
-      albumId: album.id,
-      externalAlbumId: album.externalAlbumId,
-      name: album.name,
-      description: album.description,
-      isPublic: album.isPublic,
-      userId,
-    }).catch((e) => this.logger.warn(`[createAlbum] Webhook failed: ${e.message}`));
+    this.webhook
+      .sendWebhook(clientId, WebhookEvent.ALBUM_CREATED, {
+        albumId: album.id,
+        externalAlbumId: album.externalAlbumId,
+        name: album.name,
+        description: album.description,
+        isPublic: album.isPublic,
+        userId,
+      })
+      .catch((e) =>
+        this.logger.warn(`[createAlbum] Webhook failed: ${e.message}`),
+      );
 
     this.logger.log(`[createAlbum] Success - Album ID: ${album.id}`);
     return this.formatAlbumResponse(album);
@@ -172,7 +188,10 @@ export class AlbumService {
     if (!album.isPublic && album.userId !== userId) {
       throw new ForbiddenException('Access denied to private album');
     }
-    const { imageCount, videoCount } = await this.countItemsByType(albumId, album._count.albumItems);
+    const { imageCount, videoCount } = await this.countItemsByType(
+      albumId,
+      album._count.albumItems,
+    );
     return {
       ...this.formatAlbumResponse(album),
       itemCount: album._count.albumItems,
@@ -222,7 +241,8 @@ export class AlbumService {
     if (filters.clientId) where.clientId = filters.clientId;
     if (filters.userId) where.userId = filters.userId;
     if (filters.public !== undefined) where.isPublic = filters.public;
-    if (filters.search) where.name = { contains: filters.search, mode: 'insensitive' };
+    if (filters.search)
+      where.name = { contains: filters.search, mode: 'insensitive' };
 
     const [albums, total] = await Promise.all([
       this.prisma.album.findMany({
@@ -251,16 +271,32 @@ export class AlbumService {
           coverUrl: this.resolveCoverUrl(album),
         };
       }),
-      pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
+      pagination: {
+        page,
+        perPage,
+        total,
+        totalPages: Math.ceil(total / perPage),
+      },
     };
   }
 
-  async updateAlbum(albumId: string, clientId: string, userId: string, dto: UpdateAlbumDto) {
+  async updateAlbum(
+    albumId: string,
+    clientId: string,
+    userId: string,
+    dto: UpdateAlbumDto,
+  ) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId) throw new ForbiddenException('You can only update your own albums');
+    if (album.userId !== userId)
+      throw new ForbiddenException('You can only update your own albums');
 
     if (dto.coverImageId) {
-      await this.validateCoverImageInAlbum(dto.coverImageId, albumId, clientId, userId);
+      await this.validateCoverImageInAlbum(
+        dto.coverImageId,
+        albumId,
+        clientId,
+        userId,
+      );
     }
 
     const updateData: any = {
@@ -269,19 +305,27 @@ export class AlbumService {
       description: dto.description,
       isPublic: dto.isPublic,
     };
-    if (dto.coverImageId !== undefined) updateData.coverImageId = dto.coverImageId;
+    if (dto.coverImageId !== undefined)
+      updateData.coverImageId = dto.coverImageId;
 
-    const updated = await this.prisma.album.update({ where: { id: albumId }, data: updateData });
+    const updated = await this.prisma.album.update({
+      where: { id: albumId },
+      data: updateData,
+    });
 
-    this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
-      albumId: updated.id,
-      externalAlbumId: updated.externalAlbumId,
-      name: updated.name,
-      description: updated.description,
-      isPublic: updated.isPublic,
-      coverImageId: updated.coverImageId,
-      userId,
-    }).catch((e) => this.logger.warn(`[updateAlbum] Webhook failed: ${e.message}`));
+    this.webhook
+      .sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
+        albumId: updated.id,
+        externalAlbumId: updated.externalAlbumId,
+        name: updated.name,
+        description: updated.description,
+        isPublic: updated.isPublic,
+        coverImageId: updated.coverImageId,
+        userId,
+      })
+      .catch((e) =>
+        this.logger.warn(`[updateAlbum] Webhook failed: ${e.message}`),
+      );
 
     this.logger.log(`[updateAlbum] Success - Album ID: ${albumId}`);
     return this.formatAlbumResponse(updated);
@@ -289,14 +333,19 @@ export class AlbumService {
 
   async deleteAlbum(albumId: string, clientId: string, userId: string) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId) throw new ForbiddenException('You can only delete your own albums');
+    if (album.userId !== userId)
+      throw new ForbiddenException('You can only delete your own albums');
 
     await this.prisma.album.delete({ where: { id: albumId } });
 
-    this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
-      id: albumId,
-      timestamp: new Date().toISOString(),
-    }).catch((e) => this.logger.warn(`[deleteAlbum] Webhook failed: ${e.message}`));
+    this.webhook
+      .sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
+        id: albumId,
+        timestamp: new Date().toISOString(),
+      })
+      .catch((e) =>
+        this.logger.warn(`[deleteAlbum] Webhook failed: ${e.message}`),
+      );
 
     this.logger.log(`[deleteAlbum] Success - Album ID: ${albumId}`);
     return { success: true, message: 'Album deleted successfully' };
@@ -312,7 +361,9 @@ export class AlbumService {
     items: { id: string; resourceType: AlbumResourceType; order?: number }[],
     options: { userId?: string; force?: boolean } = {},
   ) {
-    const album = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+    const album = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+    });
     if (!album) throw new NotFoundException('Album not found');
 
     if (!options.force && options.userId && album.userId !== options.userId) {
@@ -339,7 +390,10 @@ export class AlbumService {
               ...(options.force ? {} : { userId: options.userId }),
             },
           });
-          if (!img) throw new NotFoundException(`Image ${item.id} not found or unauthorized`);
+          if (!img)
+            throw new NotFoundException(
+              `Image ${item.id} not found or unauthorized`,
+            );
         } else {
           const vid = await this.prisma.video.findFirst({
             where: {
@@ -348,7 +402,10 @@ export class AlbumService {
               ...(options.force ? {} : { userId: options.userId }),
             },
           });
-          if (!vid) throw new NotFoundException(`Video ${item.id} not found or unauthorized`);
+          if (!vid)
+            throw new NotFoundException(
+              `Video ${item.id} not found or unauthorized`,
+            );
         }
 
         const record = await this.prisma.albumItem.upsert({
@@ -365,19 +422,33 @@ export class AlbumService {
         });
 
         if (isImage) {
-          this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
-            albumId, imageId: item.id, albumName: album.name,
-          }).catch((e) => this.logger.warn(`[addItemsToAlbum] Webhook failed: ${e.message}`));
+          this.webhook
+            .sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
+              albumId,
+              imageId: item.id,
+              albumName: album.name,
+            })
+            .catch((e) =>
+              this.logger.warn(
+                `[addItemsToAlbum] Webhook failed: ${e.message}`,
+              ),
+            );
         }
 
         return record;
       }),
     );
 
-    this.logger.log(`[addItemsToAlbum] Album: ${albumId}, Added: ${results.length}`);
+    this.logger.log(
+      `[addItemsToAlbum] Album: ${albumId}, Added: ${results.length}`,
+    );
     return {
       albumId,
-      items: results.map((r) => ({ id: r.id, resourceType: r.resourceType, order: r.order })),
+      items: results.map((r) => ({
+        id: r.id,
+        resourceType: r.resourceType,
+        order: r.order,
+      })),
       count: results.length,
     };
   }
@@ -388,7 +459,9 @@ export class AlbumService {
     items: { id: string; resourceType: AlbumResourceType }[],
     options: { userId?: string; force?: boolean } = {},
   ) {
-    const album = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+    const album = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+    });
     if (!album) throw new NotFoundException('Album not found');
 
     if (!options.force && options.userId && album.userId !== options.userId) {
@@ -407,17 +480,32 @@ export class AlbumService {
         removed++;
 
         if (isImage) {
-          this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
-            albumId, imageId: item.id, timestamp: new Date().toISOString(),
-          }).catch((e) => this.logger.warn(`[removeItemsFromAlbum] Webhook failed: ${e.message}`));
+          this.webhook
+            .sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
+              albumId,
+              imageId: item.id,
+              timestamp: new Date().toISOString(),
+            })
+            .catch((e) =>
+              this.logger.warn(
+                `[removeItemsFromAlbum] Webhook failed: ${e.message}`,
+              ),
+            );
         }
       } catch {
         // already removed or not found — skip
       }
     }
 
-    this.logger.log(`[removeItemsFromAlbum] Album: ${albumId}, Removed: ${removed}`);
-    return { albumId, removed, success: true, message: `${removed} item(s) removed` };
+    this.logger.log(
+      `[removeItemsFromAlbum] Album: ${albumId}, Removed: ${removed}`,
+    );
+    return {
+      albumId,
+      removed,
+      success: true,
+      message: `${removed} item(s) removed`,
+    };
   }
 
   async listAlbumItems(
@@ -425,7 +513,9 @@ export class AlbumService {
     clientId: string,
     params: { resourceType?: AlbumResourceType; page: number; perPage: number },
   ) {
-    const albumExists = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+    const albumExists = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+    });
     if (!albumExists) throw new NotFoundException('Album not found');
 
     const where: any = { albumId };
@@ -440,15 +530,24 @@ export class AlbumService {
         include: {
           image: {
             select: {
-              id: true, originalName: true, mimeType: true,
-              width: true, height: true, size: true,
+              id: true,
+              originalName: true,
+              mimeType: true,
+              width: true,
+              height: true,
+              size: true,
               imageTags: { include: { tag: { select: { name: true } } } },
             },
           },
           video: {
             select: {
-              id: true, originalName: true, mimeType: true,
-              duration: true, width: true, height: true, size: true,
+              id: true,
+              originalName: true,
+              mimeType: true,
+              duration: true,
+              width: true,
+              height: true,
+              size: true,
               videoTags: { include: { tag: { select: { name: true } } } },
             },
           },
@@ -472,30 +571,48 @@ export class AlbumService {
   // Token access
   // ---------------------------------------------------------------------------
 
-  async generateAlbumToken(albumId: string, clientId: string, userId: string, expiresInDays?: number) {
+  async generateAlbumToken(
+    albumId: string,
+    clientId: string,
+    userId: string,
+    expiresInDays?: number,
+  ) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId) throw new ForbiddenException('You can only generate tokens for your own albums');
+    if (album.userId !== userId)
+      throw new ForbiddenException(
+        'You can only generate tokens for your own albums',
+      );
 
     const token = uuidv4();
     const expiresAt = expiresInDays
       ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
       : null;
 
-    await this.prisma.albumToken.create({ data: { albumId, token, expiresAt } });
+    await this.prisma.albumToken.create({
+      data: { albumId, token, expiresAt },
+    });
 
-    this.logger.log(`[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt?.toISOString() || 'never'}`);
+    this.logger.log(
+      `[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
+    );
     return { token, albumId, expiresAt, url: `/v2/albums/shared/${token}` };
   }
 
   async validateAlbumToken(albumId: string, token: string) {
-    const albumToken = await this.prisma.albumToken.findUnique({ where: { token } });
-    if (!albumToken || albumToken.albumId !== albumId) throw new ForbiddenException('Invalid token');
-    if (albumToken.expiresAt && albumToken.expiresAt < new Date()) throw new ForbiddenException('Token expired');
+    const albumToken = await this.prisma.albumToken.findUnique({
+      where: { token },
+    });
+    if (!albumToken || albumToken.albumId !== albumId)
+      throw new ForbiddenException('Invalid token');
+    if (albumToken.expiresAt && albumToken.expiresAt < new Date())
+      throw new ForbiddenException('Token expired');
     return true;
   }
 
   async getAlbumBySharedToken(token: string) {
-    const tokenRecord = await this.prisma.albumToken.findUnique({ where: { token } });
+    const tokenRecord = await this.prisma.albumToken.findUnique({
+      where: { token },
+    });
     if (!tokenRecord) throw new ForbiddenException('Invalid token');
 
     await this.validateAlbumToken(tokenRecord.albumId, token);
@@ -509,7 +626,10 @@ export class AlbumService {
     });
     if (!album) throw new NotFoundException('Album not found');
 
-    const { imageCount, videoCount } = await this.countItemsByType(album.id, album._count.albumItems);
+    const { imageCount, videoCount } = await this.countItemsByType(
+      album.id,
+      album._count.albumItems,
+    );
     return {
       ...this.formatAlbumResponse(album),
       itemCount: album._count.albumItems,
@@ -521,15 +641,28 @@ export class AlbumService {
 
   async revokeAlbumToken(albumId: string, clientId: string, userId: string) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId) throw new ForbiddenException('You can only revoke tokens for your own albums');
+    if (album.userId !== userId)
+      throw new ForbiddenException(
+        'You can only revoke tokens for your own albums',
+      );
 
-    const result = await this.prisma.albumToken.deleteMany({ where: { albumId } });
-    this.logger.log(`[revokeAlbumToken] Album: ${albumId}, Revoked: ${result.count}`);
-    return { success: true, message: 'Album tokens revoked', count: result.count };
+    const result = await this.prisma.albumToken.deleteMany({
+      where: { albumId },
+    });
+    this.logger.log(
+      `[revokeAlbumToken] Album: ${albumId}, Revoked: ${result.count}`,
+    );
+    return {
+      success: true,
+      message: 'Album tokens revoked',
+      count: result.count,
+    };
   }
 
   async deleteExpiredAlbumTokens(): Promise<number> {
-    const result = await this.prisma.albumToken.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+    const result = await this.prisma.albumToken.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
     return result.count;
   }
 
@@ -549,11 +682,19 @@ export class AlbumService {
     return album;
   }
 
-  async getAlbumWithItemsByExternalId(externalAlbumId: string, clientId: string, userId?: string) {
+  async getAlbumWithItemsByExternalId(
+    externalAlbumId: string,
+    clientId: string,
+    userId?: string,
+  ) {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
-    if (!album.isPublic && album.userId !== userId) throw new ForbiddenException('Access denied to private album');
+    if (!album.isPublic && album.userId !== userId)
+      throw new ForbiddenException('Access denied to private album');
 
-    const { imageCount, videoCount } = await this.countItemsByType(album.id, album._count.albumItems);
+    const { imageCount, videoCount } = await this.countItemsByType(
+      album.id,
+      album._count.albumItems,
+    );
     return {
       ...this.formatAlbumResponse(album),
       itemCount: album._count.albumItems,
@@ -565,12 +706,23 @@ export class AlbumService {
     };
   }
 
-  async updateAlbumByExternalId(externalAlbumId: string, clientId: string, userId: string, dto: UpdateAlbumDto) {
+  async updateAlbumByExternalId(
+    externalAlbumId: string,
+    clientId: string,
+    userId: string,
+    dto: UpdateAlbumDto,
+  ) {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
-    if (album.userId !== userId) throw new ForbiddenException('You can only update your own albums');
+    if (album.userId !== userId)
+      throw new ForbiddenException('You can only update your own albums');
 
     if (dto.coverImageId) {
-      await this.validateCoverImageInAlbum(dto.coverImageId, album.id, clientId, userId);
+      await this.validateCoverImageInAlbum(
+        dto.coverImageId,
+        album.id,
+        clientId,
+        userId,
+      );
     }
 
     const updateData: any = {
@@ -579,19 +731,29 @@ export class AlbumService {
       description: dto.description,
       isPublic: dto.isPublic,
     };
-    if (dto.coverImageId !== undefined) updateData.coverImageId = dto.coverImageId;
+    if (dto.coverImageId !== undefined)
+      updateData.coverImageId = dto.coverImageId;
 
-    const updated = await this.prisma.album.update({ where: { id: album.id }, data: updateData });
+    const updated = await this.prisma.album.update({
+      where: { id: album.id },
+      data: updateData,
+    });
 
-    this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
-      albumId: updated.id,
-      externalAlbumId: updated.externalAlbumId,
-      name: updated.name,
-      description: updated.description,
-      isPublic: updated.isPublic,
-      coverImageId: updated.coverImageId,
-      userId,
-    }).catch((e) => this.logger.warn(`[updateAlbumByExternalId] Webhook failed: ${e.message}`));
+    this.webhook
+      .sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
+        albumId: updated.id,
+        externalAlbumId: updated.externalAlbumId,
+        name: updated.name,
+        description: updated.description,
+        isPublic: updated.isPublic,
+        coverImageId: updated.coverImageId,
+        userId,
+      })
+      .catch((e) =>
+        this.logger.warn(
+          `[updateAlbumByExternalId] Webhook failed: ${e.message}`,
+        ),
+      );
 
     return this.formatAlbumResponse(updated);
   }
@@ -622,7 +784,9 @@ export class AlbumService {
 
   async findAdminAlbums(where: any, options: { skip: number; take: number }) {
     const now = new Date();
-    const activeTokensWhere = { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+    const activeTokensWhere = {
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    };
 
     const [albums, total] = await Promise.all([
       this.prisma.album.findMany({
@@ -633,7 +797,12 @@ export class AlbumService {
         include: {
           user: { select: { externalUserId: true, username: true } },
           client: { select: { name: true, domain: true } },
-          _count: { select: { albumItems: true, albumTokens: { where: activeTokensWhere } } },
+          _count: {
+            select: {
+              albumItems: true,
+              albumTokens: { where: activeTokensWhere },
+            },
+          },
         },
       }),
       this.prisma.album.count({ where }),
@@ -659,15 +828,25 @@ export class AlbumService {
           _count: {
             select: {
               albumItems: true,
-              albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+              albumTokens: {
+                where: {
+                  OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                },
+              },
             },
           },
         },
       }),
-      this.prisma.albumItem.count({ where: { albumId, resourceType: AlbumResourceType.IMAGE } }),
+      this.prisma.albumItem.count({
+        where: { albumId, resourceType: AlbumResourceType.IMAGE },
+      }),
     ]);
     if (!album) return null;
-    return { ...album, imageCount, videoCount: album._count.albumItems - imageCount };
+    return {
+      ...album,
+      imageCount,
+      videoCount: album._count.albumItems - imageCount,
+    };
   }
 
   async adminUpdateAlbum(albumId: string, data: Record<string, any>) {
@@ -682,30 +861,49 @@ export class AlbumService {
           _count: {
             select: {
               albumItems: true,
-              albumTokens: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+              albumTokens: {
+                where: {
+                  OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                },
+              },
             },
           },
         },
       }),
-      this.prisma.albumItem.count({ where: { albumId, resourceType: AlbumResourceType.IMAGE } }),
+      this.prisma.albumItem.count({
+        where: { albumId, resourceType: AlbumResourceType.IMAGE },
+      }),
     ]);
-    return { ...album, imageCount, videoCount: album._count.albumItems - imageCount };
+    return {
+      ...album,
+      imageCount,
+      videoCount: album._count.albumItems - imageCount,
+    };
   }
 
   async getAlbumByIdUnscoped(albumId: string) {
     return this.prisma.album.findUnique({ where: { id: albumId } });
   }
 
-  async forceDeleteAlbum(albumId: string, clientId: string): Promise<{ success: boolean; message: string }> {
-    const album = await this.prisma.album.findFirst({ where: { id: albumId, clientId } });
+  async forceDeleteAlbum(
+    albumId: string,
+    clientId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const album = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+    });
     if (!album) throw new NotFoundException('Album not found');
 
     await this.prisma.album.delete({ where: { id: albumId } });
 
-    this.webhook.sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
-      id: albumId,
-      timestamp: new Date().toISOString(),
-    }).catch((e) => this.logger.warn(`[forceDeleteAlbum] Webhook failed: ${e.message}`));
+    this.webhook
+      .sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
+        id: albumId,
+        timestamp: new Date().toISOString(),
+      })
+      .catch((e) =>
+        this.logger.warn(`[forceDeleteAlbum] Webhook failed: ${e.message}`),
+      );
 
     return { success: true, message: 'Album deleted successfully' };
   }
@@ -722,12 +920,17 @@ export class AlbumService {
   ): Promise<void> {
     const item = await this.prisma.albumItem.findUnique({
       where: { albumId_imageId: { albumId, imageId } },
-      include: { image: { select: { id: true, clientId: true, userId: true } } },
+      include: {
+        image: { select: { id: true, clientId: true, userId: true } },
+      },
     });
 
-    if (!item) throw new BadRequestException('Cover image must be part of the album');
+    if (!item)
+      throw new BadRequestException('Cover image must be part of the album');
     if (item.image!.clientId !== clientId || item.image!.userId !== userId) {
-      throw new BadRequestException('Cover image does not belong to this client or user');
+      throw new BadRequestException(
+        'Cover image does not belong to this client or user',
+      );
     }
   }
 }

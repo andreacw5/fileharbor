@@ -9,7 +9,6 @@ export class ImageResponseDto {
   @Expose()
   id: string;
 
-
   @ApiProperty({
     description: 'User identifier who uploaded the image',
     example: 'user-123',
@@ -144,9 +143,9 @@ export class ImageResponseDto {
 
   @ApiProperty({
     description: 'Full URL to access the image (baseUrl + url)',
-    example: 'http://localhost:3000/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423',
+    example:
+      'http://localhost:3000/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423',
   })
   @Expose()
   fullPath: string;
 }
-

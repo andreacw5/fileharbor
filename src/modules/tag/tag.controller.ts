@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -11,7 +6,10 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { TagService } from './tag.service';
-import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import {
+  AdminJwtGuard,
+  AdminJwtPayload,
+} from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
 import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { TagPageParams, TagsResponseDto } from './dto/tag-response.dto';
@@ -40,4 +38,3 @@ export class TagController {
     );
   }
 }
-

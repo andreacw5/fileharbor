@@ -100,7 +100,15 @@ export class VideoController {
     if (!file) throw new BadRequestException('No file uploaded');
 
     const effectiveUserId = dto.userId || userId;
-    return this.videoService.uploadVideo(clientId, effectiveUserId, file, dto.tags, dto.description, dto.isPrivate, dto.albumId);
+    return this.videoService.uploadVideo(
+      clientId,
+      effectiveUserId,
+      file,
+      dto.tags,
+      dto.description,
+      dto.isPrivate,
+      dto.albumId,
+    );
   }
 
   @Get()
@@ -160,7 +168,9 @@ export class VideoController {
   }
 
   @Get(':id/stream')
-  @ApiOperation({ summary: 'Stream video (X-Accel-Redirect in prod, createReadStream in dev)' })
+  @ApiOperation({
+    summary: 'Stream video (X-Accel-Redirect in prod, createReadStream in dev)',
+  })
   @ApiParam({ name: 'id', description: 'Video UUID' })
   @ApiQuery({ name: 'download', required: false, type: Boolean })
   async streamVideo(
@@ -172,15 +182,19 @@ export class VideoController {
   ) {
     const video = await this.videoService.getVideoStreamPath(id, clientId);
     const safeName = video.originalName.replace(/["\n\r]/g, '_');
-    const disposition = download === 'true'
-      ? `attachment; filename="${safeName}"`
-      : `inline; filename="${safeName}"`;
+    const disposition =
+      download === 'true'
+        ? `attachment; filename="${safeName}"`
+        : `inline; filename="${safeName}"`;
 
     // See the admin stream route: X-Accel-Redirect sends an empty body and only
     // works behind an nginx declaring the `/internal-videos/` internal location,
     // so it is opt-in rather than inferred from NODE_ENV.
     if (this.config.get<boolean>('video.xAccelRedirect')) {
-      if (video.storagePath.includes('..') || video.storagePath.startsWith('/')) {
+      if (
+        video.storagePath.includes('..') ||
+        video.storagePath.startsWith('/')
+      ) {
         throw new ForbiddenException('Invalid storage path');
       }
       res.set({
@@ -190,16 +204,28 @@ export class VideoController {
       });
       res.end();
     } else {
-      const filePath = this.storageService.getVideoFilePath(video.domain, id, 'original');
+      const filePath = this.storageService.getVideoFilePath(
+        video.domain,
+        id,
+        'original',
+      );
       const stat = await fsp.stat(filePath);
       const range = (req.headers as any)?.range as string | undefined;
 
       if (range) {
         const [startStr, endStr] = range.replace(/^bytes=/, '').split('-');
         const start = parseInt(startStr, 10);
-        const end = endStr ? parseInt(endStr, 10) : Math.min(start + 1_048_576, stat.size - 1);
+        const end = endStr
+          ? parseInt(endStr, 10)
+          : Math.min(start + 1_048_576, stat.size - 1);
 
-        if (isNaN(start) || isNaN(end) || start < 0 || end >= stat.size || start > end) {
+        if (
+          isNaN(start) ||
+          isNaN(end) ||
+          start < 0 ||
+          end >= stat.size ||
+          start > end
+        ) {
           res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
           return;
         }
@@ -225,7 +251,9 @@ export class VideoController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update video metadata (tags, description, isPrivate)' })
+  @ApiOperation({
+    summary: 'Update video metadata (tags, description, isPrivate)',
+  })
   @ApiParam({ name: 'id', description: 'Video UUID' })
   @ApiResponse({ status: 200, type: VideoResponseDto })
   async updateVideo(
@@ -235,7 +263,14 @@ export class VideoController {
     @Body() dto: UpdateVideoDto,
   ): Promise<VideoResponseDto> {
     const validUserId = this.videoService.validateUserId(userId);
-    return this.videoService.updateVideoMetadata(id, clientId, validUserId, dto.tags, dto.description, dto.isPrivate);
+    return this.videoService.updateVideoMetadata(
+      id,
+      clientId,
+      validUserId,
+      dto.tags,
+      dto.description,
+      dto.isPrivate,
+    );
   }
 
   @Delete(':id')

@@ -10,7 +10,6 @@ import { TagListItemDto, TagPageParams } from './dto/tag-response.dto';
 
 @Injectable()
 export class TagService {
-
   private readonly logger = new Logger(TagService.name);
 
   constructor(private readonly prisma: PrismaService) {}
@@ -75,13 +74,19 @@ export class TagService {
       name: row.name,
       clientId: row.clientId,
       client: row.client
-        ? { id: row.client.id, name: row.client.name, domain: row.client.domain ?? undefined }
+        ? {
+            id: row.client.id,
+            name: row.client.name,
+            domain: row.client.domain ?? undefined,
+          }
         : undefined,
       imageCount: row._count.imageTags,
       videoCount: row._count.videoTags,
     }));
 
-    this.logger.debug(`listTags returned ${data.length} of ${total} tags (page ${params.page})`);
+    this.logger.debug(
+      `listTags returned ${data.length} of ${total} tags (page ${params.page})`,
+    );
 
     return paginate(data, total, params);
   }

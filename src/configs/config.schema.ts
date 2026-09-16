@@ -16,7 +16,12 @@ export default () => ({
   storage: {
     path: process.env.STORAGE_PATH || './storage',
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10485760, // 10MB
-    allowedImageTypes: process.env.ALLOWED_IMAGE_TYPES?.split(',') || ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    allowedImageTypes: process.env.ALLOWED_IMAGE_TYPES?.split(',') || [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+    ],
   },
 
   // Image Processing
@@ -24,7 +29,7 @@ export default () => ({
     thumbnailSize: parseInt(process.env.THUMBNAIL_SIZE, 10) || 800,
     originalQuality: parseInt(process.env.ORIGINAL_QUALITY, 10) || 100,
     thumbnailQuality: parseInt(process.env.THUMBNAIL_QUALITY, 10) || 70,
-    compressionQuality: parseInt(process.env.COMPRESSION_QUALITY, 10) || 90
+    compressionQuality: parseInt(process.env.COMPRESSION_QUALITY, 10) || 90,
   },
 
   // Video Processing
@@ -43,7 +48,7 @@ export default () => ({
   // Rate Limiting
   throttle: {
     ttl: parseInt(process.env.THROTTLE_TTL, 10) || 60, // seconds
-    limit: parseInt(process.env.THROTTLE_LIMIT, 10) || 10 // requests per TTL
+    limit: parseInt(process.env.THROTTLE_LIMIT, 10) || 10, // requests per TTL
   },
 
   // Logging

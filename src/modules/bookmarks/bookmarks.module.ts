@@ -9,4 +9,3 @@ import { BookmarksService } from './bookmarks.service';
   exports: [BookmarksService],
 })
 export class BookmarksModule {}
-

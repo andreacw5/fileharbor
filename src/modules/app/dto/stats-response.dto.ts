@@ -7,7 +7,10 @@ export class StatsResponseDto {
   @ApiProperty({ example: 7 })
   totalAlbums: number;
 
-  @ApiProperty({ example: 10485760, description: 'Total storage used in bytes' })
+  @ApiProperty({
+    example: 10485760,
+    description: 'Total storage used in bytes',
+  })
   totalStorage: number;
 
   @ApiProperty({
@@ -30,4 +33,3 @@ export class StatsResponseDto {
     size: number;
   }>;
 }
-

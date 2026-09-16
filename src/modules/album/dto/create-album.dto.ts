@@ -26,7 +26,8 @@ export class CreateAlbumDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Whether the album is public (accessible without authentication)',
+    description:
+      'Whether the album is public (accessible without authentication)',
     default: false,
     example: true,
   })
@@ -42,4 +43,3 @@ export class CreateAlbumDto {
   @IsUUID()
   coverImageId?: string;
 }
-

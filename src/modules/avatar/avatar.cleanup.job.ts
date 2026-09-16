@@ -19,9 +19,13 @@ export class AvatarCleanupJob {
     private config: ConfigService,
   ) {
     // Original should be high quality to preserve image fidelity
-    this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
+    this.originalQuality = parseInt(
+      this.config.get('ORIGINAL_QUALITY') || '100',
+    );
     // Thumbnail can use lower quality to reduce file size
-    this.thumbnailQuality = parseInt(this.config.get('THUMBNAIL_QUALITY') || '70');
+    this.thumbnailQuality = parseInt(
+      this.config.get('THUMBNAIL_QUALITY') || '70',
+    );
     this.thumbnailSize = parseInt(this.config.get('THUMBNAIL_SIZE') || '800');
   }
 
@@ -43,7 +47,10 @@ export class AvatarCleanupJob {
           await this.avatarService.markAsOptimized(avatar.id);
           this.logger.log(`Optimized avatar: ${avatar.id}`);
         } catch (error) {
-          this.logger.error(`Failed to optimize avatar ${avatar.id}:`, error.message);
+          this.logger.error(
+            `Failed to optimize avatar ${avatar.id}:`,
+            error.message,
+          );
         }
       }
 
@@ -64,7 +71,11 @@ export class AvatarCleanupJob {
     const domain = client?.domain || avatar.clientId;
 
     // Read original file
-    const originalPath = this.storage.getAvatarFilePath(domain, avatar.userId, 'original');
+    const originalPath = this.storage.getAvatarFilePath(
+      domain,
+      avatar.userId,
+      'original',
+    );
     const buffer = await this.storage.readFile(originalPath);
 
     // Optimize (remove EXIF, compress)
@@ -77,11 +88,15 @@ export class AvatarCleanupJob {
     await this.storage.saveFile(originalPath, optimizedBuffer);
 
     // Re-create thumbnail with optimization
-    const thumbPath = this.storage.getAvatarFilePath(domain, avatar.userId, 'thumb');
+    const thumbPath = this.storage.getAvatarFilePath(
+      domain,
+      avatar.userId,
+      'thumb',
+    );
     const thumbBuffer = await this.storage.createThumbnail(
       optimizedBuffer,
       this.thumbnailSize,
-      this.thumbnailQuality
+      this.thumbnailQuality,
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
   }

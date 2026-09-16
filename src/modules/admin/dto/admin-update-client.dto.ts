@@ -1,5 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUrl, Matches, MaxLength, IsInt, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  MaxLength,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class AdminUpdateClientDto {
@@ -14,33 +23,47 @@ export class AdminUpdateClientDto {
   @IsBoolean()
   active?: boolean;
 
-  @ApiPropertyOptional({ description: 'Enable or disable webhook notifications' })
+  @ApiPropertyOptional({
+    description: 'Enable or disable webhook notifications',
+  })
   @IsOptional()
   @IsBoolean()
   webhookEnabled?: boolean;
 
-  @ApiPropertyOptional({ description: 'Discord webhook URL (set to null to remove)' })
+  @ApiPropertyOptional({
+    description: 'Discord webhook URL (set to null to remove)',
+  })
   @IsOptional()
   @IsUrl()
   webhookUrl?: string | null;
 
-  @ApiPropertyOptional({ description: 'Enable or disable Tinify compression for this client' })
+  @ApiPropertyOptional({
+    description: 'Enable or disable Tinify compression for this client',
+  })
   @IsOptional()
   @IsBoolean()
   tinifyActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Tinify API key for this client (set to null to remove)' })
+  @ApiPropertyOptional({
+    description: 'Tinify API key for this client (set to null to remove)',
+  })
   @IsOptional()
   @IsString()
   tinifyApiKey?: string | null;
 
-  @ApiPropertyOptional({ description: 'Manually set current Tinify usage counter (for admin reset purposes)' })
+  @ApiPropertyOptional({
+    description:
+      'Manually set current Tinify usage counter (for admin reset purposes)',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   currentTinifyUsage?: number;
 
-  @ApiPropertyOptional({ description: 'Monthly Tinify compression limit (default: 500 for free tier)' })
+  @ApiPropertyOptional({
+    description:
+      'Monthly Tinify compression limit (default: 500 for free tier)',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -57,8 +80,8 @@ export class AdminUpdateClientDto {
   @Transform(({ value }) => (value === '' ? null : value))
   @IsString()
   @Matches(/^[a-z0-9][a-z0-9-]{0,62}$/, {
-    message: 'bastionTenantSlug must be a lowercase slug (letters, digits and hyphens, starting with a letter or digit)',
+    message:
+      'bastionTenantSlug must be a lowercase slug (letters, digits and hyphens, starting with a letter or digit)',
   })
   bastionTenantSlug?: string | null;
 }
-

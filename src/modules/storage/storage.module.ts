@@ -8,4 +8,3 @@ import { StorageCleanupJob } from './storage.cleanup.job';
   exports: [StorageService],
 })
 export class StorageModule {}
-

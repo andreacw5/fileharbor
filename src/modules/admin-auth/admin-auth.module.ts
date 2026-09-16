@@ -17,6 +17,11 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
 @Module({
   imports: [PrismaModule, ConfigModule, JwtModule.register({})],
   providers: [BastionTokenVerifier, AdminJwtGuard, BastionUserJwtGuard],
-  exports: [BastionTokenVerifier, AdminJwtGuard, BastionUserJwtGuard, JwtModule],
+  exports: [
+    BastionTokenVerifier,
+    AdminJwtGuard,
+    BastionUserJwtGuard,
+    JwtModule,
+  ],
 })
 export class AdminAuthModule {}
