@@ -10,21 +10,21 @@ export class ImageResponseDto {
   id: string;
 
   @ApiProperty({
-    description: 'User identifier who uploaded the image',
-    example: 'user-123',
+    description: 'Creator identifier who uploaded the image',
+    example: 'creator-123',
   })
-  userId: string;
+  creatorId: string;
 
   @ApiProperty({
-    description: 'User identifier who uploaded the image',
-    example: 'user-123',
+    description: 'Creator identifier who uploaded the image',
+    example: 'creator-123',
   })
   @Expose()
-  user: object;
+  creator: object;
 
   @ApiProperty({
-    description: 'User identifier who uploaded the image',
-    example: 'user-123',
+    description: 'Creator identifier who uploaded the image',
+    example: 'creator-123',
   })
   @Expose()
   client: object;

@@ -44,9 +44,9 @@ export class AvatarController {
 
   @Post()
   @ApiOperation({
-    summary: 'Upload or update user avatar',
+    summary: 'Upload or update creator avatar',
     description:
-      'Upload new avatar or update existing one for a user. Auto-converts to WebP, creates thumbnail, and optimizes.',
+      'Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadAvatarDto })
@@ -71,7 +71,7 @@ export class AvatarController {
   ): Promise<AvatarResponseDto> {
     if (!file) {
       this.logger.warn(
-        `[uploadAvatar] No file provided - Client: ${clientId}, User: ${externalUserId}`,
+        `[uploadAvatar] No file provided - Client: ${clientId}, Creator: ${externalUserId}`,
       );
       throw new BadRequestException('No file uploaded');
     }
@@ -84,7 +84,7 @@ export class AvatarController {
     }
 
     this.logger.debug(
-      `[uploadAvatar] Starting - Client: ${clientId}, User: ${externalUserId}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
+      `[uploadAvatar] Starting - Client: ${clientId}, Creator: ${externalUserId}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
     );
 
     try {
@@ -94,12 +94,12 @@ export class AvatarController {
         externalUserId,
       );
       this.logger.log(
-        `[uploadAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${file.size} bytes`,
+        `[uploadAvatar] Success - Client: ${clientId}, Creator: ${externalUserId}, Size: ${file.size} bytes`,
       );
       return result;
     } catch (error) {
       this.logger.error(
-        `[uploadAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`,
+        `[uploadAvatar] Failed - Client: ${clientId}, Creator: ${externalUserId}, Error: ${error.message}`,
       );
       throw error;
     }
@@ -108,9 +108,9 @@ export class AvatarController {
   @Public()
   @Get(':externalUserId')
   @ApiOperation({
-    summary: 'Get user avatar (public endpoint)',
+    summary: 'Get creator avatar (public endpoint)',
     description:
-      'Retrieve user avatar by external user ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), download (force download), t (timestamp for cache busting)',
+      'Retrieve creator avatar by external creator ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), download (force download), t (timestamp for cache busting)',
   })
   @ApiResponse({ status: 200, description: 'Avatar file or metadata' })
   @ApiResponse({ status: 404, description: 'Avatar not found' })
@@ -120,20 +120,20 @@ export class AvatarController {
     @Res() res: Response,
   ) {
     this.logger.debug(
-      `[getAvatar] Starting - User: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Download: ${query.download}`,
+      `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Download: ${query.download}`,
     );
 
     try {
       // If info mode, return metadata as JSON
       if (query.info) {
         const avatar =
-          await this.avatarService.getAvatarByExternalUserId(externalUserId);
+          await this.avatarService.getAvatarByExternalId(externalUserId);
         const metadata = this.avatarService.getAvatarMetadata(
           avatar,
           externalUserId,
         );
         this.logger.log(
-          `[getAvatar] Metadata returned - User: ${externalUserId}`,
+          `[getAvatar] Metadata returned - Creator: ${externalUserId}`,
         );
         return res.json(metadata);
       }
@@ -153,22 +153,22 @@ export class AvatarController {
       if (query.download) {
         const filename = `avatar-${externalUserId}${query.thumb ? '-thumb' : ''}.webp`;
         headers['Content-Disposition'] = `attachment; filename="${filename}"`;
-        this.logger.debug(`[getAvatar] Download - User: ${externalUserId}`);
+        this.logger.debug(`[getAvatar] Download - Creator: ${externalUserId}`);
       } else {
         this.logger.debug(
-          `[getAvatar] View - User: ${externalUserId}, Thumb: ${query.thumb}`,
+          `[getAvatar] View - Creator: ${externalUserId}, Thumb: ${query.thumb}`,
         );
       }
 
       this.logger.log(
-        `[getAvatar] Success - User: ${externalUserId}, Thumb: ${query.thumb}, Size: ${buffer.length} bytes`,
+        `[getAvatar] Success - Creator: ${externalUserId}, Thumb: ${query.thumb}, Size: ${buffer.length} bytes`,
       );
 
       res.set(headers);
       res.send(buffer);
     } catch (error) {
       this.logger.error(
-        `[getAvatar] Failed - User: ${externalUserId}, Error: ${error.message}`,
+        `[getAvatar] Failed - Creator: ${externalUserId}, Error: ${error.message}`,
       );
       throw error;
     }
@@ -176,9 +176,9 @@ export class AvatarController {
 
   @Delete(':externalUserId')
   @ApiOperation({
-    summary: 'Delete user avatar',
+    summary: 'Delete creator avatar',
     description:
-      'Delete the avatar for a specific user. Requires only API key authentication.',
+      'Delete the avatar for a specific creator. Requires only API key authentication.',
   })
   @ApiResponse({
     status: 200,
@@ -202,7 +202,7 @@ export class AvatarController {
     }
 
     this.logger.debug(
-      `[deleteAvatar] Starting - Client: ${clientId}, User: ${externalUserId}`,
+      `[deleteAvatar] Starting - Client: ${clientId}, Creator: ${externalUserId}`,
     );
 
     try {
@@ -211,12 +211,12 @@ export class AvatarController {
         externalUserId,
       );
       this.logger.log(
-        `[deleteAvatar] Success - Client: ${clientId}, User: ${externalUserId}`,
+        `[deleteAvatar] Success - Client: ${clientId}, Creator: ${externalUserId}`,
       );
       return result;
     } catch (error) {
       this.logger.error(
-        `[deleteAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`,
+        `[deleteAvatar] Failed - Client: ${clientId}, Creator: ${externalUserId}, Error: ${error.message}`,
       );
       throw error;
     }

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   resolveAllowedClients,
   assertClientAccess,

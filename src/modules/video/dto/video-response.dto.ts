@@ -4,7 +4,7 @@ import { Expose, Transform, Type } from 'class-transformer';
 export class VideoResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() clientId: string;
-  @ApiProperty() @Expose() user: object;
+  @ApiProperty() @Expose() creator: object;
   @ApiProperty() @Expose() client: object;
   @ApiProperty() @Expose() originalName: string;
   @ApiProperty() @Expose() mimeType: string;

@@ -5,12 +5,18 @@ import { ImageController } from './image.controller';
 import { ClientModule } from '../client/client.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { StorageModule } from '../storage/storage.module';
-import { UserModule } from '../user/user.module';
+import { CreatorModule } from '../creator/creator.module';
 import { ImageCleanupJob } from '@/modules/image/jobs/image.cleanup.job';
 import { TinifyResetJob } from '@/modules/image/jobs/tinify-reset.job';
 
 @Module({
-  imports: [ClientModule, WebhookModule, StorageModule, HttpModule, UserModule],
+  imports: [
+    ClientModule,
+    WebhookModule,
+    StorageModule,
+    HttpModule,
+    CreatorModule,
+  ],
   controllers: [ImageController],
   providers: [ImageService, ImageCleanupJob, TinifyResetJob],
   exports: [ImageService],

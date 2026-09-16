@@ -18,10 +18,10 @@ describe('ClientService', () => {
     updatedAt: new Date(),
   };
 
-  const mockUser = {
-    id: 'user-123',
+  const mockCreator = {
+    id: 'creator-123',
     clientId: 'client-123',
-    externalUserId: 'ext-user-123',
+    externalId: 'ext-creator-123',
     email: 'test@example.com',
     username: 'testuser',
     createdAt: new Date(),
@@ -41,7 +41,7 @@ describe('ClientService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
-    user: {
+    creator: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
       create: jest.fn(),
@@ -130,22 +130,22 @@ describe('ClientService', () => {
   });
 
   describe('getOrCreateUser', () => {
-    it('should create new user when user does not exist', async () => {
-      mockPrismaService.user.upsert.mockResolvedValue(mockUser);
+    it('should create new creator when creator does not exist', async () => {
+      mockPrismaService.creator.upsert.mockResolvedValue(mockCreator);
 
       const result = await service.getOrCreateUser(
         'client-123',
-        'ext-user-123',
+        'ext-creator-123',
         'test@example.com',
         'testuser',
       );
 
-      expect(result).toEqual(mockUser);
-      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
+      expect(result).toEqual(mockCreator);
+      expect(mockPrismaService.creator.upsert).toHaveBeenCalledWith({
         where: {
-          clientId_externalUserId: {
+          clientId_externalId: {
             clientId: 'client-123',
-            externalUserId: 'ext-user-123',
+            externalId: 'ext-creator-123',
           },
         },
         update: {
@@ -154,48 +154,48 @@ describe('ClientService', () => {
         },
         create: {
           clientId: 'client-123',
-          externalUserId: 'ext-user-123',
+          externalId: 'ext-creator-123',
           email: 'test@example.com',
           username: 'testuser',
         },
       });
     });
 
-    it('should update existing user with new email and username', async () => {
-      const updatedUser = {
-        ...mockUser,
+    it('should update existing creator with new email and username', async () => {
+      const updatedCreator = {
+        ...mockCreator,
         email: 'updated@example.com',
         username: 'updateduser',
       };
-      mockPrismaService.user.upsert.mockResolvedValue(updatedUser);
+      mockPrismaService.creator.upsert.mockResolvedValue(updatedCreator);
 
       const result = await service.getOrCreateUser(
         'client-123',
-        'ext-user-123',
+        'ext-creator-123',
         'updated@example.com',
         'updateduser',
       );
 
-      expect(result).toEqual(updatedUser);
+      expect(result).toEqual(updatedCreator);
     });
 
     it('should handle undefined email and username', async () => {
-      mockPrismaService.user.upsert.mockResolvedValue({
-        ...mockUser,
+      mockPrismaService.creator.upsert.mockResolvedValue({
+        ...mockCreator,
         email: null,
         username: null,
       });
 
       const result = await service.getOrCreateUser(
         'client-123',
-        'ext-user-123',
+        'ext-creator-123',
       );
 
-      expect(mockPrismaService.user.upsert).toHaveBeenCalledWith({
+      expect(mockPrismaService.creator.upsert).toHaveBeenCalledWith({
         where: {
-          clientId_externalUserId: {
+          clientId_externalId: {
             clientId: 'client-123',
-            externalUserId: 'ext-user-123',
+            externalId: 'ext-creator-123',
           },
         },
         update: {
@@ -204,7 +204,7 @@ describe('ClientService', () => {
         },
         create: {
           clientId: 'client-123',
-          externalUserId: 'ext-user-123',
+          externalId: 'ext-creator-123',
           email: undefined,
           username: undefined,
         },
@@ -213,32 +213,32 @@ describe('ClientService', () => {
     });
   });
 
-  describe('getUserByExternalId', () => {
-    it('should return user when found', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+  describe('getCreatorByExternalId', () => {
+    it('should return creator when found', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
 
-      const result = await service.getUserByExternalId(
+      const result = await service.getCreatorByExternalId(
         'client-123',
-        'ext-user-123',
+        'ext-creator-123',
       );
 
-      expect(result).toEqual(mockUser);
-      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+      expect(result).toEqual(mockCreator);
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
         where: {
-          clientId_externalUserId: {
+          clientId_externalId: {
             clientId: 'client-123',
-            externalUserId: 'ext-user-123',
+            externalId: 'ext-creator-123',
           },
         },
       });
     });
 
-    it('should return null when user is not found', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue(null);
+    it('should return null when creator is not found', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
 
-      const result = await service.getUserByExternalId(
+      const result = await service.getCreatorByExternalId(
         'client-123',
-        'non-existent-user',
+        'non-existent-creator',
       );
 
       expect(result).toBeNull();
@@ -246,7 +246,7 @@ describe('ClientService', () => {
   });
 
   describe('createClient', () => {
-    it('should create a new client with generated API key and default users', async () => {
+    it('should create a new client with generated API key and default creators', async () => {
       const newClient = {
         ...mockClient,
         name: 'New Client',
@@ -254,8 +254,8 @@ describe('ClientService', () => {
       };
 
       mockPrismaService.client.create.mockResolvedValue(newClient);
-      mockPrismaService.user.count.mockResolvedValue(0);
-      mockPrismaService.user.create.mockResolvedValue(mockUser);
+      mockPrismaService.creator.count.mockResolvedValue(0);
+      mockPrismaService.creator.create.mockResolvedValue(mockCreator);
 
       const result = await service.createClient({
         name: 'New Client',
@@ -272,26 +272,26 @@ describe('ClientService', () => {
       expect(createCall.data.domain).toBe('new.fileharbor.local');
       expect(createCall.data.active).toBe(true);
 
-      // Verify default users were created
-      expect(mockPrismaService.user.count).toHaveBeenCalledWith({
+      // Verify default creators were created
+      expect(mockPrismaService.creator.count).toHaveBeenCalledWith({
         where: { clientId: newClient.id },
       });
-      expect(mockPrismaService.user.create).toHaveBeenCalledTimes(2);
+      expect(mockPrismaService.creator.create).toHaveBeenCalledTimes(2);
 
-      // Verify administrator user
-      expect(mockPrismaService.user.create).toHaveBeenCalledWith({
+      // Verify administrator creator
+      expect(mockPrismaService.creator.create).toHaveBeenCalledWith({
         data: {
           clientId: newClient.id,
-          externalUserId: 'administrator',
+          externalId: 'administrator',
           username: 'administrator',
         },
       });
 
-      // Verify system user
-      expect(mockPrismaService.user.create).toHaveBeenCalledWith({
+      // Verify system creator
+      expect(mockPrismaService.creator.create).toHaveBeenCalledWith({
         data: {
           clientId: newClient.id,
-          externalUserId: 'system',
+          externalId: 'system',
           username: 'system',
         },
       });
@@ -304,8 +304,8 @@ describe('ClientService', () => {
       };
 
       mockPrismaService.client.create.mockResolvedValue(inactiveClient);
-      mockPrismaService.user.count.mockResolvedValue(0);
-      mockPrismaService.user.create.mockResolvedValue(mockUser);
+      mockPrismaService.creator.count.mockResolvedValue(0);
+      mockPrismaService.creator.create.mockResolvedValue(mockCreator);
 
       await service.createClient({
         name: 'Inactive Client',
@@ -316,15 +316,15 @@ describe('ClientService', () => {
       expect(createCall.data.active).toBe(false);
     });
 
-    it('should not create default users if users already exist', async () => {
+    it('should not create default creators if creators already exist', async () => {
       mockPrismaService.client.create.mockResolvedValue(mockClient);
-      mockPrismaService.user.count.mockResolvedValue(2);
+      mockPrismaService.creator.count.mockResolvedValue(2);
 
       await service.createClient({
-        name: 'Existing Users Client',
+        name: 'Existing Creators Client',
       });
 
-      expect(mockPrismaService.user.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.creator.create).not.toHaveBeenCalled();
     });
 
     it('should create client without domain when not specified', async () => {
@@ -334,8 +334,8 @@ describe('ClientService', () => {
       };
 
       mockPrismaService.client.create.mockResolvedValue(clientWithoutDomain);
-      mockPrismaService.user.count.mockResolvedValue(0);
-      mockPrismaService.user.create.mockResolvedValue(mockUser);
+      mockPrismaService.creator.count.mockResolvedValue(0);
+      mockPrismaService.creator.create.mockResolvedValue(mockCreator);
 
       await service.createClient({
         name: 'No Domain Client',
@@ -347,7 +347,7 @@ describe('ClientService', () => {
 
     it('should generate unique API keys for different clients', async () => {
       mockPrismaService.client.create.mockResolvedValue(mockClient);
-      mockPrismaService.user.count.mockResolvedValue(1);
+      mockPrismaService.creator.count.mockResolvedValue(1);
 
       await service.createClient({ name: 'Client 1' });
       const apiKey1 =
@@ -368,7 +368,7 @@ describe('ClientService', () => {
   describe('generateApiKey (private method)', () => {
     it('should generate API keys with correct format', async () => {
       mockPrismaService.client.create.mockResolvedValue(mockClient);
-      mockPrismaService.user.count.mockResolvedValue(1);
+      mockPrismaService.creator.count.mockResolvedValue(1);
 
       await service.createClient({ name: 'Test Client' });
 

@@ -49,7 +49,7 @@ export class ClientInterceptor implements NestInterceptor {
 
     // Get API key from header
     const apiKey = request.headers['x-api-key'];
-    const externalUserIdHeader = request.headers['x-user-id'];
+    const externalCreatorIdHeader = request.headers['x-user-id'];
 
     if (!apiKey) {
       throw new UnauthorizedException('API key required (X-API-Key header)');
@@ -62,19 +62,23 @@ export class ClientInterceptor implements NestInterceptor {
     request.clientId = client.id;
     request.client = client;
 
-    // Handle external user ID if provided
-    // This is the user ID from the client's system, not Fileharbor's internal user ID
-    let externalUserId = externalUserIdHeader;
-    if (!externalUserId) {
-      externalUserId =
+    // Resolve the creator's external id. The wire names stay `X-User-Id` /
+    // `externalUserId`: they name a creator in the *calling* system, which
+    // FileHarbor records as a Creator.
+    let externalCreatorId = externalCreatorIdHeader;
+    if (!externalCreatorId) {
+      externalCreatorId =
         request.query?.externalUserId || request.body?.externalUserId;
     }
     // Treat empty string as missing
-    if (typeof externalUserId === 'string' && externalUserId.trim() === '') {
-      externalUserId = undefined;
+    if (
+      typeof externalCreatorId === 'string' &&
+      externalCreatorId.trim() === ''
+    ) {
+      externalCreatorId = undefined;
     }
-    // Attach external user ID to request (services will handle user lookup/creation)
-    request.externalUserId = externalUserId;
+    // Services handle creator lookup/creation from here
+    request.externalCreatorId = externalCreatorId;
 
     return next.handle();
   }

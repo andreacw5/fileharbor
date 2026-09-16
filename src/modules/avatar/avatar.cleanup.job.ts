@@ -73,7 +73,7 @@ export class AvatarCleanupJob {
     // Read original file
     const originalPath = this.storage.getAvatarFilePath(
       domain,
-      avatar.userId,
+      avatar.creatorId,
       'original',
     );
     const buffer = await this.storage.readFile(originalPath);
@@ -90,7 +90,7 @@ export class AvatarCleanupJob {
     // Re-create thumbnail with optimization
     const thumbPath = this.storage.getAvatarFilePath(
       domain,
-      avatar.userId,
+      avatar.creatorId,
       'thumb',
     );
     const thumbBuffer = await this.storage.createThumbnail(

@@ -66,27 +66,27 @@ export class StorageCleanupJob {
           }
 
           // Clean orphaned avatars
-          const avatarUserIds =
-            await this.storage.getClientAvatarUserIds(domain);
+          const avatarCreatorExternalIds =
+            await this.storage.getClientAvatarCreatorExternalIds(domain);
           this.logger.log(
-            `Checking ${avatarUserIds.length} avatars for client ${domain}`,
+            `Checking ${avatarCreatorExternalIds.length} avatars for client ${domain}`,
           );
 
-          for (const userId of avatarUserIds) {
+          for (const creatorId of avatarCreatorExternalIds) {
             const avatar = await this.prisma.avatar.findFirst({
               where: {
                 clientId: client.id,
-                userId,
+                creatorId,
               },
             });
 
             if (!avatar) {
               // Avatar not in database, delete from disk
-              const avatarPath = this.storage.getAvatarPath(domain, userId);
+              const avatarPath = this.storage.getAvatarPath(domain, creatorId);
               await this.storage.deleteDirectory(avatarPath);
               orphanedAvatarsCount++;
               this.logger.log(
-                `Deleted orphaned avatar: ${domain}/avatars/${userId}`,
+                `Deleted orphaned avatar: ${domain}/avatars/${creatorId}`,
               );
             }
           }

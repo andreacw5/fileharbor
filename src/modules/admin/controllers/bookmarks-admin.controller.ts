@@ -17,17 +17,15 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
-import {
-  AdminJwtGuard,
-  AdminJwtPayload,
-} from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import {
   AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
   AdminDeleteResponseDto,
-  AdminUserBookmarkResponseDto,
+  AdminCreatorBookmarkResponseDto,
   AdminVideoBookmarkListResponseDto,
   AdminVideoBookmarkResponseDto,
 } from '../dto/admin-response.dto';
@@ -35,7 +33,7 @@ import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
 
 @ApiTags('Admin - Bookmarks')
 @Controller('admin/bookmarks')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-media.manage')
 export class BookmarksAdminController {
@@ -63,7 +61,7 @@ export class BookmarksAdminController {
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminBookmarkListResponseDto })
   async listBookmarks(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('search') search?: string,
     @Query('tags') tags?: string | string[],
@@ -100,7 +98,7 @@ export class BookmarksAdminController {
   @ApiResponse({ status: 403, description: 'Access denied' })
   async bookmarkImage(
     @Param('imageId') imageId: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminBookmarkResponseDto> {
     const bookmark = await this.bookmarksService.bookmarkImage(
       adminUser,
@@ -120,7 +118,7 @@ export class BookmarksAdminController {
   @ApiResponse({ status: 403, description: 'Access denied' })
   async removeBookmark(
     @Param('imageId') imageId: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const result = await this.bookmarksService.removeBookmark(
       adminUser,
@@ -140,41 +138,41 @@ export class BookmarksAdminController {
     );
   }
 
-  @Post('users/:userId')
+  @Post('creators/:creatorId')
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Bookmark a user for the current admin' })
-  @ApiResponse({ status: 201, type: AdminUserBookmarkResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiOperation({ summary: 'Bookmark a creator for the current admin' })
+  @ApiResponse({ status: 201, type: AdminCreatorBookmarkResponseDto })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  async bookmarkUser(
-    @Param('userId') userId: string,
-    @AdminUser() adminUser: AdminJwtPayload,
-  ): Promise<AdminUserBookmarkResponseDto> {
-    const bookmark = await this.bookmarksService.bookmarkUser(
+  async bookmarkCreator(
+    @Param('creatorId') creatorId: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminCreatorBookmarkResponseDto> {
+    const bookmark = await this.bookmarksService.bookmarkCreator(
       adminUser,
-      userId,
+      creatorId,
     );
 
-    return plainToInstance(AdminUserBookmarkResponseDto, bookmark, {
+    return plainToInstance(AdminCreatorBookmarkResponseDto, bookmark, {
       excludeExtraneousValues: true,
     });
   }
 
-  @Delete('users/:userId')
+  @Delete('creators/:creatorId')
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove a user from admin bookmarks' })
+  @ApiOperation({ summary: 'Remove a creator from admin bookmarks' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  async removeUserBookmark(
-    @Param('userId') userId: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+  async removeCreatorBookmark(
+    @Param('creatorId') creatorId: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
-    const result = await this.bookmarksService.removeUserBookmark(
+    const result = await this.bookmarksService.removeCreatorBookmark(
       adminUser,
-      userId,
+      creatorId,
     );
 
     return plainToInstance(
@@ -199,7 +197,7 @@ export class BookmarksAdminController {
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminVideoBookmarkListResponseDto })
   async listVideoBookmarks(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('search') search?: string,
     @Query('page') page?: string,
@@ -224,7 +222,7 @@ export class BookmarksAdminController {
   @ApiResponse({ status: 201, type: AdminVideoBookmarkResponseDto })
   async bookmarkVideo(
     @Param('videoId') videoId: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoBookmarkResponseDto> {
     const bookmark = await this.bookmarksService.bookmarkVideo(
       adminUser,
@@ -242,7 +240,7 @@ export class BookmarksAdminController {
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
   async removeVideoBookmark(
     @Param('videoId') videoId: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const result = await this.bookmarksService.removeVideoBookmark(
       adminUser,

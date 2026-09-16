@@ -7,12 +7,12 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export class CreateUserDto {
-  @ApiProperty({ description: 'External user ID from the client system' })
+export class CreateCreatorDto {
+  @ApiProperty({ description: 'External creator ID from the client system' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  externalUserId: string;
+  externalId: string;
 
   @ApiPropertyOptional({ description: 'Username' })
   @IsOptional()
@@ -34,7 +34,7 @@ export class CreateUserDto {
   @MaxLength(255)
   website?: string;
 
-  @ApiPropertyOptional({ description: 'User biography' })
+  @ApiPropertyOptional({ description: 'Creator biography' })
   @IsOptional()
   @IsString()
   @MaxLength(1000)

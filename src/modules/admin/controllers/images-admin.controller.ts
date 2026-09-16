@@ -26,10 +26,14 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Readable } from 'stream';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
+import {
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminUpdateImageDto } from '../dto/admin-update-image.dto';
 import { AdminUploadImageDto } from '../dto/admin-upload-image.dto';
 import {
@@ -55,7 +59,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 
 @ApiTags('Admin - Images')
 @Controller('admin/images')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-media.manage')
 export class ImagesAdminController {
@@ -86,9 +90,9 @@ export class ImagesAdminController {
           format: 'uuid',
           description: 'Target client ID',
         },
-        externalUserId: {
+        externalId: {
           type: 'string',
-          description: 'External user ID (defaults to system)',
+          description: 'External creator ID (defaults to system)',
         },
         albumId: { type: 'string', description: 'Album UUID' },
         tags: { type: 'array', items: { type: 'string' } },
@@ -108,10 +112,17 @@ export class ImagesAdminController {
     description: 'Admin has no access to the given client',
   })
   @UseInterceptors(FilesInterceptor('files'))
+  @Audit('fh_image.uploaded', {
+    metadata: (r: ImageResponseDto[], req: AuditRequest) => ({
+      clientId: (req.body as { clientId?: string })?.clientId,
+      count: Array.isArray(r) ? r.length : 0,
+      imageIds: Array.isArray(r) ? r.map((image) => image.id) : [],
+    }),
+  })
   async uploadImage(
     @UploadedFiles() files: Express.Multer.File[],
     @Body() dto: AdminUploadImageDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<ImageResponseDto[]> {
     assertClientAccess(adminUser, dto.clientId);
 
@@ -123,7 +134,7 @@ export class ImagesAdminController {
     for (const file of files) {
       const result = await this.imageService.uploadImage(
         dto.clientId,
-        dto.externalUserId,
+        dto.externalId,
         file,
         dto.albumId,
         dto.tags,
@@ -138,7 +149,7 @@ export class ImagesAdminController {
   @Get()
   @ApiOperation({ summary: 'List images (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'albumId', required: false })
   @ApiQuery({
     name: 'name',
@@ -166,9 +177,9 @@ export class ImagesAdminController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   async listImages(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
-    @Query('userId') userId?: string,
+    @Query('creatorId') creatorId?: string,
     @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
@@ -204,7 +215,7 @@ export class ImagesAdminController {
       sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (userId) where.user = { id: userId };
+    if (creatorId) where.creator = { id: creatorId };
     if (albumId)
       where.albumItems = { some: { albumId, resourceType: 'IMAGE' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
@@ -227,7 +238,7 @@ export class ImagesAdminController {
   @ApiResponse({ status: 200, type: AdminImageResponseDto })
   async getImage(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminImageResponseDto> {
     const image = await this.imageService.findAdminImageById(
       id,
@@ -260,10 +271,16 @@ export class ImagesAdminController {
       'Update image metadata (originalName, isPrivate, tags, description)',
   })
   @ApiResponse({ status: 200, type: AdminImageResponseDto })
+  @Audit('fh_image.updated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({
+      imageId: req.params.id,
+      fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
+    }),
+  })
   async updateImage(
     @Param('id') id: string,
     @Body() dto: AdminUpdateImageDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminImageResponseDto> {
     const existing = await this.imageService.getImageById(id);
     assertClientAccess(adminUser, existing.clientId);
@@ -295,9 +312,13 @@ export class ImagesAdminController {
   @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an image (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @Audit('fh_image.deleted', {
+    // The response is a generic success DTO, so the subject comes from the route.
+    metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+  })
   async deleteImage(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const image = await this.imageService.getImageById(id);
     assertClientAccess(adminUser, image.clientId);
@@ -336,7 +357,7 @@ export class ImagesAdminController {
     @Param('id') id: string,
     @Query('thumb') thumb: boolean,
     @Res({ passthrough: true }) res: Response,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<StreamableFile> {
     const image = await this.imageService.getImageById(id);
     assertClientAccess(adminUser, image.clientId);
@@ -389,9 +410,12 @@ export class ImagesAdminController {
   })
   @ApiResponse({ status: 403, description: 'Access denied' })
   @ApiResponse({ status: 404, description: 'Image or client not found' })
+  @Audit('fh_image.compressed', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+  })
   async compressImageWithTinify(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<TinifyCompressionResponseDto> {
     const image = await this.imageService.getImageById(id);
     assertClientAccess(adminUser, image.clientId);

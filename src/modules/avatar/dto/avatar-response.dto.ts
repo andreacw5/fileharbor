@@ -10,11 +10,11 @@ export class AvatarResponseDto {
   id: string;
 
   @ApiProperty({
-    description: 'User identifier who owns the avatar',
-    example: 'user-123',
+    description: 'Creator identifier who owns the avatar',
+    example: 'creator-123',
   })
   @Expose()
-  userId: string;
+  creatorId: string;
 
   @ApiProperty({
     description: 'Image format',
@@ -68,21 +68,21 @@ export class AvatarResponseDto {
 
   @ApiProperty({
     description: 'URL to access the avatar',
-    example: '/v2/avatars/user-123',
+    example: '/v2/avatars/creator-123',
   })
   @Expose()
   url: string;
 
   @ApiPropertyOptional({
     description: 'URL to access the avatar thumbnail',
-    example: '/v2/avatars/user-123?thumb=true',
+    example: '/v2/avatars/creator-123?thumb=true',
   })
   @Expose()
   thumbnailUrl?: string;
 
   @ApiProperty({
     description: 'Full URL to access the avatar (baseUrl + url)',
-    example: 'http://localhost:3000/v2/avatars/user-123',
+    example: 'http://localhost:3000/v2/avatars/creator-123',
   })
   @Expose()
   fullPath: string;

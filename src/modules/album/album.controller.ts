@@ -21,7 +21,10 @@ import {
 } from '@nestjs/swagger';
 import { AlbumService } from './album.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
-import { ClientId, UserId } from '@/modules/client/decorators/client.decorator';
+import {
+  ClientId,
+  CreatorExternalId,
+} from '@/modules/client/decorators/client.decorator';
 import { Public } from '@/modules/client/decorators/public.decorator';
 import {
   CreateAlbumDto,
@@ -54,12 +57,14 @@ export class AlbumController {
   @ApiResponse({ status: 201, type: AlbumResponseDto })
   async createAlbum(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Body() dto: CreateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.createAlbum(clientId, userId, dto);
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
+    return this.albumService.createAlbum(clientId, creatorId, dto);
   }
 
   @Get()
@@ -71,7 +76,7 @@ export class AlbumController {
   ): Promise<ListAlbumsResponseDto> {
     return this.albumService.listAlbums({
       clientId,
-      userId: query.userId,
+      creatorId: query.creatorId,
       public: query.public,
       search: query.search,
       page: query.page,
@@ -94,10 +99,10 @@ export class AlbumController {
   @ApiResponse({ status: 200, type: AlbumResponseDto })
   async getAlbum(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
   ): Promise<AlbumResponseDto> {
-    return this.albumService.getAlbumWithItems(albumId, clientId, userId);
+    return this.albumService.getAlbumWithItems(albumId, clientId, creatorId);
   }
 
   @Patch(':albumId')
@@ -105,13 +110,15 @@ export class AlbumController {
   @ApiResponse({ status: 200, type: AlbumResponseDto })
   async updateAlbum(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.updateAlbum(albumId, clientId, userId, dto);
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
+    return this.albumService.updateAlbum(albumId, clientId, creatorId, dto);
   }
 
   @Delete(':albumId')
@@ -119,12 +126,14 @@ export class AlbumController {
   @ApiResponse({ status: 200, type: DeleteAlbumResponseDto })
   async deleteAlbum(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.deleteAlbum(albumId, clientId, userId);
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
+    return this.albumService.deleteAlbum(albumId, clientId, creatorId);
   }
 
   // ---------------------------------------------------------------------------
@@ -136,14 +145,16 @@ export class AlbumController {
   @ApiResponse({ status: 201, type: AddAlbumItemsResponseDto })
   async addItems(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
     @Body() dto: AddAlbumItemsDto,
   ): Promise<AddAlbumItemsResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     return this.albumService.addItemsToAlbum(albumId, clientId, dto.items, {
-      userId,
+      creatorId,
     });
   }
 
@@ -152,17 +163,19 @@ export class AlbumController {
   @ApiBody({ type: RemoveAlbumItemsDto })
   async removeItems(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
     @Body() dto: RemoveAlbumItemsDto,
   ) {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     return this.albumService.removeItemsFromAlbum(
       albumId,
       clientId,
       dto.items,
-      { userId },
+      { creatorId },
     );
   }
 
@@ -193,16 +206,18 @@ export class AlbumController {
   @ApiResponse({ status: 201, type: AlbumTokenResponseDto })
   async generateAlbumToken(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
     @Body() dto?: CreateAlbumTokenDto,
   ): Promise<AlbumTokenResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     return this.albumService.generateAlbumToken(
       albumId,
       clientId,
-      userId,
+      creatorId,
       dto?.expiresInDays,
     );
   }
@@ -212,12 +227,14 @@ export class AlbumController {
   @ApiResponse({ status: 200, type: DeleteAlbumResponseDto })
   async revokeAlbumToken(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
-    return this.albumService.revokeAlbumToken(albumId, clientId, userId);
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
+    return this.albumService.revokeAlbumToken(albumId, clientId, creatorId);
   }
 
   // ---------------------------------------------------------------------------
@@ -229,13 +246,13 @@ export class AlbumController {
   @ApiResponse({ status: 200, type: AlbumResponseDto })
   async getAlbumByExternalId(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('externalAlbumId') externalAlbumId: string,
   ): Promise<AlbumResponseDto> {
     return this.albumService.getAlbumWithItemsByExternalId(
       externalAlbumId,
       clientId,
-      userId,
+      creatorId,
     );
   }
 
@@ -244,16 +261,18 @@ export class AlbumController {
   @ApiResponse({ status: 200, type: AlbumResponseDto })
   async updateAlbumByExternalId(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     return this.albumService.updateAlbumByExternalId(
       externalAlbumId,
       clientId,
-      userId,
+      creatorId,
       dto,
     );
   }
@@ -263,17 +282,19 @@ export class AlbumController {
   @ApiResponse({ status: 201, type: AddAlbumItemsResponseDto })
   async addItemsToAlbumByExternalId(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: AddAlbumItemsDto,
   ): Promise<AddAlbumItemsResponseDto> {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     return this.albumService.addItemsToAlbumByExternalId(
       externalAlbumId,
       clientId,
       dto.items,
-      { userId },
+      { creatorId },
     );
   }
 
@@ -282,17 +303,19 @@ export class AlbumController {
   @ApiBody({ type: RemoveAlbumItemsDto })
   async removeItemsFromAlbumByExternalId(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: RemoveAlbumItemsDto,
   ) {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     return this.albumService.removeItemsFromAlbumByExternalId(
       externalAlbumId,
       clientId,
       dto.items,
-      { userId },
+      { creatorId },
     );
   }
 }

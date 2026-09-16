@@ -11,12 +11,12 @@ import { Type, Transform } from 'class-transformer';
 
 export class ListAlbumsDto {
   @ApiPropertyOptional({
-    description: 'Filter by user ID',
-    example: 'user-123',
+    description: 'Filter by creator ID',
+    example: 'creator-123',
   })
   @IsOptional()
   @IsString()
-  userId?: string;
+  creatorId?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by public status (true/false)',

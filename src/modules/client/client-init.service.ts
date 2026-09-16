@@ -16,7 +16,7 @@ export class ClientInitService implements OnModuleInit {
   }
 
   /**
-   * Initialize default client and admin user if database is empty
+   * Initialize the default client and its seed creators if the database is empty
    */
   private async initializeDefaultClient() {
     try {
@@ -27,7 +27,7 @@ export class ClientInitService implements OnModuleInit {
 
       if (clientCount === 0) {
         this.logger.log(
-          'Database is empty. Creating default client and admin user...',
+          'Database is empty. Creating default client and its seed creators...',
         );
 
         // Create default client using ClientService
@@ -42,16 +42,18 @@ export class ClientInitService implements OnModuleInit {
         );
         this.logger.log(`API Key: ${defaultClient.apiKey}`);
 
-        // Get the default users that were auto-created by ClientService
-        const defaultUsers = await this.prisma.user.findMany({
+        // Get the default creators that were auto-created by ClientService
+        const defaultCreators = await this.prisma.creator.findMany({
           where: { clientId: defaultClient.id },
         });
 
-        if (defaultUsers.length > 0) {
-          this.logger.log(`Created ${defaultUsers.length} default users:`);
-          for (const user of defaultUsers) {
+        if (defaultCreators.length > 0) {
+          this.logger.log(
+            `Created ${defaultCreators.length} default creators:`,
+          );
+          for (const creator of defaultCreators) {
             this.logger.log(
-              `  - ${user.username} (externalUserId: ${user.externalUserId}, ID: ${user.id})`,
+              `  - ${creator.username} (externalId: ${creator.externalId}, ID: ${creator.id})`,
             );
           }
         }
@@ -67,7 +69,7 @@ export class ClientInitService implements OnModuleInit {
           this.logger.log('Development mode: Logging existing clients...');
           const clients = await this.prisma.client.findMany({
             include: {
-              users: true,
+              creators: true,
               _count: {
                 select: {
                   images: true,
@@ -87,14 +89,14 @@ export class ClientInitService implements OnModuleInit {
             this.logger.log(`  Images: ${client._count.images}`);
             this.logger.log(`  Avatars: ${client._count.avatars}`);
             this.logger.log(`  Albums: ${client._count.albums}`);
-            this.logger.log(`  Users (${client.users.length}):`);
+            this.logger.log(`  Creators (${client.creators.length}):`);
 
-            for (const user of client.users) {
+            for (const creator of client.creators) {
               this.logger.log(
-                `    - ${user.username || user.externalUserId} (ID: ${user.id}, External: ${user.externalUserId})`,
+                `    - ${creator.username || creator.externalId} (ID: ${creator.id}, External: ${creator.externalId})`,
               );
-              if (user.email) {
-                this.logger.log(`      Email: ${user.email}`);
+              if (creator.email) {
+                this.logger.log(`      Email: ${creator.email}`);
               }
             }
           }

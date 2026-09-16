@@ -15,12 +15,14 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import {
-  AdminJwtGuard,
-  AdminJwtPayload,
-} from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ImageService } from '@/modules/image/image.service';
 import {
@@ -35,7 +37,7 @@ import {
 
 @ApiTags('Admin - Image Share Links')
 @Controller('admin/image-share-links')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-media.manage')
 export class ImageShareLinksAdminController {
@@ -62,7 +64,7 @@ export class ImageShareLinksAdminController {
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminImageShareLinksListResponseDto })
   async listShareLinks(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('imageId') imageId?: string,
     @Query('page') page?: string,
@@ -98,7 +100,7 @@ export class ImageShareLinksAdminController {
         const links = await this.imageService.getShareLinks(
           image.id,
           image.clientId,
-          image.userId,
+          image.creatorId,
         );
         const mapped = links.map((link) => ({
           id: link.id,
@@ -189,9 +191,14 @@ export class ImageShareLinksAdminController {
     status: 403,
     description: 'Admin has no access to the related client',
   })
+  @Audit('fh_share_link.deleted', {
+    metadata: (_r: unknown, req: AuditRequest) => ({
+      shareLinkId: req.params.id,
+    }),
+  })
   async deleteShareLink(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const shareLink = await this.prisma.imageShareLink.findUnique({
       where: { id },
@@ -199,7 +206,7 @@ export class ImageShareLinksAdminController {
         image: {
           select: {
             clientId: true,
-            userId: true,
+            creatorId: true,
           },
         },
       },
@@ -214,7 +221,7 @@ export class ImageShareLinksAdminController {
     await this.imageService.deleteShareLink(
       id,
       shareLink.image.clientId,
-      shareLink.image.userId,
+      shareLink.image.creatorId,
     );
 
     return plainToInstance(

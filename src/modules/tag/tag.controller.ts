@@ -6,12 +6,10 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { TagService } from './tag.service';
-import {
-  AdminJwtGuard,
-  AdminJwtPayload,
-} from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import { TagPageParams, TagsResponseDto } from './dto/tag-response.dto';
 import { PaginatedResult } from '@/common/pagination';
 import { TagListItemDto } from './dto/tag-response.dto';
@@ -22,13 +20,13 @@ export class TagController {
   constructor(private readonly tagAdminService: TagService) {}
 
   @Get()
-  @UseGuards(AdminJwtGuard)
+  @UseGuards(BastionUserGuard)
   @RequirePermission('fileharbor-media.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List image tags (scoped to accessible clients)' })
   @ApiResponse({ status: 200, type: TagsResponseDto })
   listTags(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query() params: TagPageParams = new TagPageParams(),
   ): Promise<PaginatedResult<TagListItemDto>> {
     return this.tagAdminService.listTags(

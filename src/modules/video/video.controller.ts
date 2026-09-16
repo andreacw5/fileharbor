@@ -37,7 +37,10 @@ import type { Request, Response } from 'express';
 import { VideoService } from './video.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
-import { ClientId, UserId } from '@/modules/client/decorators/client.decorator';
+import {
+  ClientId,
+  CreatorExternalId,
+} from '@/modules/client/decorators/client.decorator';
 import {
   UploadVideoDto,
   VideoResponseDto,
@@ -93,16 +96,16 @@ export class VideoController {
   @UseInterceptors(FileInterceptor('file', videoMulterOptions))
   async uploadVideo(
     @ClientId() clientId: string,
-    @UserId() userId: string | undefined,
+    @CreatorExternalId() creatorId: string | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadVideoDto,
   ): Promise<VideoResponseDto> {
     if (!file) throw new BadRequestException('No file uploaded');
 
-    const effectiveUserId = dto.userId || userId;
+    const effectiveCreatorExternalId = dto.creatorId || creatorId;
     return this.videoService.uploadVideo(
       clientId,
-      effectiveUserId,
+      effectiveCreatorExternalId,
       file,
       dto.tags,
       dto.description,
@@ -120,7 +123,7 @@ export class VideoController {
   ): Promise<ListVideosResponseDto> {
     return this.videoService.listVideos({
       clientId,
-      userId: query.userId,
+      creatorId: query.creatorId,
       tag: query.tag,
       page: query.page,
       perPage: query.perPage,
@@ -259,14 +262,15 @@ export class VideoController {
   async updateVideo(
     @Param('id') id: string,
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Body() dto: UpdateVideoDto,
   ): Promise<VideoResponseDto> {
-    const validUserId = this.videoService.validateUserId(userId);
+    const validCreatorExternalId =
+      this.videoService.validateCreatorExternalId(creatorId);
     return this.videoService.updateVideoMetadata(
       id,
       clientId,
-      validUserId,
+      validCreatorExternalId,
       dto.tags,
       dto.description,
       dto.isPrivate,

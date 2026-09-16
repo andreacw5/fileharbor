@@ -3,11 +3,11 @@ import { AvatarService } from './avatar.service';
 import { AvatarController } from './avatar.controller';
 import { ClientModule } from '../client/client.module';
 import { WebhookModule } from '../webhook/webhook.module';
-import { UserModule } from '../user/user.module';
+import { CreatorModule } from '../creator/creator.module';
 import { AvatarCleanupJob } from '@/modules/avatar/avatar.cleanup.job';
 
 @Module({
-  imports: [ClientModule, WebhookModule, UserModule],
+  imports: [ClientModule, WebhookModule, CreatorModule],
   controllers: [AvatarController],
   providers: [AvatarService, AvatarCleanupJob],
   exports: [AvatarService],

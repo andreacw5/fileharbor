@@ -129,7 +129,7 @@ export class AlbumService {
       id: album.id,
       externalAlbumId: album.externalAlbumId,
       clientId: album.clientId,
-      userId: album.userId,
+      creatorId: album.creatorId,
       name: album.name,
       description: album.description,
       isPublic: album.isPublic,
@@ -142,11 +142,11 @@ export class AlbumService {
   // Core CRUD
   // ---------------------------------------------------------------------------
 
-  async createAlbum(clientId: string, userId: string, dto: CreateAlbumDto) {
+  async createAlbum(clientId: string, creatorId: string, dto: CreateAlbumDto) {
     const album = await this.prisma.album.create({
       data: {
         clientId,
-        userId,
+        creatorId,
         externalAlbumId: dto.externalAlbumId,
         name: dto.name,
         description: dto.description,
@@ -161,7 +161,7 @@ export class AlbumService {
         name: album.name,
         description: album.description,
         isPublic: album.isPublic,
-        userId,
+        creatorId,
       })
       .catch((e) =>
         this.logger.warn(`[createAlbum] Webhook failed: ${e.message}`),
@@ -183,9 +183,13 @@ export class AlbumService {
     return album;
   }
 
-  async getAlbumWithItems(albumId: string, clientId: string, userId?: string) {
+  async getAlbumWithItems(
+    albumId: string,
+    clientId: string,
+    creatorId?: string,
+  ) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (!album.isPublic && album.userId !== userId) {
+    if (!album.isPublic && album.creatorId !== creatorId) {
       throw new ForbiddenException('Access denied to private album');
     }
     const { imageCount, videoCount } = await this.countItemsByType(
@@ -201,9 +205,9 @@ export class AlbumService {
     };
   }
 
-  async getUserAlbums(clientId: string, userId: string) {
+  async getCreatorAlbums(clientId: string, creatorId: string) {
     const albums = await this.prisma.album.findMany({
-      where: { clientId, userId },
+      where: { clientId, creatorId },
       include: {
         _count: { select: { albumItems: true } },
         ...this.coverInclude(),
@@ -227,7 +231,7 @@ export class AlbumService {
 
   async listAlbums(filters: {
     clientId?: string;
-    userId?: string;
+    creatorId?: string;
     public?: boolean;
     search?: string;
     page?: number;
@@ -239,7 +243,7 @@ export class AlbumService {
 
     const where: any = {};
     if (filters.clientId) where.clientId = filters.clientId;
-    if (filters.userId) where.userId = filters.userId;
+    if (filters.creatorId) where.creatorId = filters.creatorId;
     if (filters.public !== undefined) where.isPublic = filters.public;
     if (filters.search)
       where.name = { contains: filters.search, mode: 'insensitive' };
@@ -283,11 +287,11 @@ export class AlbumService {
   async updateAlbum(
     albumId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
     dto: UpdateAlbumDto,
   ) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId)
+    if (album.creatorId !== creatorId)
       throw new ForbiddenException('You can only update your own albums');
 
     if (dto.coverImageId) {
@@ -295,7 +299,7 @@ export class AlbumService {
         dto.coverImageId,
         albumId,
         clientId,
-        userId,
+        creatorId,
       );
     }
 
@@ -321,7 +325,7 @@ export class AlbumService {
         description: updated.description,
         isPublic: updated.isPublic,
         coverImageId: updated.coverImageId,
-        userId,
+        creatorId,
       })
       .catch((e) =>
         this.logger.warn(`[updateAlbum] Webhook failed: ${e.message}`),
@@ -331,9 +335,9 @@ export class AlbumService {
     return this.formatAlbumResponse(updated);
   }
 
-  async deleteAlbum(albumId: string, clientId: string, userId: string) {
+  async deleteAlbum(albumId: string, clientId: string, creatorId: string) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId)
+    if (album.creatorId !== creatorId)
       throw new ForbiddenException('You can only delete your own albums');
 
     await this.prisma.album.delete({ where: { id: albumId } });
@@ -359,14 +363,18 @@ export class AlbumService {
     albumId: string,
     clientId: string,
     items: { id: string; resourceType: AlbumResourceType; order?: number }[],
-    options: { userId?: string; force?: boolean } = {},
+    options: { creatorId?: string; force?: boolean } = {},
   ) {
     const album = await this.prisma.album.findFirst({
       where: { id: albumId, clientId },
     });
     if (!album) throw new NotFoundException('Album not found');
 
-    if (!options.force && options.userId && album.userId !== options.userId) {
+    if (
+      !options.force &&
+      options.creatorId &&
+      album.creatorId !== options.creatorId
+    ) {
       throw new ForbiddenException('You can only modify your own albums');
     }
 
@@ -387,7 +395,7 @@ export class AlbumService {
             where: {
               id: item.id,
               clientId,
-              ...(options.force ? {} : { userId: options.userId }),
+              ...(options.force ? {} : { creatorId: options.creatorId }),
             },
           });
           if (!img)
@@ -399,7 +407,7 @@ export class AlbumService {
             where: {
               id: item.id,
               clientId,
-              ...(options.force ? {} : { userId: options.userId }),
+              ...(options.force ? {} : { creatorId: options.creatorId }),
             },
           });
           if (!vid)
@@ -457,14 +465,18 @@ export class AlbumService {
     albumId: string,
     clientId: string,
     items: { id: string; resourceType: AlbumResourceType }[],
-    options: { userId?: string; force?: boolean } = {},
+    options: { creatorId?: string; force?: boolean } = {},
   ) {
     const album = await this.prisma.album.findFirst({
       where: { id: albumId, clientId },
     });
     if (!album) throw new NotFoundException('Album not found');
 
-    if (!options.force && options.userId && album.userId !== options.userId) {
+    if (
+      !options.force &&
+      options.creatorId &&
+      album.creatorId !== options.creatorId
+    ) {
       throw new ForbiddenException('You can only modify your own albums');
     }
 
@@ -574,11 +586,11 @@ export class AlbumService {
   async generateAlbumToken(
     albumId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
     expiresInDays?: number,
   ) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId)
+    if (album.creatorId !== creatorId)
       throw new ForbiddenException(
         'You can only generate tokens for your own albums',
       );
@@ -639,9 +651,9 @@ export class AlbumService {
     };
   }
 
-  async revokeAlbumToken(albumId: string, clientId: string, userId: string) {
+  async revokeAlbumToken(albumId: string, clientId: string, creatorId: string) {
     const album = await this.getAlbumById(albumId, clientId);
-    if (album.userId !== userId)
+    if (album.creatorId !== creatorId)
       throw new ForbiddenException(
         'You can only revoke tokens for your own albums',
       );
@@ -685,10 +697,10 @@ export class AlbumService {
   async getAlbumWithItemsByExternalId(
     externalAlbumId: string,
     clientId: string,
-    userId?: string,
+    creatorId?: string,
   ) {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
-    if (!album.isPublic && album.userId !== userId)
+    if (!album.isPublic && album.creatorId !== creatorId)
       throw new ForbiddenException('Access denied to private album');
 
     const { imageCount, videoCount } = await this.countItemsByType(
@@ -709,11 +721,11 @@ export class AlbumService {
   async updateAlbumByExternalId(
     externalAlbumId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
     dto: UpdateAlbumDto,
   ) {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
-    if (album.userId !== userId)
+    if (album.creatorId !== creatorId)
       throw new ForbiddenException('You can only update your own albums');
 
     if (dto.coverImageId) {
@@ -721,7 +733,7 @@ export class AlbumService {
         dto.coverImageId,
         album.id,
         clientId,
-        userId,
+        creatorId,
       );
     }
 
@@ -747,7 +759,7 @@ export class AlbumService {
         description: updated.description,
         isPublic: updated.isPublic,
         coverImageId: updated.coverImageId,
-        userId,
+        creatorId,
       })
       .catch((e) =>
         this.logger.warn(
@@ -762,7 +774,7 @@ export class AlbumService {
     externalAlbumId: string,
     clientId: string,
     items: { id: string; resourceType: AlbumResourceType; order?: number }[],
-    options: { userId?: string; force?: boolean } = {},
+    options: { creatorId?: string; force?: boolean } = {},
   ) {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
     return this.addItemsToAlbum(album.id, clientId, items, options);
@@ -772,7 +784,7 @@ export class AlbumService {
     externalAlbumId: string,
     clientId: string,
     items: { id: string; resourceType: AlbumResourceType }[],
-    options: { userId?: string; force?: boolean } = {},
+    options: { creatorId?: string; force?: boolean } = {},
   ) {
     const album = await this.getAlbumByExternalId(externalAlbumId, clientId);
     return this.removeItemsFromAlbum(album.id, clientId, items, options);
@@ -795,7 +807,7 @@ export class AlbumService {
         skip: options.skip,
         take: options.take,
         include: {
-          user: { select: { externalUserId: true, username: true } },
+          creator: { select: { externalId: true, username: true } },
           client: { select: { name: true, domain: true } },
           _count: {
             select: {
@@ -824,7 +836,7 @@ export class AlbumService {
         where: { id: albumId },
         include: {
           client: { select: { id: true, name: true, domain: true } },
-          user: { select: { externalUserId: true, username: true } },
+          creator: { select: { externalId: true, username: true } },
           _count: {
             select: {
               albumItems: true,
@@ -857,7 +869,7 @@ export class AlbumService {
         data,
         include: {
           client: { select: { id: true, name: true, domain: true } },
-          user: { select: { externalUserId: true, username: true } },
+          creator: { select: { externalId: true, username: true } },
           _count: {
             select: {
               albumItems: true,
@@ -916,20 +928,23 @@ export class AlbumService {
     imageId: string,
     albumId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
   ): Promise<void> {
     const item = await this.prisma.albumItem.findUnique({
       where: { albumId_imageId: { albumId, imageId } },
       include: {
-        image: { select: { id: true, clientId: true, userId: true } },
+        image: { select: { id: true, clientId: true, creatorId: true } },
       },
     });
 
     if (!item)
       throw new BadRequestException('Cover image must be part of the album');
-    if (item.image!.clientId !== clientId || item.image!.userId !== userId) {
+    if (
+      item.image!.clientId !== clientId ||
+      item.image!.creatorId !== creatorId
+    ) {
       throw new BadRequestException(
-        'Cover image does not belong to this client or user',
+        'Cover image does not belong to this client or creator',
       );
     }
   }

@@ -13,7 +13,7 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { UserService } from '@/modules/user/user.service';
+import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
@@ -38,7 +38,7 @@ export class VideoService {
     private storage: StorageService,
     private config: ConfigService,
     private webhook: WebhookService,
-    private userService: UserService,
+    private creatorService: CreatorService,
     private route: RouteHelperService,
   ) {
     this.thumbnailQuality = parseInt(
@@ -48,7 +48,7 @@ export class VideoService {
 
   async uploadVideo(
     clientId: string,
-    externalUserId: string | undefined,
+    externalId: string | undefined,
     file: Express.Multer.File,
     tags?: string[],
     description?: string,
@@ -57,7 +57,7 @@ export class VideoService {
   ): Promise<VideoResponseDto> {
     const videoId = uuidv4();
     this.logger.debug(
-      `[uploadVideo] Start - ID: ${videoId}, Client: ${clientId}, User: ${externalUserId || 'system'}, File: ${file.originalname}, Size: ${file.size}`,
+      `[uploadVideo] Start - ID: ${videoId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}`,
     );
 
     try {
@@ -77,17 +77,20 @@ export class VideoService {
       if (!client) throw new BadRequestException('Client not found');
       const domain = client.domain || clientId;
 
-      let user;
-      if (externalUserId) {
-        user = await this.userService.resolveUser(clientId, externalUserId);
+      let creator;
+      if (externalId) {
+        creator = await this.creatorService.resolveCreator(
+          clientId,
+          externalId,
+        );
       } else {
-        user = await this.prisma.user.findUnique({
+        creator = await this.prisma.creator.findUnique({
           where: {
-            clientId_externalUserId: { clientId, externalUserId: 'system' },
+            clientId_externalId: { clientId, externalId: 'system' },
           },
         });
-        if (!user)
-          throw new BadRequestException('System user not found for client');
+        if (!creator)
+          throw new BadRequestException('System creator not found for client');
       }
 
       const finalPath = this.storage.getVideoFilePath(
@@ -126,7 +129,7 @@ export class VideoService {
         data: {
           id: videoId,
           clientId,
-          userId: user.id,
+          creatorId: creator.id,
           originalName: file.originalname,
           storagePath,
           mimeType: 'video/mp4',
@@ -142,7 +145,7 @@ export class VideoService {
         },
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { id: true, externalUserId: true, username: true } },
+          creator: { select: { id: true, externalId: true, username: true } },
           client: { select: { id: true, name: true, domain: true } },
         },
       });
@@ -159,7 +162,7 @@ export class VideoService {
           videoId: video.id,
           originalName: video.originalName,
           size: video.size,
-          userId: user.externalUserId,
+          creatorId: creator.externalId,
         })
         .catch((err) =>
           this.logger.warn(
@@ -201,7 +204,7 @@ export class VideoService {
       where,
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
-        user: { select: { id: true, externalUserId: true, username: true } },
+        creator: { select: { id: true, externalId: true, username: true } },
         client: { select: { id: true, name: true, domain: true } },
       },
     });
@@ -238,7 +241,7 @@ export class VideoService {
 
   async listVideos(filters: {
     clientId: string;
-    userId?: string;
+    creatorId?: string;
     tag?: string;
     page?: number;
     perPage?: number;
@@ -248,7 +251,7 @@ export class VideoService {
     const skip = (page - 1) * perPage;
 
     const where: any = { clientId: filters.clientId };
-    if (filters.userId) where.userId = filters.userId;
+    if (filters.creatorId) where.creatorId = filters.creatorId;
     if (filters.tag) {
       where.videoTags = { some: { tag: { name: filters.tag } } };
     }
@@ -261,7 +264,7 @@ export class VideoService {
         take: perPage,
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { id: true, externalUserId: true, username: true } },
+          creator: { select: { id: true, externalId: true, username: true } },
           client: { select: { id: true, name: true, domain: true } },
         },
       }),
@@ -321,13 +324,13 @@ export class VideoService {
   async updateVideoMetadata(
     videoId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
     tags?: string[],
     description?: string,
     isPrivate?: boolean,
   ): Promise<VideoResponseDto> {
     const video = await this.prisma.video.findFirst({
-      where: { id: videoId, clientId, userId },
+      where: { id: videoId, clientId, creatorId },
     });
     if (!video) throw new NotFoundException('Video not found');
 
@@ -348,7 +351,7 @@ export class VideoService {
       },
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
-        user: { select: { id: true, externalUserId: true, username: true } },
+        creator: { select: { id: true, externalId: true, username: true } },
         client: { select: { id: true, name: true, domain: true } },
       },
     });
@@ -364,10 +367,12 @@ export class VideoService {
     return this.formatVideoResponse(video);
   }
 
-  validateUserId(userId: string | undefined): string {
-    if (!userId)
-      throw new BadRequestException('User ID is required (X-User-Id header)');
-    return userId;
+  validateCreatorExternalId(creatorId: string | undefined): string {
+    if (!creatorId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
+    return creatorId;
   }
 
   async findAdminVideos(
@@ -388,7 +393,7 @@ export class VideoService {
         take: options.take,
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { id: true, externalUserId: true, username: true } },
+          creator: { select: { id: true, externalId: true, username: true } },
           client: { select: { name: true, domain: true } },
         },
       }),
@@ -427,7 +432,7 @@ export class VideoService {
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        user: { select: { id: true, externalUserId: true, username: true } },
+        creator: { select: { id: true, externalId: true, username: true } },
       },
     });
 
@@ -454,7 +459,7 @@ export class VideoService {
       include: {
         videoTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        user: { select: { id: true, externalUserId: true, username: true } },
+        creator: { select: { id: true, externalId: true, username: true } },
       },
     });
   }

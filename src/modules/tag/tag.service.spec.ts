@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TagService } from './tag.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { TagPageParams } from './dto/tag-response.dto';
 
 function makeParams(overrides: Partial<TagPageParams> = {}): TagPageParams {

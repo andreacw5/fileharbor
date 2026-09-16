@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -9,10 +10,12 @@ import { ImageModule } from '@/modules/image/image.module';
 import { AvatarModule } from '@/modules/avatar/avatar.module';
 import { AlbumModule } from '@/modules/album/album.module';
 import { AdminModule } from '@/modules/admin/admin.module';
+import { BastionModule } from '@/modules/bastion/bastion.module';
+import { AuditInterceptor } from '@/modules/bastion/interceptors/audit.interceptor';
 import { MeModule } from '@/modules/me/me.module';
 import { VideoModule } from '@/modules/video/video.module';
 import { StatisticsModule } from '@/modules/statistics/statistics.module';
-import { UserModule } from '@/modules/user/user.module';
+import { CreatorModule } from '@/modules/creator/creator.module';
 import { TagModule } from '@/modules/tag/tag.module';
 import { HealthModule } from '@/modules/health/health.module';
 import config from '../../configs/config.schema';
@@ -54,12 +57,13 @@ import { RouteHelperModule } from '@/utils/route.utils';
 
     // Core modules
     PrismaModule,
+    BastionModule,
     StorageModule,
     ClientModule,
     ImageModule,
     AvatarModule,
     AlbumModule,
-    UserModule,
+    CreatorModule,
     RouteHelperModule,
     HealthModule,
 
@@ -73,6 +77,12 @@ import { RouteHelperModule } from '@/utils/route.utils';
 
     // Self-service (Bastion user JWT) module
     MeModule,
+  ],
+  providers: [
+    // Writes the Bastion audit event declared by `@Audit()` on an admin handler.
+    // Registered globally rather than per controller so a new admin route cannot
+    // silently skip auditing: a handler with no `@Audit()` is a no-op here.
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

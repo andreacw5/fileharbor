@@ -11,8 +11,8 @@ export class UploadAvatarDto {
 
   @ApiProperty({
     type: 'string',
-    description: 'External user ID from your system',
-    example: 'user-123',
+    description: 'External creator ID from your system',
+    example: 'creator-123',
   })
   @IsString()
   externalUserId: string;

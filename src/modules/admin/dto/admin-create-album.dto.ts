@@ -13,12 +13,12 @@ export class AdminCreateAlbumDto {
 
   @ApiPropertyOptional({
     description:
-      'External user ID to associate the album with (defaults to "system")',
-    example: 'user-456',
+      'External creator ID to associate the album with (defaults to "system")',
+    example: 'creator-456',
   })
   @IsOptional()
   @IsString()
-  externalUserId?: string;
+  externalId?: string;
 
   @ApiProperty({
     description: 'Album name',

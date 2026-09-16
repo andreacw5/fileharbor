@@ -1,15 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { BastionUserJwtGuard } from './bastion-user-jwt.guard';
-import {
-  BastionTokenVerifier,
-  BastionJwtPayload,
-} from '../bastion-token-verifier.service';
+import { BastionSelfServiceGuard } from './bastion-self-service.guard';
+import { BastionJwksService } from '../bastion-jwks.service';
+import { BastionTokenVerifier } from '../bastion-token-verifier.service';
+import { UserJwtPayload } from '../bastion.types';
 
-describe('BastionUserJwtGuard', () => {
-  const bastionPayload: BastionJwtPayload = {
+describe('BastionSelfServiceGuard', () => {
+  const bastionPayload: UserJwtPayload = {
     sub: 'bastion-user-1',
     tenantId: 'tenant-1',
     tenantSlug: 'heyatom',
@@ -22,17 +20,17 @@ describe('BastionUserJwtGuard', () => {
     exp: 0,
   };
 
-  const mockJwtService = { verify: jest.fn() };
+  const mockJwks = { verify: jest.fn() };
 
   /** Builds a guard whose ConfigService returns the supplied env values. */
   const buildGuard = async (
     config: Record<string, string>,
-  ): Promise<BastionUserJwtGuard> => {
+  ): Promise<BastionSelfServiceGuard> => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        BastionUserJwtGuard,
+        BastionSelfServiceGuard,
         BastionTokenVerifier,
-        { provide: JwtService, useValue: mockJwtService },
+        { provide: BastionJwksService, useValue: mockJwks },
         {
           provide: ConfigService,
           useValue: { get: (key: string) => config[key] },
@@ -40,10 +38,10 @@ describe('BastionUserJwtGuard', () => {
       ],
     }).compile();
 
-    return module.get<BastionUserJwtGuard>(BastionUserJwtGuard);
+    return module.get<BastionSelfServiceGuard>(BastionSelfServiceGuard);
   };
 
-  /** Returns a context whose getRequest() is stable across calls, so bastionUser set by the guard is observable. */
+  /** Returns a context whose getRequest() is stable across calls, so the bastionUser set by the guard is observable. */
   const contextWithHeaders = (
     headers: Record<string, string>,
   ): { context: ExecutionContext; request: any } => {
@@ -58,11 +56,7 @@ describe('BastionUserJwtGuard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Bypass JWKS by stubbing the network-bound key fetch; slug/payload logic is what matters here.
-    jest
-      .spyOn(BastionTokenVerifier.prototype as any, 'getPublicKeyPem')
-      .mockResolvedValue('pem');
-    mockJwtService.verify.mockReturnValue(bastionPayload);
+    mockJwks.verify.mockResolvedValue(bastionPayload);
   });
 
   it('accepts a verified token without requiring any console permission', async () => {

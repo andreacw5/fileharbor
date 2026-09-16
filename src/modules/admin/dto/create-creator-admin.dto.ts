@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID } from 'class-validator';
-import { CreateUserDto } from '@/modules/user/dto/create-user.dto';
+import { CreateCreatorDto } from '@/modules/creator/dto/create-creator.dto';
 
-export class CreateUserAdminDto extends CreateUserDto {
+export class CreateCreatorAdminDto extends CreateCreatorDto {
   @ApiProperty({
     description: 'Target client ID (UUID)',
     example: '00000000-0000-0000-0000-000000000000',

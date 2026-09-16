@@ -86,7 +86,7 @@ describe('WebhookService', () => {
       const eventData = {
         imageId: 'image-123',
         size: 1024000,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       };
 
       await service.sendWebhook(
@@ -174,7 +174,7 @@ describe('WebhookService', () => {
       const eventData = {
         imageId: 'image-123',
         size: 2048000,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       };
 
       await service.sendWebhook(
@@ -194,7 +194,7 @@ describe('WebhookService', () => {
               fields: expect.arrayContaining([
                 { name: 'ID', value: 'image-123' },
                 { name: 'Size', value: '1.95 MB', inline: true },
-                { name: 'User', value: 'user-123', inline: true },
+                { name: 'Creator', value: 'creator-123', inline: true },
               ]),
               thumbnail: {
                 url: `${mockBaseUrl}/images/image-123`,
@@ -256,7 +256,7 @@ describe('WebhookService', () => {
       const eventData = {
         avatarId: 'avatar-123',
         size: 512000,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       };
 
       await service.sendWebhook(
@@ -276,10 +276,10 @@ describe('WebhookService', () => {
               fields: expect.arrayContaining([
                 { name: 'ID', value: 'avatar-123' },
                 { name: 'Size', value: '500.00 KB', inline: true },
-                { name: 'User', value: 'user-123', inline: true },
+                { name: 'Creator', value: 'creator-123', inline: true },
               ]),
               thumbnail: {
-                url: `${mockBaseUrl}/avatars/user-123`,
+                url: `${mockBaseUrl}/avatars/creator-123`,
               },
               footer: expect.objectContaining({
                 text: 'FileHarbor Monitoring',
@@ -336,7 +336,7 @@ describe('WebhookService', () => {
         name: 'Test Album',
         description: 'Test Description',
         isPublic: true,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       };
 
       await service.sendWebhook(
@@ -357,7 +357,7 @@ describe('WebhookService', () => {
                 { name: 'ID', value: 'album-123' },
                 { name: 'Name', value: 'Test Album' },
                 { name: 'Public', value: 'Yes', inline: true },
-                { name: 'User', value: 'user-123', inline: true },
+                { name: 'Creator', value: 'creator-123', inline: true },
                 { name: 'Description', value: 'Test Description' },
               ]),
             }),
@@ -371,7 +371,7 @@ describe('WebhookService', () => {
         albumId: 'album-123',
         name: 'Test Album',
         isPublic: false,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       };
 
       await service.sendWebhook(
@@ -406,7 +406,7 @@ describe('WebhookService', () => {
         name: 'Updated Album',
         description: 'Updated Description',
         isPublic: true,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       };
 
       await service.sendWebhook(
@@ -543,7 +543,7 @@ describe('WebhookService', () => {
       await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {
         imageId: 'test',
         size: 1000,
-        userId: 'user-1',
+        creatorId: 'creator-1',
       });
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
@@ -558,7 +558,7 @@ describe('WebhookService', () => {
       await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {
         imageId: 'test',
         size: 1000,
-        userId: 'user-1',
+        creatorId: 'creator-1',
       });
 
       const call = mockHttpService.post.mock.calls[0];
@@ -579,7 +579,7 @@ describe('WebhookService', () => {
 
       expect(embed.fields).toContainEqual({ name: 'ID', value: 'N/A' });
       expect(embed.fields).toContainEqual({
-        name: 'User',
+        name: 'Creator',
         value: 'System',
         inline: true,
       });
@@ -594,7 +594,7 @@ describe('WebhookService', () => {
       await service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {
         imageId: 'image-123',
         size: 1000,
-        userId: 'user-1',
+        creatorId: 'creator-1',
       });
 
       const call = mockHttpService.post.mock.calls[0];
@@ -610,13 +610,13 @@ describe('WebhookService', () => {
       await service.sendWebhook(mockClientId, WebhookEvent.AVATAR_UPLOADED, {
         avatarId: 'avatar-123',
         size: 1000,
-        userId: 'user-123',
+        creatorId: 'creator-123',
       });
 
       const call = mockHttpService.post.mock.calls[0];
       const embed = call[1].embeds[0];
 
-      expect(embed.thumbnail.url).toBe(`${mockBaseUrl}/avatars/user-123`);
+      expect(embed.thumbnail.url).toBe(`${mockBaseUrl}/avatars/creator-123`);
     });
   });
 
@@ -631,7 +631,7 @@ describe('WebhookService', () => {
         service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {
           imageId: 'test',
           size: 1000,
-          userId: 'user-1',
+          creatorId: 'creator-1',
         }),
       ).resolves.not.toThrow();
     });
@@ -646,7 +646,7 @@ describe('WebhookService', () => {
         service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {
           imageId: 'test',
           size: 1000,
-          userId: 'user-1',
+          creatorId: 'creator-1',
         }),
       ).resolves.not.toThrow();
     });
@@ -664,7 +664,7 @@ describe('WebhookService', () => {
         service.sendWebhook(mockClientId, WebhookEvent.IMAGE_UPLOADED, {
           imageId: 'test',
           size: 1000,
-          userId: 'user-1',
+          creatorId: 'creator-1',
         }),
       ).resolves.not.toThrow();
     });

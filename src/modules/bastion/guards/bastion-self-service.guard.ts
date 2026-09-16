@@ -1,32 +1,19 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
 import { BastionTokenVerifier } from '../bastion-token-verifier.service';
-
-/**
- * Bastion user identity attached to `request.bastionUser` by `BastionUserJwtGuard`.
- * Unlike `AdminJwtPayload`, this carries no local enrichment (no principal, no
- * client scope) and passes no permission check — any signed-in Bastion user of
- * an accepted app passes. Used by self-service endpoints (e.g. `/me/avatar`) where the caller
- * is acting on their own behalf, not as a console admin.
- */
-export interface BastionUserPayload {
-  sub: string;
-  tenantId: string;
-  tenantSlug: string;
-  appSlug: string;
-  email: string;
-  username?: string;
-}
+import { BastionUserPayload } from '../bastion.types';
 
 /**
  * Verifies the Bastion user JWT (signature + appSlug, via `BastionTokenVerifier`)
- * and attaches the decoded identity to `request.bastionUser`. Unlike
- * `AdminJwtGuard`, it does NOT require a local `AdminUser` row — it accepts
- * any signed-in user of an accepted app. Do not reuse for admin/console
- * endpoints; use `AdminJwtGuard` there.
+ * and attaches the decoded identity to `request.bastionUser`.
+ *
+ * Unlike `BastionUserGuard` it enforces **no console permission** and resolves
+ * **no client scope** — it only establishes "this is *some* verified Bastion user
+ * of an accepted app". That is what `/me/*` needs, where the caller acts on their
+ * own behalf; it is never enough for a console route, so do not reuse it there.
  */
 @Injectable()
-export class BastionUserJwtGuard implements CanActivate {
+export class BastionSelfServiceGuard implements CanActivate {
   constructor(private readonly tokenVerifier: BastionTokenVerifier) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

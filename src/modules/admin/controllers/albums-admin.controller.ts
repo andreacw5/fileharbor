@@ -24,10 +24,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AlbumResourceType } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
+import {
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminUpdateAlbumDto } from '../dto/admin-update-album.dto';
 import { AdminCreateAlbumDto } from '../dto/admin-create-album.dto';
 import {
@@ -50,7 +54,7 @@ import {
 
 @ApiTags('Admin - Albums')
 @Controller('admin/albums')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-library.manage')
 export class AlbumsAdminController {
@@ -66,24 +70,36 @@ export class AlbumsAdminController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create an album on behalf of a client' })
   @ApiResponse({ status: 201, type: AdminAlbumResponseDto })
+  @Audit('fh_album.created', {
+    metadata: (r: AdminAlbumResponseDto) => ({
+      albumId: r.id,
+      name: r.name,
+      clientId: r.clientId,
+      isPublic: r.isPublic,
+    }),
+  })
   async createAlbum(
     @Body() dto: AdminCreateAlbumDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminAlbumResponseDto> {
     assertClientAccess(adminUser, dto.clientId);
 
-    const externalUserId = dto.externalUserId || 'system';
-    const user = await this.clientService.getOrCreateUser(
+    const externalId = dto.externalId || 'system';
+    const creator = await this.clientService.getOrCreateUser(
       dto.clientId,
-      externalUserId,
+      externalId,
     );
 
-    const album = await this.albumService.createAlbum(dto.clientId, user.id, {
-      name: dto.name,
-      description: dto.description,
-      isPublic: dto.isPublic,
-      externalAlbumId: dto.externalAlbumId,
-    });
+    const album = await this.albumService.createAlbum(
+      dto.clientId,
+      creator.id,
+      {
+        name: dto.name,
+        description: dto.description,
+        isPublic: dto.isPublic,
+        externalAlbumId: dto.externalAlbumId,
+      },
+    );
 
     const enriched = await this.albumService.findAdminAlbumById(album.id);
     if (!enriched) throw new NotFoundException('Album not found');
@@ -105,15 +121,15 @@ export class AlbumsAdminController {
   @Get()
   @ApiOperation({ summary: 'List albums (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'public', required: false, type: Boolean })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   async listAlbums(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
-    @Query('userId') userId?: string,
+    @Query('creatorId') creatorId?: string,
     @Query('search') search?: string,
     @Query('public') publicFilter?: string,
     @Query('page') page?: string,
@@ -124,7 +140,7 @@ export class AlbumsAdminController {
     const skip = (pageNum - 1) * take;
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (userId) where.user = { externalUserId: userId };
+    if (creatorId) where.creator = { externalId: creatorId };
     if (search) where.name = { contains: search, mode: 'insensitive' };
     if (publicFilter !== undefined) {
       where.isPublic =
@@ -163,7 +179,7 @@ export class AlbumsAdminController {
   @ApiResponse({ status: 200, type: AdminAlbumResponseDto })
   async getAlbum(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminAlbumResponseDto> {
     const album = await this.albumService.findAdminAlbumById(id);
     if (!album) throw new NotFoundException('Album not found');
@@ -186,10 +202,16 @@ export class AlbumsAdminController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update album name, description or visibility' })
   @ApiResponse({ status: 200, type: AdminAlbumResponseDto })
+  @Audit('fh_album.updated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({
+      albumId: req.params.id,
+      fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
+    }),
+  })
   async updateAlbum(
     @Param('id') id: string,
     @Body() dto: AdminUpdateAlbumDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminAlbumResponseDto> {
     const existing = await this.albumService.getAlbumByIdUnscoped(id);
     if (!existing) throw new NotFoundException('Album not found');
@@ -230,10 +252,16 @@ export class AlbumsAdminController {
     summary: 'Add images and/or videos to album (admin, bypasses ownership)',
   })
   @ApiResponse({ status: 200, type: AddAlbumItemsResponseDto })
+  @Audit('fh_album.items_added', {
+    metadata: (r: AddAlbumItemsResponseDto, req: AuditRequest) => ({
+      albumId: req.params.id,
+      count: r?.count,
+    }),
+  })
   async addItems(
     @Param('id') id: string,
     @Body() dto: AddAlbumItemsDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AddAlbumItemsResponseDto> {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
     if (!album) throw new NotFoundException('Album not found');
@@ -253,10 +281,16 @@ export class AlbumsAdminController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove images and/or videos from album (admin)' })
   @ApiBody({ type: RemoveAlbumItemsDto })
+  @Audit('fh_album.items_removed', {
+    metadata: (r: { removed?: number }, req: AuditRequest) => ({
+      albumId: req.params.id,
+      removed: r?.removed,
+    }),
+  })
   async removeItems(
     @Param('id') id: string,
     @Body() dto: RemoveAlbumItemsDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ) {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
     if (!album) throw new NotFoundException('Album not found');
@@ -282,7 +316,7 @@ export class AlbumsAdminController {
   @ApiResponse({ status: 200, type: AlbumItemListResponseDto })
   async listItems(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query() query: ListAlbumItemsDto,
   ): Promise<AlbumItemListResponseDto> {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
@@ -303,9 +337,12 @@ export class AlbumsAdminController {
   @Delete(':id')
   @ApiOperation({ summary: 'Force delete an album (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @Audit('fh_album.deleted', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ albumId: req.params.id }),
+  })
   async deleteAlbum(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
     if (!album) throw new NotFoundException('Album not found');

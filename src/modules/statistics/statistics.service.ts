@@ -6,7 +6,7 @@ import {
   DailyDataPointDto,
   StatsTrendDto,
 } from '@/modules/admin/dto/admin-response.dto';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { buildClientWhere } from '@/modules/admin/helpers/admin-access.helper';
 import { APP_VERSION } from '@/common/version';
 
@@ -29,13 +29,13 @@ export class StatisticsService {
       totalAvatars,
       totalAlbums,
       totalVideos,
-      totalUsers,
+      totalCreators,
       storageAgg,
       newImages,
       newAvatars,
       newAlbums,
       newVideos,
-      newUsers,
+      newCreators,
       newStorageAgg,
     ] = await Promise.all([
       this.prisma.client.count(
@@ -47,13 +47,13 @@ export class StatisticsService {
       this.prisma.avatar.count({ where: clientWhere }),
       this.prisma.album.count({ where: clientWhere }),
       this.prisma.video.count({ where: clientWhere }),
-      this.prisma.user.count({ where: clientWhere }),
+      this.prisma.creator.count({ where: clientWhere }),
       this.prisma.image.aggregate({ where: clientWhere, _sum: { size: true } }),
       this.prisma.image.count({ where: clientWhere7d }),
       this.prisma.avatar.count({ where: clientWhere7d }),
       this.prisma.album.count({ where: clientWhere7d }),
       this.prisma.video.count({ where: clientWhere7d }),
-      this.prisma.user.count({ where: clientWhere7d }),
+      this.prisma.creator.count({ where: clientWhere7d }),
       this.prisma.image.aggregate({
         where: clientWhere7d,
         _sum: { size: true },
@@ -69,7 +69,7 @@ export class StatisticsService {
         newAvatars,
         newAlbums,
         newVideos,
-        newUsers,
+        newCreators,
         newStorage: newStorageAgg._sum.size || 0,
       },
       { excludeExtraneousValues: true },
@@ -84,7 +84,7 @@ export class StatisticsService {
         totalAvatars,
         totalAlbums,
         totalVideos,
-        totalUsers,
+        totalCreators,
         totalStorage: storageAgg._sum.size || 0,
         last7Days,
         dailyChart,
@@ -94,7 +94,7 @@ export class StatisticsService {
   }
 
   /**
-   * Build per-day counts for images, avatars, albums and users
+   * Build per-day counts for images, avatars, albums and creators
    * for the 7-day window starting at `from`.
    */
   private async buildDailyChart(

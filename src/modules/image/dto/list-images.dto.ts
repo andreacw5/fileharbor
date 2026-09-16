@@ -4,12 +4,12 @@ import { Type } from 'class-transformer';
 
 export class ListImagesDto {
   @ApiPropertyOptional({
-    description: 'Filter by user ID',
-    example: 'user-123',
+    description: 'Filter by creator ID',
+    example: 'creator-123',
   })
   @IsOptional()
   @IsString()
-  userId?: string;
+  creatorId?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by album ID',

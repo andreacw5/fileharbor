@@ -8,7 +8,7 @@ const trimOrUndefined = ({ value }: { value: unknown }): unknown => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-export class UpdateUserByExternalIdDto {
+export class UpdateCreatorByExternalIdDto {
   @ApiPropertyOptional({
     description: 'Updated username from external system',
     maxLength: 100,

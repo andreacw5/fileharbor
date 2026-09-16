@@ -9,7 +9,7 @@ import {
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
 import { HttpService } from '@nestjs/axios';
-import { UserService } from '@/modules/user/user.service';
+import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
 describe('ImageService', () => {
@@ -17,8 +17,8 @@ describe('ImageService', () => {
 
   // Mock data
   const mockClientId = 'client-123';
-  const mockUserId = 'user-123';
-  const mockExternalUserId = 'ext-user-123';
+  const mockCreatorExternalId = 'creator-123';
+  const mockExternalUserId = 'ext-creator-123';
   const mockImageId = 'image-123';
   const mockDomain = 'test.fileharbor.local';
 
@@ -32,20 +32,20 @@ describe('ImageService', () => {
     updatedAt: new Date(),
   };
 
-  const mockUser = {
-    id: mockUserId,
+  const mockCreator = {
+    id: mockCreatorExternalId,
     clientId: mockClientId,
-    externalUserId: mockExternalUserId,
+    externalId: mockExternalUserId,
     email: null,
     username: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  const mockSystemUser = {
-    id: 'system-user-123',
+  const mockSystemCreator = {
+    id: 'system-creator-123',
     clientId: mockClientId,
-    externalUserId: 'system',
+    externalId: 'system',
     email: null,
     username: 'system',
     createdAt: new Date(),
@@ -55,7 +55,7 @@ describe('ImageService', () => {
   const mockImage = {
     id: mockImageId,
     clientId: mockClientId,
-    userId: mockUserId,
+    creatorId: mockCreatorExternalId,
     externalImageId: null,
     originalName: 'test.jpg',
     storagePath: `${mockDomain}/images/${mockImageId}`,
@@ -97,7 +97,7 @@ describe('ImageService', () => {
     client: {
       findUnique: jest.fn(),
     },
-    user: {
+    creator: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
     },
@@ -158,8 +158,8 @@ describe('ImageService', () => {
     sendWebhook: jest.fn().mockResolvedValue(undefined),
   };
 
-  const mockUserServiceMock = {
-    resolveUser: jest.fn(),
+  const mockCreatorServiceMock = {
+    resolveCreator: jest.fn(),
     findOrCreate: jest.fn(),
   };
 
@@ -188,8 +188,8 @@ describe('ImageService', () => {
           useValue: { post: jest.fn() },
         },
         {
-          provide: UserService,
-          useValue: mockUserServiceMock,
+          provide: CreatorService,
+          useValue: mockCreatorServiceMock,
         },
         {
           provide: RouteHelperService,
@@ -219,8 +219,8 @@ describe('ImageService', () => {
   describe('uploadImage', () => {
     beforeEach(() => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockPrismaService.user.upsert.mockResolvedValue(mockUser);
-      mockUserServiceMock.resolveUser.mockResolvedValue(mockUser);
+      mockPrismaService.creator.upsert.mockResolvedValue(mockCreator);
+      mockCreatorServiceMock.resolveCreator.mockResolvedValue(mockCreator);
       mockStorageService.getImageMetadata.mockResolvedValue(mockImageMetadata);
       mockStorageService.convertToWebP.mockResolvedValue(
         Buffer.from('webp-data'),
@@ -238,7 +238,7 @@ describe('ImageService', () => {
       mockPrismaService.image.create.mockResolvedValue(mockImage);
     });
 
-    it('should upload image successfully with user', async () => {
+    it('should upload image successfully with creator', async () => {
       const result = await service.uploadImage(
         mockClientId,
         mockExternalUserId,
@@ -261,8 +261,8 @@ describe('ImageService', () => {
       );
     });
 
-    it('should upload image without user (system)', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue(mockSystemUser);
+    it('should upload image without creator (system)', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockSystemCreator);
 
       const result = await service.uploadImage(
         mockClientId,
@@ -271,17 +271,17 @@ describe('ImageService', () => {
       );
 
       expect(result).toBeDefined();
-      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
         where: {
-          clientId_externalUserId: {
+          clientId_externalId: {
             clientId: mockClientId,
-            externalUserId: 'system',
+            externalId: 'system',
           },
         },
       });
     });
 
-    it('should upsert user with username when provided', async () => {
+    it('should upsert creator with username when provided', async () => {
       await service.uploadImage(
         mockClientId,
         mockExternalUserId,
@@ -293,7 +293,7 @@ describe('ImageService', () => {
         'Andrea',
       );
 
-      expect(mockUserServiceMock.resolveUser).toHaveBeenCalledWith(
+      expect(mockCreatorServiceMock.resolveCreator).toHaveBeenCalledWith(
         mockClientId,
         mockExternalUserId,
         'Andrea',
@@ -328,7 +328,7 @@ describe('ImageService', () => {
       const mockAlbum = {
         id: albumId,
         clientId: mockClientId,
-        userId: mockUserId,
+        creatorId: mockCreatorExternalId,
         name: 'Test Album',
         isPublic: false,
         createdAt: new Date(),
@@ -461,18 +461,21 @@ describe('ImageService', () => {
     });
   });
 
-  describe('getUserImages', () => {
-    it('should return user images', async () => {
+  describe('getCreatorImages', () => {
+    it('should return creator images', async () => {
       const images = [mockImage];
       mockPrismaService.image.findMany.mockResolvedValue(images);
 
-      const result = await service.getUserImages(mockClientId, mockUserId);
+      const result = await service.getCreatorImages(
+        mockClientId,
+        mockCreatorExternalId,
+      );
 
       expect(result).toHaveLength(1);
       expect(mockPrismaService.image.findMany).toHaveBeenCalledWith({
         where: {
           clientId: mockClientId,
-          userId: mockUserId,
+          creatorId: mockCreatorExternalId,
         },
         include: {
           imageTags: {
@@ -492,7 +495,10 @@ describe('ImageService', () => {
     it('should handle empty results', async () => {
       mockPrismaService.image.findMany.mockResolvedValue([]);
 
-      const result = await service.getUserImages(mockClientId, mockUserId);
+      const result = await service.getCreatorImages(
+        mockClientId,
+        mockCreatorExternalId,
+      );
 
       expect(result).toEqual([]);
     });
@@ -619,7 +625,7 @@ describe('ImageService', () => {
       const result = await service.createShareLink(
         mockImageId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         expiresAt,
       );
 
@@ -633,7 +639,11 @@ describe('ImageService', () => {
       mockPrismaService.image.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.createShareLink(mockImageId, mockClientId, mockUserId),
+        service.createShareLink(
+          mockImageId,
+          mockClientId,
+          mockCreatorExternalId,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -650,7 +660,7 @@ describe('ImageService', () => {
       const result = await service.createShareLink(
         mockImageId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
       );
 
       expect(result.expiresAt).toBeNull();
@@ -704,7 +714,7 @@ describe('ImageService', () => {
       const result = await service.updateImageMetadata(
         mockImageId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         ['nature', 'sunset'],
         'Updated description',
       );
