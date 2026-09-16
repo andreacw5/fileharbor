@@ -4,7 +4,9 @@
  * @param apiKey - The API key to mask
  * @returns Masked API key or null/undefined if input is null/undefined
  */
-export function maskApiKey(apiKey: string | null | undefined): string | null | undefined {
+export function maskApiKey(
+  apiKey: string | null | undefined,
+): string | null | undefined {
   if (!apiKey) return apiKey;
 
   const length = apiKey.length;
@@ -21,4 +23,3 @@ export function maskApiKey(apiKey: string | null | undefined): string | null | u
 
   return `${start}${'*'.repeat(maskedLength)}${end}`;
 }
-

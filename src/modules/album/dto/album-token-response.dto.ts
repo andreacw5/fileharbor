@@ -26,4 +26,3 @@ export class AlbumTokenResponseDto {
   })
   url: string;
 }
-

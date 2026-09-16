@@ -25,7 +25,6 @@ const SYSTEM_USER_ID = 'system';
 
 @Injectable()
 export class UserService {
-
   private readonly logger = new Logger(UserService.name);
 
   constructor(
@@ -102,7 +101,10 @@ export class UserService {
       `listUsersForClient clientId=${clientId} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
     );
 
-    const { page, take, skip } = this.buildPagination(filters.page, filters.perPage);
+    const { page, take, skip } = this.buildPagination(
+      filters.page,
+      filters.perPage,
+    );
 
     const where: any = { clientId, externalUserId: { not: SYSTEM_USER_ID } };
 
@@ -126,13 +128,20 @@ export class UserService {
       this.prisma.user.count({ where }),
     ]);
 
-    this.logger.debug(`listUsersForClient returned ${users.length}/${total} users`);
+    this.logger.debug(
+      `listUsersForClient returned ${users.length}/${total} users`,
+    );
 
     const data = users.map((u) => this.mapUser(UserListResponseDto, u));
 
     return {
       data,
-      pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
+      pagination: {
+        page,
+        perPage: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
     };
   }
 
@@ -150,7 +159,10 @@ export class UserService {
 
     const existing = await this.prisma.user.findUnique({
       where: {
-        clientId_externalUserId: { clientId, externalUserId: dto.externalUserId },
+        clientId_externalUserId: {
+          clientId,
+          externalUserId: dto.externalUserId,
+        },
       },
       select: { id: true },
     });
@@ -175,7 +187,9 @@ export class UserService {
       },
     });
 
-    this.logger.log(`createUserForClient created user=${user.id} clientId=${clientId}`);
+    this.logger.log(
+      `createUserForClient created user=${user.id} clientId=${clientId}`,
+    );
 
     return this.mapUser(UserResponseDto, user);
   }
@@ -196,7 +210,10 @@ export class UserService {
       `listUsers called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${filters.page ?? 1}`,
     );
 
-    const { page, take, skip } = this.buildPagination(filters.page, filters.perPage);
+    const { page, take, skip } = this.buildPagination(
+      filters.page,
+      filters.perPage,
+    );
     const where: any = buildClientWhere(admin, filters.clientId);
 
     if (filters.search) {
@@ -207,11 +224,14 @@ export class UserService {
     }
 
     // Exclude system user
-    where.externalUserId = { ...(where.externalUserId || {}), not: SYSTEM_USER_ID };
+    where.externalUserId = {
+      ...(where.externalUserId || {}),
+      not: SYSTEM_USER_ID,
+    };
 
     if (filters.isBookmarked === true) {
       where.adminBookmarks = {
-        some: { adminUserId: admin.adminUserId },
+        some: { actorId: admin.actorId },
       };
     }
 
@@ -240,7 +260,7 @@ export class UserService {
       } else {
         const bookmarks = await this.prisma.adminUserBookmark.findMany({
           where: {
-            adminUserId: admin.adminUserId,
+            actorId: admin.actorId,
             userId: { in: users.map((u) => u.id) },
           },
           select: { userId: true },
@@ -252,7 +272,10 @@ export class UserService {
     this.logger.debug(`listUsers returned ${users.length}/${total} users`);
 
     const data = users.map((u) => {
-      const avatarUrl = u.avatars.length > 0 ? this.route.fullUrl('avatars', u.externalUserId) : undefined;
+      const avatarUrl =
+        u.avatars.length > 0
+          ? this.route.fullUrl('avatars', u.externalUserId)
+          : undefined;
       return this.mapUser(UserListResponseDto, u, {
         isBookmarked: bookmarkedUserIds.has(u.id),
         avatarUrl,
@@ -261,17 +284,27 @@ export class UserService {
 
     return {
       data,
-      pagination: { page, perPage: take, total, totalPages: Math.ceil(total / take) },
+      pagination: {
+        page,
+        perPage: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
     };
   }
 
-  async getUser(userId: string, admin: AdminJwtPayload): Promise<UserResponseDto> {
+  async getUser(
+    userId: string,
+    admin: AdminJwtPayload,
+  ): Promise<UserResponseDto> {
     this.logger.log(`getUser called by admin=${admin.sub} userId=${userId}`);
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        _count: { select: { images: true, avatars: true, albums: true, videos: true } },
+        _count: {
+          select: { images: true, avatars: true, albums: true, videos: true },
+        },
         client: { select: { id: true, name: true, domain: true } },
         avatars: {
           select: { id: true, userId: true },
@@ -289,17 +322,22 @@ export class UserService {
 
     const bookmark = await this.prisma.adminUserBookmark.findUnique({
       where: {
-        adminUserId_userId: {
-          adminUserId: admin.adminUserId,
+        actorId_userId: {
+          actorId: admin.actorId,
           userId: user.id,
         },
       },
       select: { id: true },
     });
 
-    this.logger.debug(`getUser: found user=${userId} clientId=${user.clientId}`);
+    this.logger.debug(
+      `getUser: found user=${userId} clientId=${user.clientId}`,
+    );
 
-    const avatarUrl = user.avatars.length > 0 ? this.route.fullUrl('avatars', user.externalUserId) : undefined;
+    const avatarUrl =
+      user.avatars.length > 0
+        ? this.route.fullUrl('avatars', user.externalUserId)
+        : undefined;
 
     return this.mapUser(UserResponseDto, user, {
       isBookmarked: !!bookmark,
@@ -324,9 +362,17 @@ export class UserService {
     dto: UpdateUserAdminDto,
     admin: AdminJwtPayload,
   ): Promise<UserResponseDto> {
-    this.logger.log(`updateUserAdmin called by admin=${admin.sub} userId=${userId}`);
+    this.logger.log(
+      `updateUserAdmin called by admin=${admin.sub} userId=${userId}`,
+    );
 
-    if (!dto.externalUserId && !dto.username && !dto.email && !dto.website && !dto.bio) {
+    if (
+      !dto.externalUserId &&
+      !dto.username &&
+      !dto.email &&
+      !dto.website &&
+      !dto.bio
+    ) {
       throw new BadRequestException(
         'At least one field between externalUserId, username, email, website, and bio must be provided',
       );
@@ -370,14 +416,18 @@ export class UserService {
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
-        ...(dto.externalUserId !== undefined ? { externalUserId: dto.externalUserId } : {}),
+        ...(dto.externalUserId !== undefined
+          ? { externalUserId: dto.externalUserId }
+          : {}),
         ...(dto.username !== undefined ? { username: dto.username } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
         ...(dto.website !== undefined ? { website: dto.website } : {}),
         ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       },
       include: {
-        _count: { select: { images: true, avatars: true, albums: true, videos: true } },
+        _count: {
+          select: { images: true, avatars: true, albums: true, videos: true },
+        },
         client: { select: { id: true, name: true, domain: true } },
       },
     });
@@ -405,7 +455,9 @@ export class UserService {
     }
 
     if (externalUserId === SYSTEM_USER_ID) {
-      throw new BadRequestException('System user cannot be updated with this endpoint');
+      throw new BadRequestException(
+        'System user cannot be updated with this endpoint',
+      );
     }
 
     try {
@@ -423,11 +475,16 @@ export class UserService {
         },
       });
 
-      this.logger.log(`updateUserByExternalUserId updated user=${updated.id} clientId=${updated.clientId}`);
+      this.logger.log(
+        `updateUserByExternalUserId updated user=${updated.id} clientId=${updated.clientId}`,
+      );
 
       return this.mapUser(UserResponseDto, updated);
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      ) {
         throw new NotFoundException('User not found');
       }
       throw e;

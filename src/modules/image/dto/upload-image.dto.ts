@@ -2,7 +2,6 @@ import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UploadImageDto {
-
   @IsOptional()
   @IsString()
   userId?: string;
@@ -18,7 +17,7 @@ export class UploadImageDto {
   @IsOptional()
   @Transform(({ value }) => {
     if (typeof value === 'string') {
-      return value.split(',').map(tag => tag.trim());
+      return value.split(',').map((tag) => tag.trim());
     }
     return value;
   })
@@ -39,4 +38,3 @@ export class UploadImageDto {
   @IsBoolean()
   isPrivate?: boolean;
 }
-

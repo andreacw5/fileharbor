@@ -54,14 +54,24 @@ export class StatisticsService {
       this.prisma.album.count({ where: clientWhere7d }),
       this.prisma.video.count({ where: clientWhere7d }),
       this.prisma.user.count({ where: clientWhere7d }),
-      this.prisma.image.aggregate({ where: clientWhere7d, _sum: { size: true } }),
+      this.prisma.image.aggregate({
+        where: clientWhere7d,
+        _sum: { size: true },
+      }),
     ]);
 
     const dailyChart = await this.buildDailyChart(clientWhere, sevenDaysAgo);
 
     const last7Days = plainToInstance(
       StatsTrendDto,
-      { newImages, newAvatars, newAlbums, newVideos, newUsers, newStorage: newStorageAgg._sum.size || 0 },
+      {
+        newImages,
+        newAvatars,
+        newAlbums,
+        newVideos,
+        newUsers,
+        newStorage: newStorageAgg._sum.size || 0,
+      },
       { excludeExtraneousValues: true },
     );
 
@@ -104,14 +114,27 @@ export class StatisticsService {
     const timeWhere = { ...clientWhere, createdAt: { gte: from, lt: to } };
 
     const [images, avatars, albums, videos] = await Promise.all([
-      this.prisma.image.findMany({ where: timeWhere, select: { createdAt: true } }),
-      this.prisma.avatar.findMany({ where: timeWhere, select: { createdAt: true } }),
-      this.prisma.album.findMany({ where: timeWhere, select: { createdAt: true } }),
-      this.prisma.video.findMany({ where: timeWhere, select: { createdAt: true } }),
+      this.prisma.image.findMany({
+        where: timeWhere,
+        select: { createdAt: true },
+      }),
+      this.prisma.avatar.findMany({
+        where: timeWhere,
+        select: { createdAt: true },
+      }),
+      this.prisma.album.findMany({
+        where: timeWhere,
+        select: { createdAt: true },
+      }),
+      this.prisma.video.findMany({
+        where: timeWhere,
+        select: { createdAt: true },
+      }),
     ]);
 
     const countByDay = (records: { createdAt: Date }[], date: string) =>
-      records.filter((r) => r.createdAt.toISOString().slice(0, 10) === date).length;
+      records.filter((r) => r.createdAt.toISOString().slice(0, 10) === date)
+        .length;
 
     return days.map((date) =>
       plainToInstance(
@@ -128,4 +151,3 @@ export class StatisticsService {
     );
   }
 }
-

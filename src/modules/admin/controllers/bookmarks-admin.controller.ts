@@ -17,13 +17,16 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
-import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import {
+  AdminJwtGuard,
+  AdminJwtPayload,
+} from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import {
   AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
   AdminDeleteResponseDto,
-  AdminUserBookmarkListResponseDto,
   AdminUserBookmarkResponseDto,
   AdminVideoBookmarkListResponseDto,
   AdminVideoBookmarkResponseDto,
@@ -34,14 +37,28 @@ import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
 @Controller('admin/bookmarks')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class BookmarksAdminController {
   constructor(private readonly bookmarksService: BookmarksService) {}
 
   @Get()
   @ApiOperation({ summary: 'List bookmarked images for admin GUI' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Filter by client ID' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by original filename' })
-  @ApiQuery({ name: 'tags', required: false, isArray: true, description: 'Filter by tags' })
+  @ApiQuery({
+    name: 'clientId',
+    required: false,
+    description: 'Filter by client ID',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by original filename',
+  })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    isArray: true,
+    description: 'Filter by tags',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminBookmarkListResponseDto })
@@ -54,7 +71,12 @@ export class BookmarksAdminController {
     @Query('perPage') perPage?: string,
   ): Promise<AdminBookmarkListResponseDto> {
     const tagsArray = tags
-      ? Array.isArray(tags) ? tags : tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+      ? Array.isArray(tags)
+        ? tags
+        : tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean)
       : undefined;
 
     const result = await this.bookmarksService.listBookmarks(adminUser, {
@@ -65,7 +87,9 @@ export class BookmarksAdminController {
       perPage: Number(perPage) || 20,
     });
 
-    return plainToInstance(AdminBookmarkListResponseDto, result, { excludeExtraneousValues: true });
+    return plainToInstance(AdminBookmarkListResponseDto, result, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Post(':imageId')
@@ -78,9 +102,14 @@ export class BookmarksAdminController {
     @Param('imageId') imageId: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminBookmarkResponseDto> {
-    const bookmark = await this.bookmarksService.bookmarkImage(adminUser, imageId);
+    const bookmark = await this.bookmarksService.bookmarkImage(
+      adminUser,
+      imageId,
+    );
 
-    return plainToInstance(AdminBookmarkResponseDto, bookmark, { excludeExtraneousValues: true });
+    return plainToInstance(AdminBookmarkResponseDto, bookmark, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Delete(':imageId')
@@ -93,19 +122,26 @@ export class BookmarksAdminController {
     @Param('imageId') imageId: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
-    const result = await this.bookmarksService.removeBookmark(adminUser, imageId);
+    const result = await this.bookmarksService.removeBookmark(
+      adminUser,
+      imageId,
+    );
 
     return plainToInstance(
       AdminDeleteResponseDto,
       {
         success: true,
-        message: result.removed > 0 ? 'Bookmark removed successfully' : 'Bookmark not found',
+        message:
+          result.removed > 0
+            ? 'Bookmark removed successfully'
+            : 'Bookmark not found',
       },
       { excludeExtraneousValues: true },
     );
   }
 
   @Post('users/:userId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark a user for the current admin' })
   @ApiResponse({ status: 201, type: AdminUserBookmarkResponseDto })
@@ -115,12 +151,18 @@ export class BookmarksAdminController {
     @Param('userId') userId: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminUserBookmarkResponseDto> {
-    const bookmark = await this.bookmarksService.bookmarkUser(adminUser, userId);
+    const bookmark = await this.bookmarksService.bookmarkUser(
+      adminUser,
+      userId,
+    );
 
-    return plainToInstance(AdminUserBookmarkResponseDto, bookmark, { excludeExtraneousValues: true });
+    return plainToInstance(AdminUserBookmarkResponseDto, bookmark, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Delete('users/:userId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a user from admin bookmarks' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
@@ -130,19 +172,26 @@ export class BookmarksAdminController {
     @Param('userId') userId: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
-    const result = await this.bookmarksService.removeUserBookmark(adminUser, userId);
+    const result = await this.bookmarksService.removeUserBookmark(
+      adminUser,
+      userId,
+    );
 
     return plainToInstance(
       AdminDeleteResponseDto,
       {
         success: true,
-        message: result.removed > 0 ? 'Bookmark removed successfully' : 'Bookmark not found',
+        message:
+          result.removed > 0
+            ? 'Bookmark removed successfully'
+            : 'Bookmark not found',
       },
       { excludeExtraneousValues: true },
     );
   }
 
   @Get('videos')
+  @RequirePermission('fileharbor-library.manage')
   @ApiOperation({ summary: 'List bookmarked videos for admin GUI' })
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'search', required: false })
@@ -163,10 +212,13 @@ export class BookmarksAdminController {
       perPage: Number(perPage) || 20,
     });
 
-    return plainToInstance(AdminVideoBookmarkListResponseDto, result, { excludeExtraneousValues: true });
+    return plainToInstance(AdminVideoBookmarkListResponseDto, result, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Post('videos/:videoId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark a video for the current admin' })
   @ApiResponse({ status: 201, type: AdminVideoBookmarkResponseDto })
@@ -174,11 +226,17 @@ export class BookmarksAdminController {
     @Param('videoId') videoId: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoBookmarkResponseDto> {
-    const bookmark = await this.bookmarksService.bookmarkVideo(adminUser, videoId);
-    return plainToInstance(AdminVideoBookmarkResponseDto, bookmark, { excludeExtraneousValues: true });
+    const bookmark = await this.bookmarksService.bookmarkVideo(
+      adminUser,
+      videoId,
+    );
+    return plainToInstance(AdminVideoBookmarkResponseDto, bookmark, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Delete('videos/:videoId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a video from admin bookmarks' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
@@ -186,16 +244,21 @@ export class BookmarksAdminController {
     @Param('videoId') videoId: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
-    const result = await this.bookmarksService.removeVideoBookmark(adminUser, videoId);
+    const result = await this.bookmarksService.removeVideoBookmark(
+      adminUser,
+      videoId,
+    );
 
     return plainToInstance(
       AdminDeleteResponseDto,
       {
         success: true,
-        message: result.removed > 0 ? 'Bookmark removed successfully' : 'Bookmark not found',
+        message:
+          result.removed > 0
+            ? 'Bookmark removed successfully'
+            : 'Bookmark not found',
       },
       { excludeExtraneousValues: true },
     );
   }
 }
-

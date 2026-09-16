@@ -14,7 +14,9 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   AdminDeleteResponseDto,
@@ -22,13 +24,17 @@ import {
 } from '../dto/admin-response.dto';
 import { AvatarService } from '@/modules/avatar/avatar.service';
 import { plainToInstance } from 'class-transformer';
-import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
+import {
+  assertClientAccess,
+  buildClientWhere,
+} from '../helpers/admin-access.helper';
 import { RouteHelperService } from '@/utils/route.utils';
 
 @ApiTags('Admin - Avatars')
 @Controller('admin/avatars')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class AvatarsAdminController {
   constructor(
     private readonly avatarService: AvatarService,
@@ -55,17 +61,27 @@ export class AvatarsAdminController {
     const where: any = buildClientWhere(adminUser, clientId);
     if (userId) where.user = { externalUserId: userId };
 
-    const { avatars, total } = await this.avatarService.findAdminAvatars(where, { skip, take });
+    const { avatars, total } = await this.avatarService.findAdminAvatars(
+      where,
+      { skip, take },
+    );
 
     const data = avatars.map((avatar) => {
       const externalUserId = avatar.user?.externalUserId;
-      const fullPath = externalUserId ? this.route.fullUrl('avatars', externalUserId) : null;
+      const fullPath = externalUserId
+        ? this.route.fullUrl('avatars', externalUserId)
+        : null;
       return { ...avatar, fullPath };
     });
 
     return {
       data,
-      pagination: { page: pageNum, perPage: take, total, totalPages: Math.ceil(total / take) },
+      pagination: {
+        page: pageNum,
+        perPage: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
     };
   }
 
@@ -81,12 +97,19 @@ export class AvatarsAdminController {
     assertClientAccess(adminUser, avatar.clientId);
 
     const externalUserId = avatar.user?.externalUserId;
-    const fullPath = externalUserId ? this.route.fullUrl('avatars', externalUserId) : null;
+    const fullPath = externalUserId
+      ? this.route.fullUrl('avatars', externalUserId)
+      : null;
 
-    return plainToInstance(AdminAvatarResponseDto, { ...avatar, fullPath }, { excludeExtraneousValues: true });
+    return plainToInstance(
+      AdminAvatarResponseDto,
+      { ...avatar, fullPath },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Delete(':id')
+  @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an avatar (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
   async deleteAvatar(
@@ -106,4 +129,3 @@ export class AvatarsAdminController {
     );
   }
 }
-

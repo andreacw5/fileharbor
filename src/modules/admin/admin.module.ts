@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AdminInitService } from './admin-init.service';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { StorageModule } from '@/modules/storage/storage.module';
 import { ImageModule } from '@/modules/image/image.module';
@@ -46,7 +45,7 @@ import { VideosAdminController } from './controllers/videos-admin.controller';
     BookmarksAdminController,
     VideosAdminController,
   ],
-  providers: [AdminInitService],
+  providers: [],
   exports: [],
 })
 export class AdminModule {}

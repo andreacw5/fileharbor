@@ -75,9 +75,13 @@ export class BastionTokenVerifier {
    * and checks the decoded `appSlug` against the accepted list.
    * Throws `UnauthorizedException` on any failure.
    */
-  async verifyAuthHeader(authHeader: string | undefined): Promise<BastionJwtPayload> {
+  async verifyAuthHeader(
+    authHeader: string | undefined,
+  ): Promise<BastionJwtPayload> {
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid Authorization header');
+      throw new UnauthorizedException(
+        'Missing or invalid Authorization header',
+      );
     }
 
     const token = authHeader.substring(7);
@@ -120,20 +124,31 @@ export class BastionTokenVerifier {
     try {
       response = await fetch(`${bastionUrl}/.well-known/jwks.json`);
     } catch {
-      throw new ServiceUnavailableException('Authentication service unreachable');
+      throw new ServiceUnavailableException(
+        'Authentication service unreachable',
+      );
     }
 
     if (!response.ok) {
-      throw new ServiceUnavailableException('Authentication service unavailable');
+      throw new ServiceUnavailableException(
+        'Authentication service unavailable',
+      );
     }
 
     const { keys: rawKeys } = (await response.json()) as { keys: JsonWebKey[] };
     const keys = rawKeys
       .filter((k) => k.use === 'sig' && k.kty === 'RSA')
-      .map((k) => crypto.createPublicKey({ key: k as crypto.JsonWebKeyInput['key'], format: 'jwk' }));
+      .map((k) =>
+        crypto.createPublicKey({
+          key: k as crypto.JsonWebKeyInput['key'],
+          format: 'jwk',
+        }),
+      );
 
     if (keys.length === 0) {
-      throw new ServiceUnavailableException('No valid signing keys found in JWKS');
+      throw new ServiceUnavailableException(
+        'No valid signing keys found in JWKS',
+      );
     }
 
     this.jwksCache = { keys, expiresAt: now + JWKS_TTL_MS };

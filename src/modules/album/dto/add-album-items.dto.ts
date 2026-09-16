@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsInt, IsOptional, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { AlbumResourceType } from '@prisma/client';
 
@@ -30,5 +38,9 @@ export class AddAlbumItemsDto {
 export class AddAlbumItemsResponseDto {
   @ApiProperty() albumId: string;
   @ApiProperty() count: number;
-  @ApiProperty({ type: [Object] }) items: { id: string; resourceType: string; order: number }[];
+  @ApiProperty({ type: [Object] }) items: {
+    id: string;
+    resourceType: string;
+    order: number;
+  }[];
 }

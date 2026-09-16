@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({ description: 'External user ID from the client system' })
@@ -14,7 +20,9 @@ export class CreateUserDto {
   @MaxLength(255)
   username?: string;
 
-  @ApiPropertyOptional({ description: 'Email address (stored but never returned in list responses)' })
+  @ApiPropertyOptional({
+    description: 'Email address (stored but never returned in list responses)',
+  })
   @IsOptional()
   @IsEmail()
   @MaxLength(255)
@@ -32,4 +40,3 @@ export class CreateUserDto {
   @MaxLength(1000)
   bio?: string;
 }
-

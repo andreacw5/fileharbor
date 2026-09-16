@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type, Transform } from 'class-transformer';
 import { maskApiKey } from '../helpers/mask-api-key.helper';
 
-
 export class AdminClientResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() name: string;
@@ -10,21 +9,35 @@ export class AdminClientResponseDto {
   @ApiProperty() @Expose() active: boolean;
   @ApiProperty() @Expose() webhookEnabled: boolean;
   @ApiPropertyOptional() @Expose() webhookUrl?: string;
-  @ApiProperty({ description: 'Whether Tinify compression is enabled for this client' })
-  @Expose() tinifyActive: boolean;
-  @ApiPropertyOptional({ description: 'Tinify API key for this client (masked for security)', example: 'sk_1234****abcd' })
+  @ApiProperty({
+    description: 'Whether Tinify compression is enabled for this client',
+  })
+  @Expose()
+  tinifyActive: boolean;
+  @ApiPropertyOptional({
+    description: 'Tinify API key for this client (masked for security)',
+    example: 'sk_1234****abcd',
+  })
   @Expose()
   @Transform(({ value }) => maskApiKey(value))
   tinifyApiKey?: string;
   @ApiProperty({ description: 'Current monthly Tinify compression usage' })
-  @Expose() currentTinifyUsage: number;
-  @ApiProperty({ description: 'Monthly Tinify compression limit (default: 500 for free tier)', default: 500 })
-  @Expose() currentTinifyLimit: number;
+  @Expose()
+  currentTinifyUsage: number;
+  @ApiProperty({
+    description:
+      'Monthly Tinify compression limit (default: 500 for free tier)',
+    default: 500,
+  })
+  @Expose()
+  currentTinifyLimit: number;
   @ApiPropertyOptional({
-    description: 'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar',
+    description:
+      'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar',
     nullable: true,
   })
-  @Expose() bastionTenantSlug?: string | null;
+  @Expose()
+  bastionTenantSlug?: string | null;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() totalImages?: number;
@@ -35,8 +48,16 @@ export class AdminClientResponseDto {
   @ApiPropertyOptional() @Expose() totalStorage?: number;
 }
 
+export class AdminClientCreatedResponseDto extends AdminClientResponseDto {
+  @ApiProperty({ description: 'Client API key — returned only on creation' })
+  @Expose()
+  apiKey: string;
+}
+
 export class DailyDataPointDto {
-  @ApiProperty({ description: 'Date in YYYY-MM-DD format' }) @Expose() date: string;
+  @ApiProperty({ description: 'Date in YYYY-MM-DD format' })
+  @Expose()
+  date: string;
   @ApiProperty() @Expose() images: number;
   @ApiProperty() @Expose() avatars: number;
   @ApiProperty() @Expose() albums: number;
@@ -44,12 +65,24 @@ export class DailyDataPointDto {
 }
 
 export class StatsTrendDto {
-  @ApiProperty({ description: 'New items in the last 7 days' }) @Expose() newImages: number;
-  @ApiProperty({ description: 'New items in the last 7 days' }) @Expose() newAvatars: number;
-  @ApiProperty({ description: 'New items in the last 7 days' }) @Expose() newAlbums: number;
-  @ApiProperty({ description: 'New items in the last 7 days' }) @Expose() newVideos: number;
-  @ApiProperty({ description: 'New items in the last 7 days' }) @Expose() newUsers: number;
-  @ApiProperty({ description: 'Storage added in the last 7 days (bytes)' }) @Expose() newStorage: number;
+  @ApiProperty({ description: 'New items in the last 7 days' })
+  @Expose()
+  newImages: number;
+  @ApiProperty({ description: 'New items in the last 7 days' })
+  @Expose()
+  newAvatars: number;
+  @ApiProperty({ description: 'New items in the last 7 days' })
+  @Expose()
+  newAlbums: number;
+  @ApiProperty({ description: 'New items in the last 7 days' })
+  @Expose()
+  newVideos: number;
+  @ApiProperty({ description: 'New items in the last 7 days' })
+  @Expose()
+  newUsers: number;
+  @ApiProperty({ description: 'Storage added in the last 7 days (bytes)' })
+  @Expose()
+  newStorage: number;
 }
 
 export class AdminStatsResponseDto {
@@ -64,12 +97,18 @@ export class AdminStatsResponseDto {
   @ApiProperty() @Expose() totalStorage: number;
   @ApiProperty() @Expose() totalUsers: number;
 
-  @ApiProperty({ description: 'New counts in the last 7 days', type: StatsTrendDto })
+  @ApiProperty({
+    description: 'New counts in the last 7 days',
+    type: StatsTrendDto,
+  })
   @Expose()
   @Type(() => StatsTrendDto)
   last7Days: StatsTrendDto;
 
-  @ApiProperty({ description: 'Daily breakdown for the last 7 days (for charts)', type: [DailyDataPointDto] })
+  @ApiProperty({
+    description: 'Daily breakdown for the last 7 days (for charts)',
+    type: [DailyDataPointDto],
+  })
   @Expose()
   @Type(() => DailyDataPointDto)
   dailyChart: DailyDataPointDto[];
@@ -94,7 +133,9 @@ export class AdminAlbumResponseDto {
   @ApiPropertyOptional() @Expose() externalAlbumId?: string;
   @ApiProperty() @Expose() isPublic: boolean;
   @ApiPropertyOptional() @Expose() coverImageId?: string;
-  @ApiPropertyOptional({ description: 'Full URL to the cover image' }) @Expose() coverImageUrl?: string;
+  @ApiPropertyOptional({ description: 'Full URL to the cover image' })
+  @Expose()
+  coverImageUrl?: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
 
@@ -108,14 +149,22 @@ export class AdminAlbumResponseDto {
   @Type(() => AdminAlbumUserDto)
   user?: AdminAlbumUserDto;
 
-  @ApiPropertyOptional({ description: 'Total items (images + videos) in the album' })
-  @Expose() totalItems?: number;
+  @ApiPropertyOptional({
+    description: 'Total items (images + videos) in the album',
+  })
+  @Expose()
+  totalItems?: number;
   @ApiPropertyOptional({ description: 'Number of images in the album' })
-  @Expose() imageCount?: number;
+  @Expose()
+  imageCount?: number;
   @ApiPropertyOptional({ description: 'Number of videos in the album' })
-  @Expose() videoCount?: number;
-  @ApiPropertyOptional({ description: 'Number of active (non-expired) access tokens' })
-  @Expose() activeTokens?: number;
+  @Expose()
+  videoCount?: number;
+  @ApiPropertyOptional({
+    description: 'Number of active (non-expired) access tokens',
+  })
+  @Expose()
+  activeTokens?: number;
 }
 
 export class AdminDeleteResponseDto {
@@ -148,7 +197,8 @@ export class AdminImageResponseDto {
   @ApiProperty() @Expose() isPrivate: boolean;
   @ApiProperty() @Expose() isOptimized: boolean;
   @ApiProperty({ description: 'Whether image was compressed with Tinify API' })
-  @Expose() tinifyOptimized: boolean;
+  @Expose()
+  tinifyOptimized: boolean;
   @ApiProperty({ type: [String] }) @Expose() tags: string[];
   @ApiPropertyOptional() @Expose() description?: string;
   @ApiProperty() @Expose() views: number;
@@ -170,16 +220,23 @@ export class AdminImageResponseDto {
   @Type(() => AdminImageUserDto)
   user?: AdminImageUserDto;
 
-  @ApiPropertyOptional({ description: 'Albums this image belongs to', type: [AdminImageAlbumDto] })
+  @ApiPropertyOptional({
+    description: 'Albums this image belongs to',
+    type: [AdminImageAlbumDto],
+  })
   @Expose()
   @Type(() => AdminImageAlbumDto)
   albums?: AdminImageAlbumDto[];
 
-  @ApiPropertyOptional({ description: 'Number of active (non-expired) share links for this image' })
+  @ApiPropertyOptional({
+    description: 'Number of active (non-expired) share links for this image',
+  })
   @Expose()
   activeShareLinks?: number;
 
-  @ApiProperty({ description: 'Whether the requesting admin has bookmarked this image' })
+  @ApiProperty({
+    description: 'Whether the requesting admin has bookmarked this image',
+  })
   @Expose()
   isBookmarked: boolean;
 }
@@ -212,7 +269,6 @@ export class AdminAvatarResponseDto {
   user?: AdminImageUserDto;
 }
 
-
 export class AdminAlbumImageEntryDto {
   @ApiProperty() @Expose() imageId: string;
   @ApiProperty() @Expose() order: number;
@@ -220,16 +276,23 @@ export class AdminAlbumImageEntryDto {
 
 export class AdminAddImagesToAlbumResponseDto {
   @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
-  @ApiProperty({ description: 'Images added with their order', type: [AdminAlbumImageEntryDto] })
+  @ApiProperty({
+    description: 'Images added with their order',
+    type: [AdminAlbumImageEntryDto],
+  })
   @Expose()
   @Type(() => AdminAlbumImageEntryDto)
   images: AdminAlbumImageEntryDto[];
-  @ApiProperty({ description: 'Number of images processed' }) @Expose() count: number;
+  @ApiProperty({ description: 'Number of images processed' })
+  @Expose()
+  count: number;
 }
 
 export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
-  @ApiProperty({ description: 'Number of images removed' }) @Expose() removed: number;
+  @ApiProperty({ description: 'Number of images removed' })
+  @Expose()
+  removed: number;
   @ApiProperty() @Expose() success: boolean;
   @ApiProperty() @Expose() message: string;
 }
@@ -267,7 +330,7 @@ export class AdminImageShareLinksListResponseDto {
 
 export class AdminBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() actorId: string;
   @ApiProperty() @Expose() imageId: string;
   @ApiProperty({ description: 'When the admin bookmarked the image' })
   @Expose()
@@ -313,7 +376,7 @@ export class AdminBookmarkedUserDto {
 
 export class AdminUserBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() actorId: string;
   @ApiProperty() @Expose() userId: string;
   @ApiProperty({ description: 'When the admin bookmarked the user' })
   @Expose()
@@ -365,17 +428,23 @@ export class AdminVideoResponseDto {
   @Type(() => AdminImageUserDto)
   user?: AdminImageUserDto;
 
-  @ApiProperty({ description: 'Full absolute stream URL' }) @Expose() fullPath: string;
-  @ApiProperty({ description: 'Full absolute thumbnail URL' }) @Expose() fullThumbnailUrl: string;
+  @ApiProperty({ description: 'Full absolute stream URL' })
+  @Expose()
+  fullPath: string;
+  @ApiProperty({ description: 'Full absolute thumbnail URL' })
+  @Expose()
+  fullThumbnailUrl: string;
 
-  @ApiProperty({ description: 'Whether the requesting admin has bookmarked this video' })
+  @ApiProperty({
+    description: 'Whether the requesting admin has bookmarked this video',
+  })
   @Expose()
   isBookmarked: boolean;
 }
 
 export class AdminVideoBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() actorId: string;
   @ApiProperty() @Expose() videoId: string;
   @ApiProperty() @Expose() @Type(() => Date) bookmarkedAt: Date;
 
@@ -396,5 +465,3 @@ export class AdminVideoBookmarkListResponseDto {
   @Type(() => AdminPaginationResponseDto)
   pagination: AdminPaginationResponseDto;
 }
-
-

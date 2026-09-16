@@ -34,7 +34,8 @@ export class GetAvatarDto {
   download?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Timestamp for cache busting (ignored by server, used by browser to force reload)',
+    description:
+      'Timestamp for cache busting (ignored by server, used by browser to force reload)',
     example: '1768848792396',
     type: String,
   })
@@ -42,4 +43,3 @@ export class GetAvatarDto {
   @IsString()
   t?: string;
 }
-

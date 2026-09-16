@@ -9,7 +9,10 @@ const trimOrUndefined = ({ value }: { value: unknown }): unknown => {
 };
 
 export class UpdateUserByExternalIdDto {
-  @ApiPropertyOptional({ description: 'Updated username from external system', maxLength: 100 })
+  @ApiPropertyOptional({
+    description: 'Updated username from external system',
+    maxLength: 100,
+  })
   @IsOptional()
   @Transform(trimOrUndefined)
   @IsString()
@@ -22,18 +25,23 @@ export class UpdateUserByExternalIdDto {
   @IsEmail()
   email?: string;
 
-  @ApiPropertyOptional({ description: 'Updated website URL or label from external system', maxLength: 255 })
+  @ApiPropertyOptional({
+    description: 'Updated website URL or label from external system',
+    maxLength: 255,
+  })
   @IsOptional()
   @Transform(trimOrUndefined)
   @IsString()
   @MaxLength(255)
   website?: string;
 
-  @ApiPropertyOptional({ description: 'Updated biography from external system', maxLength: 1000 })
+  @ApiPropertyOptional({
+    description: 'Updated biography from external system',
+    maxLength: 1000,
+  })
   @IsOptional()
   @Transform(trimOrUndefined)
   @IsString()
   @MaxLength(1000)
   bio?: string;
 }
-

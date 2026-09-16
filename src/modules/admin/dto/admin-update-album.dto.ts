@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength, ValidateIf } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 
 export class AdminUpdateAlbumDto {
   @ApiPropertyOptional({ description: 'Album name' })
@@ -19,16 +26,21 @@ export class AdminUpdateAlbumDto {
   @IsBoolean()
   isPublic?: boolean;
 
-  @ApiPropertyOptional({ description: 'External album ID from the client\'s system (set to null to remove)' })
+  @ApiPropertyOptional({
+    description:
+      "External album ID from the client's system (set to null to remove)",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   externalAlbumId?: string | null;
 
-  @ApiPropertyOptional({ description: 'Cover image ID (set to null to remove)', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Cover image ID (set to null to remove)',
+    nullable: true,
+  })
   @IsOptional()
   @ValidateIf((o) => o.coverImageId !== null)
   @IsUUID()
   coverImageId?: string | null;
 }
-

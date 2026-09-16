@@ -36,18 +36,30 @@ import { plainToInstance } from 'class-transformer';
 import type { Request, Response } from 'express';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
-import { buildVideoTagCreateInput, extractVideoTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
+import {
+  assertClientAccess,
+  buildClientWhere,
+} from '../helpers/admin-access.helper';
+import {
+  buildVideoTagCreateInput,
+  extractVideoTagNames,
+  normalizeTagNames,
+} from '@/modules/tag/tag.utils';
 import { VideoService } from '@/modules/video/video.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { RouteHelperService } from '@/utils/route.utils';
-import { AdminDeleteResponseDto, AdminVideoResponseDto } from '../dto/admin-response.dto';
+import {
+  AdminDeleteResponseDto,
+  AdminVideoResponseDto,
+} from '../dto/admin-response.dto';
 
 const videoMulterOptions = {
   storage: diskStorage({
     destination: os.tmpdir(),
-    filename: (_req: any, _file: any, cb: any) => cb(null, `${uuidv4()}.mp4.tmp`),
+    filename: (_req: any, _file: any, cb: any) =>
+      cb(null, `${uuidv4()}.mp4.tmp`),
   }),
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
     if (file.mimetype !== 'video/mp4') {
@@ -62,6 +74,7 @@ const videoMulterOptions = {
 @Controller('admin/videos')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-library.manage')
 export class VideosAdminController {
   constructor(
     private readonly videoService: VideoService,
@@ -102,14 +115,26 @@ export class VideosAdminController {
     assertClientAccess(adminUser, clientId);
 
     const isPrivate = isPrivateRaw === 'true' || isPrivateRaw === '1';
-    const result = await this.videoService.uploadVideo(clientId, externalUserId, file, [], description, isPrivate);
+    const result = await this.videoService.uploadVideo(
+      clientId,
+      externalUserId,
+      file,
+      [],
+      description,
+      isPrivate,
+    );
 
     return plainToInstance(
       AdminVideoResponseDto,
       {
         ...result,
         fullPath: this.route.fullUrl('admin', 'videos', result.id, 'stream'),
-        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', result.id, 'thumb'),
+        fullThumbnailUrl: this.route.fullUrl(
+          'admin',
+          'videos',
+          result.id,
+          'thumb',
+        ),
       },
       { excludeExtraneousValues: true },
     );
@@ -122,7 +147,11 @@ export class VideosAdminController {
   @ApiQuery({ name: 'albumId', required: false })
   @ApiQuery({ name: 'name', required: false })
   @ApiQuery({ name: 'tags', required: false, isArray: true })
-  @ApiQuery({ name: 'sortBy', required: false, enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'] })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
+  })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
@@ -139,20 +168,34 @@ export class VideosAdminController {
     @Query('perPage') perPage?: string,
   ) {
     const tagsArray = tags
-      ? Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim()).filter(Boolean)
+      ? Array.isArray(tags)
+        ? tags
+        : tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
       : undefined;
 
     const pageNum = Number(page) || 1;
     const take = Math.min(Number(perPage) || 20, 100);
     const skip = (pageNum - 1) * take;
 
-    const allowedSortFields = ['createdAt', 'size', 'originalName', 'views', 'downloads'];
-    const validSortBy = sortBy && allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    const validSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
+    const allowedSortFields = [
+      'createdAt',
+      'size',
+      'originalName',
+      'views',
+      'downloads',
+    ];
+    const validSortBy =
+      sortBy && allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const validSortOrder =
+      sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
     const where: any = buildClientWhere(adminUser, clientId);
     if (userId) where.user = { id: userId };
-    if (albumId) where.albumItems = { some: { albumId, resourceType: 'VIDEO' } };
+    if (albumId)
+      where.albumItems = { some: { albumId, resourceType: 'VIDEO' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
     if (tagsArray && tagsArray.length > 0) {
       where.videoTags = {
@@ -164,7 +207,7 @@ export class VideosAdminController {
       where,
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
-      adminUser.adminUserId,
+      adminUser.actorId,
     );
 
     return {
@@ -175,7 +218,12 @@ export class VideosAdminController {
           {
             ...v,
             fullPath: this.route.fullUrl('admin', 'videos', v.id, 'stream'),
-            fullThumbnailUrl: this.route.fullUrl('admin', 'videos', v.id, 'thumb'),
+            fullThumbnailUrl: this.route.fullUrl(
+              'admin',
+              'videos',
+              v.id,
+              'thumb',
+            ),
           },
           { excludeExtraneousValues: true },
         ),
@@ -190,7 +238,10 @@ export class VideosAdminController {
     @Param('id') id: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoResponseDto> {
-    const video = await this.videoService.findAdminVideoById(id, adminUser.adminUserId);
+    const video = await this.videoService.findAdminVideoById(
+      id,
+      adminUser.actorId,
+    );
     if (!video) throw new BadRequestException('Video not found');
     assertClientAccess(adminUser, video.clientId);
 
@@ -200,7 +251,12 @@ export class VideosAdminController {
         ...video,
         tags: extractVideoTagNames(video),
         fullPath: this.route.fullUrl('admin', 'videos', video.id, 'stream'),
-        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', video.id, 'thumb'),
+        fullThumbnailUrl: this.route.fullUrl(
+          'admin',
+          'videos',
+          video.id,
+          'thumb',
+        ),
       },
       { excludeExtraneousValues: true },
     );
@@ -211,7 +267,13 @@ export class VideosAdminController {
   @ApiResponse({ status: 200, type: AdminVideoResponseDto })
   async updateVideo(
     @Param('id') id: string,
-    @Body() dto: { originalName?: string; isPrivate?: boolean; description?: string; tags?: string[] },
+    @Body()
+    dto: {
+      originalName?: string;
+      isPrivate?: boolean;
+      description?: string;
+      tags?: string[];
+    },
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoResponseDto> {
     const existing = await this.videoService.getVideoById(id);
@@ -222,7 +284,10 @@ export class VideosAdminController {
     if (dto.isPrivate !== undefined) data.isPrivate = dto.isPrivate;
     if ('description' in dto) data.description = dto.description ?? null;
     if (dto.tags !== undefined) {
-      const videoTagsInput = buildVideoTagCreateInput(existing.clientId, dto.tags);
+      const videoTagsInput = buildVideoTagCreateInput(
+        existing.clientId,
+        dto.tags,
+      );
       data.videoTags = {
         deleteMany: {},
         ...(videoTagsInput.length > 0 && { create: videoTagsInput }),
@@ -236,7 +301,12 @@ export class VideosAdminController {
         ...updated,
         tags: extractVideoTagNames(updated),
         fullPath: this.route.fullUrl('admin', 'videos', updated.id, 'stream'),
-        fullThumbnailUrl: this.route.fullUrl('admin', 'videos', updated.id, 'thumb'),
+        fullThumbnailUrl: this.route.fullUrl(
+          'admin',
+          'videos',
+          updated.id,
+          'thumb',
+        ),
       },
       { excludeExtraneousValues: true },
     );
@@ -263,7 +333,10 @@ export class VideosAdminController {
       throw new NotFoundException('Thumbnail not found');
     }
 
-    res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'private, max-age=3600' });
+    res.set({
+      'Content-Type': 'image/webp',
+      'Cache-Control': 'private, max-age=3600',
+    });
     res.end(buffer);
   }
 
@@ -283,16 +356,20 @@ export class VideosAdminController {
 
     const domain = (video as any).client?.domain || video.clientId;
     const safeName = video.originalName.replace(/["\n\r]/g, '_');
-    const disposition = download === 'true'
-      ? `attachment; filename="${safeName}"`
-      : `inline; filename="${safeName}"`;
+    const disposition =
+      download === 'true'
+        ? `attachment; filename="${safeName}"`
+        : `inline; filename="${safeName}"`;
 
     // Opt-in, not NODE_ENV: X-Accel-Redirect delegates delivery to nginx and
     // sends an empty body, which only works behind an nginx that declares the
     // `/internal-videos/` internal location. Everywhere else the caller gets
     // `video/mp4` with zero bytes and the player reports an unsupported format.
     if (this.config.get<boolean>('video.xAccelRedirect')) {
-      if ((video as any).storagePath.includes('..') || (video as any).storagePath.startsWith('/')) {
+      if (
+        (video as any).storagePath.includes('..') ||
+        (video as any).storagePath.startsWith('/')
+      ) {
         throw new ForbiddenException('Invalid storage path');
       }
       res.set({
@@ -309,9 +386,17 @@ export class VideosAdminController {
       if (range) {
         const [startStr, endStr] = range.replace(/^bytes=/, '').split('-');
         const start = parseInt(startStr, 10);
-        const end = endStr ? parseInt(endStr, 10) : Math.min(start + 1_048_576, stat.size - 1);
+        const end = endStr
+          ? parseInt(endStr, 10)
+          : Math.min(start + 1_048_576, stat.size - 1);
 
-        if (isNaN(start) || isNaN(end) || start < 0 || end >= stat.size || start > end) {
+        if (
+          isNaN(start) ||
+          isNaN(end) ||
+          start < 0 ||
+          end >= stat.size ||
+          start > end
+        ) {
           res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
           return;
         }

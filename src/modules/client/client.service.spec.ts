@@ -6,7 +6,6 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 
 describe('ClientService', () => {
   let service: ClientService;
-  let prismaService: PrismaService;
 
   // Mock data
   const mockClient = {
@@ -65,7 +64,6 @@ describe('ClientService', () => {
     }).compile();
 
     service = module.get<ClientService>(ClientService);
-    prismaService = module.get<PrismaService>(PrismaService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();
@@ -101,12 +99,12 @@ describe('ClientService', () => {
     it('should throw UnauthorizedException when client is inactive', async () => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockInactiveClient);
 
-      await expect(service.validateClient('fh_test_api_key_123')).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.validateClient('fh_test_api_key_123')).rejects.toThrow(
-        'Invalid or inactive client',
-      );
+      await expect(
+        service.validateClient('fh_test_api_key_123'),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.validateClient('fh_test_api_key_123'),
+      ).rejects.toThrow('Invalid or inactive client');
     });
   });
 
@@ -352,13 +350,15 @@ describe('ClientService', () => {
       mockPrismaService.user.count.mockResolvedValue(1);
 
       await service.createClient({ name: 'Client 1' });
-      const apiKey1 = mockPrismaService.client.create.mock.calls[0][0].data.apiKey;
+      const apiKey1 =
+        mockPrismaService.client.create.mock.calls[0][0].data.apiKey;
 
       jest.clearAllMocks();
       mockPrismaService.client.create.mockResolvedValue(mockClient);
 
       await service.createClient({ name: 'Client 2' });
-      const apiKey2 = mockPrismaService.client.create.mock.calls[0][0].data.apiKey;
+      const apiKey2 =
+        mockPrismaService.client.create.mock.calls[0][0].data.apiKey;
 
       // API keys should be different (with very high probability)
       expect(apiKey1).not.toBe(apiKey2);
@@ -372,7 +372,8 @@ describe('ClientService', () => {
 
       await service.createClient({ name: 'Test Client' });
 
-      const apiKey = mockPrismaService.client.create.mock.calls[0][0].data.apiKey;
+      const apiKey =
+        mockPrismaService.client.create.mock.calls[0][0].data.apiKey;
 
       // Should start with 'fh_'
       expect(apiKey).toMatch(/^fh_/);
@@ -394,7 +395,9 @@ describe('ClientService', () => {
 
     it('updates the client and returns it enriched with stats', async () => {
       mockPrismaService.client.update.mockResolvedValue(updatedClient);
-      mockPrismaService.image.aggregate.mockResolvedValue({ _sum: { size: 1024 } });
+      mockPrismaService.image.aggregate.mockResolvedValue({
+        _sum: { size: 1024 },
+      });
 
       const result = await service.updateClientWithStats('client-123', {
         bastionTenantSlug: 'heyatom',
@@ -403,7 +406,11 @@ describe('ClientService', () => {
       expect(mockPrismaService.client.update).toHaveBeenCalledWith({
         where: { id: 'client-123' },
         data: { bastionTenantSlug: 'heyatom' },
-        include: { _count: { select: { images: true, avatars: true, albums: true, videos: true } } },
+        include: {
+          _count: {
+            select: { images: true, avatars: true, albums: true, videos: true },
+          },
+        },
       });
       expect(result.bastionTenantSlug).toBe('heyatom');
       expect(result.totalStorage).toBe(1024);
@@ -411,28 +418,38 @@ describe('ClientService', () => {
 
     it('maps a bastionTenantSlug unique constraint violation to a ConflictException', async () => {
       mockPrismaService.client.update.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (`bastionTenantSlug`)', {
-          code: 'P2002',
-          clientVersion: '7.10.0',
-          meta: { target: ['bastionTenantSlug'] },
-        }),
+        new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the fields: (`bastionTenantSlug`)',
+          {
+            code: 'P2002',
+            clientVersion: '7.10.0',
+            meta: { target: ['bastionTenantSlug'] },
+          },
+        ),
       );
 
       await expect(
-        service.updateClientWithStats('client-123', { bastionTenantSlug: 'heyatom' }),
-      ).rejects.toThrow(new ConflictException('Tenant slug already mapped to another client'));
+        service.updateClientWithStats('client-123', {
+          bastionTenantSlug: 'heyatom',
+        }),
+      ).rejects.toThrow(
+        new ConflictException('Tenant slug already mapped to another client'),
+      );
     });
 
     it('rethrows unrelated Prisma errors unchanged', async () => {
-      const otherError = new Prisma.PrismaClientKnownRequestError('Record not found', {
-        code: 'P2025',
-        clientVersion: '7.10.0',
-      });
+      const otherError = new Prisma.PrismaClientKnownRequestError(
+        'Record not found',
+        {
+          code: 'P2025',
+          clientVersion: '7.10.0',
+        },
+      );
       mockPrismaService.client.update.mockRejectedValue(otherError);
 
-      await expect(service.updateClientWithStats('client-123', { name: 'New name' })).rejects.toBe(
-        otherError,
-      );
+      await expect(
+        service.updateClientWithStats('client-123', { name: 'New name' }),
+      ).rejects.toBe(otherError);
     });
   });
 });

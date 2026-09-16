@@ -9,7 +9,10 @@ import * as fs from 'fs/promises';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import {
+  WebhookService,
+  WebhookEvent,
+} from '@/modules/webhook/webhook.service';
 import { UserService } from '@/modules/user/user.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,7 +23,10 @@ import {
   DeleteVideoResponseDto,
   VideoPaginationMetaDto,
 } from './dto';
-import { buildVideoTagCreateInput, extractVideoTagNames } from '@/modules/tag/tag.utils';
+import {
+  buildVideoTagCreateInput,
+  extractVideoTagNames,
+} from '@/modules/tag/tag.utils';
 
 @Injectable()
 export class VideoService {
@@ -35,7 +41,9 @@ export class VideoService {
     private userService: UserService,
     private route: RouteHelperService,
   ) {
-    this.thumbnailQuality = parseInt(this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80');
+    this.thumbnailQuality = parseInt(
+      this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80',
+    );
   }
 
   async uploadVideo(
@@ -63,7 +71,9 @@ export class VideoService {
         throw new BadRequestException('File is not a valid MP4');
       }
 
-      const client = await this.prisma.client.findUnique({ where: { id: clientId } });
+      const client = await this.prisma.client.findUnique({
+        where: { id: clientId },
+      });
       if (!client) throw new BadRequestException('Client not found');
       const domain = client.domain || clientId;
 
@@ -72,19 +82,32 @@ export class VideoService {
         user = await this.userService.resolveUser(clientId, externalUserId);
       } else {
         user = await this.prisma.user.findUnique({
-          where: { clientId_externalUserId: { clientId, externalUserId: 'system' } },
+          where: {
+            clientId_externalUserId: { clientId, externalUserId: 'system' },
+          },
         });
-        if (!user) throw new BadRequestException('System user not found for client');
+        if (!user)
+          throw new BadRequestException('System user not found for client');
       }
 
-      const finalPath = this.storage.getVideoFilePath(domain, videoId, 'original');
+      const finalPath = this.storage.getVideoFilePath(
+        domain,
+        videoId,
+        'original',
+      );
       await this.storage.copyFromTemp(file.path, finalPath);
 
       const thumbPath = this.storage.getVideoFilePath(domain, videoId, 'thumb');
       try {
-        await this.storage.extractVideoThumbnail(finalPath, thumbPath, this.thumbnailQuality);
+        await this.storage.extractVideoThumbnail(
+          finalPath,
+          thumbPath,
+          this.thumbnailQuality,
+        );
       } catch (err) {
-        this.logger.warn(`[uploadVideo] Thumbnail extraction failed for ${videoId}: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(
+          `[uploadVideo] Thumbnail extraction failed for ${videoId}: ${err instanceof Error ? err.message : err}`,
+        );
       }
 
       const storagePath = `${domain}/videos/${videoId}`;
@@ -94,7 +117,9 @@ export class VideoService {
       try {
         videoMeta = await this.storage.getVideoMetadata(finalPath);
       } catch (err) {
-        this.logger.warn(`[uploadVideo] Metadata extraction failed for ${videoId}: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(
+          `[uploadVideo] Metadata extraction failed for ${videoId}: ${err instanceof Error ? err.message : err}`,
+        );
       }
 
       const video = await this.prisma.video.create({
@@ -111,7 +136,9 @@ export class VideoService {
           height: videoMeta.height || null,
           isPrivate: isPrivate || false,
           description: description || null,
-          ...(videoTagsInput.length > 0 && { videoTags: { create: videoTagsInput } }),
+          ...(videoTagsInput.length > 0 && {
+            videoTags: { create: videoTagsInput },
+          }),
         },
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
@@ -121,18 +148,28 @@ export class VideoService {
       });
 
       if (albumId) {
-        this.logger.debug(`[uploadVideo] Adding to album - ID: ${videoId}, Album: ${albumId}`);
+        this.logger.debug(
+          `[uploadVideo] Adding to album - ID: ${videoId}, Album: ${albumId}`,
+        );
         await this.addVideoToAlbum(videoId, albumId, clientId);
       }
 
-      this.webhook.sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
-        videoId: video.id,
-        originalName: video.originalName,
-        size: video.size,
-        userId: user.externalUserId,
-      }).catch((err) => this.logger.warn(`[uploadVideo] Webhook failed: ${err instanceof Error ? err.message : err}`));
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
+          videoId: video.id,
+          originalName: video.originalName,
+          size: video.size,
+          userId: user.externalUserId,
+        })
+        .catch((err) =>
+          this.logger.warn(
+            `[uploadVideo] Webhook failed: ${err instanceof Error ? err.message : err}`,
+          ),
+        );
 
-      this.logger.log(`[uploadVideo] Success - ID: ${videoId}, Client: ${clientId}`);
+      this.logger.log(
+        `[uploadVideo] Success - ID: ${videoId}, Client: ${clientId}`,
+      );
       return this.formatVideoResponse(video);
     } finally {
       await fs.unlink(file.path).catch(() => {});
@@ -173,19 +210,30 @@ export class VideoService {
     return video;
   }
 
-  async getVideoStreamPath(videoId: string, clientId: string): Promise<{ storagePath: string; domain: string; originalName: string }> {
+  async getVideoStreamPath(
+    videoId: string,
+    clientId: string,
+  ): Promise<{ storagePath: string; domain: string; originalName: string }> {
     const video = await this.getVideoById(videoId, clientId);
 
     if (video.isPrivate) {
       throw new ForbiddenException('This video is private');
     }
 
-    const client = await this.prisma.client.findUnique({ where: { id: clientId } });
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+    });
     const domain = client?.domain || clientId;
 
-    this.prisma.video.update({ where: { id: videoId }, data: { views: { increment: 1 } } }).catch(() => {});
+    this.prisma.video
+      .update({ where: { id: videoId }, data: { views: { increment: 1 } } })
+      .catch(() => {});
 
-    return { storagePath: video.storagePath, domain, originalName: video.originalName };
+    return {
+      storagePath: video.storagePath,
+      domain,
+      originalName: video.originalName,
+    };
   }
 
   async listVideos(filters: {
@@ -227,26 +275,47 @@ export class VideoService {
       { excludeExtraneousValues: true },
     );
 
-    return plainToInstance(ListVideosResponseDto, { data, pagination }, { excludeExtraneousValues: true });
+    return plainToInstance(
+      ListVideosResponseDto,
+      { data, pagination },
+      { excludeExtraneousValues: true },
+    );
   }
 
-  async deleteVideo(videoId: string, clientId: string): Promise<DeleteVideoResponseDto> {
-    const video = await this.prisma.video.findFirst({ where: { id: videoId, clientId } });
+  async deleteVideo(
+    videoId: string,
+    clientId: string,
+  ): Promise<DeleteVideoResponseDto> {
+    const video = await this.prisma.video.findFirst({
+      where: { id: videoId, clientId },
+    });
     if (!video) throw new NotFoundException('Video not found');
 
-    const client = await this.prisma.client.findUnique({ where: { id: clientId } });
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+    });
     const domain = client?.domain || clientId;
 
     const videoDir = this.storage.getVideoPath(domain, videoId);
     await this.storage.deleteDirectory(videoDir);
     await this.prisma.video.delete({ where: { id: videoId } });
 
-    this.webhook.sendWebhook(clientId, WebhookEvent.VIDEO_DELETED, {
-      id: videoId,
-      timestamp: new Date().toISOString(),
-    }).catch((err) => this.logger.warn(`[deleteVideo] Webhook failed: ${err instanceof Error ? err.message : err}`));
+    this.webhook
+      .sendWebhook(clientId, WebhookEvent.VIDEO_DELETED, {
+        id: videoId,
+        timestamp: new Date().toISOString(),
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `[deleteVideo] Webhook failed: ${err instanceof Error ? err.message : err}`,
+        ),
+      );
 
-    return plainToInstance(DeleteVideoResponseDto, { success: true, message: 'Video deleted successfully' }, { excludeExtraneousValues: true });
+    return plainToInstance(
+      DeleteVideoResponseDto,
+      { success: true, message: 'Video deleted successfully' },
+      { excludeExtraneousValues: true },
+    );
   }
 
   async updateVideoMetadata(
@@ -257,10 +326,13 @@ export class VideoService {
     description?: string,
     isPrivate?: boolean,
   ): Promise<VideoResponseDto> {
-    const video = await this.prisma.video.findFirst({ where: { id: videoId, clientId, userId } });
+    const video = await this.prisma.video.findFirst({
+      where: { id: videoId, clientId, userId },
+    });
     if (!video) throw new NotFoundException('Video not found');
 
-    const videoTagsInput = tags !== undefined ? buildVideoTagCreateInput(clientId, tags) : undefined;
+    const videoTagsInput =
+      tags !== undefined ? buildVideoTagCreateInput(clientId, tags) : undefined;
 
     const updated = await this.prisma.video.update({
       where: { id: videoId },
@@ -284,13 +356,17 @@ export class VideoService {
     return this.formatVideoResponse(updated);
   }
 
-  async getVideoMetadata(videoId: string, clientId?: string): Promise<VideoResponseDto> {
+  async getVideoMetadata(
+    videoId: string,
+    clientId?: string,
+  ): Promise<VideoResponseDto> {
     const video = await this.getVideoById(videoId, clientId);
     return this.formatVideoResponse(video);
   }
 
   validateUserId(userId: string | undefined): string {
-    if (!userId) throw new BadRequestException('User ID is required (X-User-Id header)');
+    if (!userId)
+      throw new BadRequestException('User ID is required (X-User-Id header)');
     return userId;
   }
 
@@ -298,9 +374,11 @@ export class VideoService {
     where: any,
     options: { skip: number; take: number; page: number },
     sort?: { field: string; order: 'asc' | 'desc' },
-    adminUserId?: string,
+    actorId?: string,
   ) {
-    const orderBy: any = sort ? { [sort.field]: sort.order } : { createdAt: 'desc' };
+    const orderBy: any = sort
+      ? { [sort.field]: sort.order }
+      : { createdAt: 'desc' };
 
     const [videos, total] = await Promise.all([
       this.prisma.video.findMany({
@@ -318,9 +396,9 @@ export class VideoService {
     ]);
 
     let bookmarkedIds = new Set<string>();
-    if (adminUserId && videos.length > 0) {
+    if (actorId && videos.length > 0) {
       const bookmarks = await (this.prisma as any).adminVideoBookmark.findMany({
-        where: { adminUserId, videoId: { in: videos.map((v) => v.id) } },
+        where: { actorId, videoId: { in: videos.map((v) => v.id) } },
         select: { videoId: true },
       });
       bookmarkedIds = new Set(bookmarks.map((b: any) => b.videoId));
@@ -343,7 +421,7 @@ export class VideoService {
     };
   }
 
-  async findAdminVideoById(videoId: string, adminUserId?: string) {
+  async findAdminVideoById(videoId: string, actorId?: string) {
     const video = await this.prisma.video.findUnique({
       where: { id: videoId },
       include: {
@@ -356,11 +434,13 @@ export class VideoService {
     if (!video) return null;
 
     let isBookmarked = false;
-    if (adminUserId) {
-      const bookmark = await (this.prisma as any).adminVideoBookmark.findUnique({
-        where: { adminUserId_videoId: { adminUserId, videoId } },
-        select: { videoId: true },
-      });
+    if (actorId) {
+      const bookmark = await (this.prisma as any).adminVideoBookmark.findUnique(
+        {
+          where: { actorId_videoId: { actorId, videoId } },
+          select: { videoId: true },
+        },
+      );
       isBookmarked = !!bookmark;
     }
 

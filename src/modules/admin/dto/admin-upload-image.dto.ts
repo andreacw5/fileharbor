@@ -1,6 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean, IsArray, IsUUID } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+  IsUUID,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class AdminUploadImageDto {
   @ApiProperty({ description: 'Target client ID for the upload' })
@@ -8,7 +14,10 @@ export class AdminUploadImageDto {
   @IsUUID()
   clientId: string;
 
-  @ApiPropertyOptional({ description: 'External user ID (from client system). Defaults to "system" if omitted.' })
+  @ApiPropertyOptional({
+    description:
+      'External user ID (from client system). Defaults to "system" if omitted.',
+  })
   @IsOptional()
   @IsString()
   externalUserId?: string;
@@ -23,7 +32,11 @@ export class AdminUploadImageDto {
   @IsArray()
   @IsString({ each: true })
   @Transform(({ value }) => {
-    if (typeof value === 'string') return value.split(',').map((t) => t.trim()).filter(Boolean);
+    if (typeof value === 'string')
+      return value
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
     return value;
   })
   tags?: string[];
@@ -39,4 +52,3 @@ export class AdminUploadImageDto {
   @Transform(({ value }) => value === 'true' || value === true)
   isPrivate?: boolean;
 }
-

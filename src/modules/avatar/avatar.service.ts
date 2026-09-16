@@ -7,7 +7,10 @@ import {
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import {
+  WebhookService,
+  WebhookEvent,
+} from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
@@ -30,9 +33,13 @@ export class AvatarService {
     private route: RouteHelperService,
   ) {
     // Original should be high quality to preserve avatar fidelity
-    this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
+    this.originalQuality = parseInt(
+      this.config.get('ORIGINAL_QUALITY') || '100',
+    );
     // Thumbnail can use lower quality to reduce file size
-    this.thumbnailQuality = parseInt(this.config.get('THUMBNAIL_QUALITY') || '70');
+    this.thumbnailQuality = parseInt(
+      this.config.get('THUMBNAIL_QUALITY') || '70',
+    );
     this.thumbnailSize = parseInt(this.config.get('THUMBNAIL_SIZE') || '800');
   }
 
@@ -46,14 +53,14 @@ export class AvatarService {
     externalUserId: string,
   ) {
     this.logger.debug(
-      `[uploadAvatar] Start - Client: ${clientId}, User: ${externalUserId}, File: ${file.originalname} (${file.size} bytes)`
+      `[uploadAvatar] Start - Client: ${clientId}, User: ${externalUserId}, File: ${file.originalname} (${file.size} bytes)`,
     );
 
     try {
       // Validate file
       if (!file.mimetype.startsWith('image/')) {
         this.logger.warn(
-          `[uploadAvatar] Invalid MIME type - Client: ${clientId}, User: ${externalUserId}, Type: ${file.mimetype}`
+          `[uploadAvatar] Invalid MIME type - Client: ${clientId}, User: ${externalUserId}, Type: ${file.mimetype}`,
         );
         throw new BadRequestException('Only image files are allowed');
       }
@@ -66,13 +73,17 @@ export class AvatarService {
         where: { id: clientId },
       });
       if (!client) {
-        this.logger.error(`[uploadAvatar] Client not found - Client: ${clientId}`);
+        this.logger.error(
+          `[uploadAvatar] Client not found - Client: ${clientId}`,
+        );
         throw new BadRequestException('Client not found');
       }
       const domain = client.domain || clientId;
 
       // Trova o crea lo user associato a questo externalUserId
-      this.logger.debug(`[uploadAvatar] Resolving user - Client: ${clientId}, User: ${externalUserId}`);
+      this.logger.debug(
+        `[uploadAvatar] Resolving user - Client: ${clientId}, User: ${externalUserId}`,
+      );
       const user = await this.userService.resolveUser(clientId, externalUserId);
       const userId = user.id;
 
@@ -88,7 +99,9 @@ export class AvatarService {
 
       // Delete old avatar files if exists
       if (existingAvatar) {
-        this.logger.debug(`[uploadAvatar] Deleting old avatar - Client: ${clientId}, User: ${userId}`);
+        this.logger.debug(
+          `[uploadAvatar] Deleting old avatar - Client: ${clientId}, User: ${userId}`,
+        );
         const oldAvatarPath = this.storage.getAvatarPath(domain, userId);
         await this.storage.deleteDirectory(oldAvatarPath);
       }
@@ -97,37 +110,57 @@ export class AvatarService {
       const avatarPath = this.storage.getAvatarPath(domain, userId);
 
       // Get metadata
-      this.logger.debug(`[uploadAvatar] Extracting metadata - Client: ${clientId}`);
+      this.logger.debug(
+        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
+      );
       const metadata = await this.storage.getImageMetadata(file.buffer);
       this.logger.debug(
-        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`
+        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
       );
 
       // Convert to WebP for original (high quality)
-      this.logger.debug(`[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.originalQuality}`);
+      this.logger.debug(
+        `[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.originalQuality}`,
+      );
       const webpBuffer = await this.storage.convertToWebP(
         file.buffer,
         this.originalQuality,
       );
 
       // Save original avatar (renamed to original.webp for consistency)
-      this.logger.debug(`[uploadAvatar] Saving original - Client: ${clientId}, Size: ${webpBuffer.length} bytes`);
-      const originalPath = this.storage.getAvatarFilePath(domain, userId, 'original');
+      this.logger.debug(
+        `[uploadAvatar] Saving original - Client: ${clientId}, Size: ${webpBuffer.length} bytes`,
+      );
+      const originalPath = this.storage.getAvatarFilePath(
+        domain,
+        userId,
+        'original',
+      );
       await this.storage.saveFile(originalPath, webpBuffer);
 
       // Create and save thumbnail (lower quality for smaller size)
-      this.logger.debug(`[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`);
+      this.logger.debug(
+        `[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`,
+      );
       const thumbBuffer = await this.storage.createThumbnail(
         webpBuffer,
         this.thumbnailSize,
         this.thumbnailQuality,
       );
-      const thumbnailPath = this.storage.getAvatarFilePath(domain, userId, 'thumb');
+      const thumbnailPath = this.storage.getAvatarFilePath(
+        domain,
+        userId,
+        'thumb',
+      );
       await this.storage.saveFile(thumbnailPath, thumbBuffer);
-      this.logger.debug(`[uploadAvatar] Thumbnail saved - Client: ${clientId}, Size: ${thumbBuffer.length} bytes`);
+      this.logger.debug(
+        `[uploadAvatar] Thumbnail saved - Client: ${clientId}, Size: ${thumbBuffer.length} bytes`,
+      );
 
       // Save/Update in database (storagePath is the base path without extension)
-      this.logger.debug(`[uploadAvatar] Saving to database - Client: ${clientId}, User: ${userId}`);
+      this.logger.debug(
+        `[uploadAvatar] Saving to database - Client: ${clientId}, User: ${userId}`,
+      );
       const avatar = await this.prisma.avatar.upsert({
         where: {
           clientId_userId: {
@@ -159,31 +192,32 @@ export class AvatarService {
       });
 
       // Send webhook notification (non-blocking)
-      this.webhook.sendWebhook(clientId, WebhookEvent.AVATAR_UPLOADED, {
-        avatarId: avatar.id,
-        userId: externalUserId,
-        width: avatar.width,
-        height: avatar.height,
-        size: avatar.size,
-      }).catch((error) => {
-        this.logger.warn(
-          `[uploadAvatar] Failed to send webhook for avatar ${avatar.id}:`,
-          error instanceof Error ? error.message : error
-        );
-      });
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.AVATAR_UPLOADED, {
+          avatarId: avatar.id,
+          userId: externalUserId,
+          width: avatar.width,
+          height: avatar.height,
+          size: avatar.size,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `[uploadAvatar] Failed to send webhook for avatar ${avatar.id}:`,
+            error instanceof Error ? error.message : error,
+          );
+        });
 
       this.logger.log(
-        `[uploadAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${webpBuffer.length} bytes`
+        `[uploadAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${webpBuffer.length} bytes`,
       );
       return this.formatAvatarResponse(avatar, externalUserId);
     } catch (error) {
       this.logger.error(
-        `[uploadAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`
+        `[uploadAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`,
       );
       throw error;
     }
   }
-
 
   /**
    * Get avatar file by external user ID (used by public endpoint)
@@ -218,7 +252,11 @@ export class AvatarService {
 
     // Get the appropriate variant path
     const variant = thumbnail ? 'thumb' : 'original';
-    const filePath = this.storage.getAvatarFilePath(domain, user.id, variant as 'original' | 'thumb');
+    const filePath = this.storage.getAvatarFilePath(
+      domain,
+      user.id,
+      variant as 'original' | 'thumb',
+    );
 
     const buffer = await this.storage.readFile(filePath);
     return { buffer, mimeType: avatar.mimeType };
@@ -227,8 +265,13 @@ export class AvatarService {
   /**
    * Delete user avatar by external user ID
    */
-  async deleteAvatar(clientId: string, externalUserId: string): Promise<DeleteAvatarResponseDto> {
-    this.logger.debug(`[deleteAvatar] Start - Client: ${clientId}, User: ${externalUserId}`);
+  async deleteAvatar(
+    clientId: string,
+    externalUserId: string,
+  ): Promise<DeleteAvatarResponseDto> {
+    this.logger.debug(
+      `[deleteAvatar] Start - Client: ${clientId}, User: ${externalUserId}`,
+    );
 
     try {
       // Find the user by clientId and externalUserId
@@ -242,7 +285,9 @@ export class AvatarService {
       });
 
       if (!user) {
-        this.logger.warn(`[deleteAvatar] User not found - Client: ${clientId}, User: ${externalUserId}`);
+        this.logger.warn(
+          `[deleteAvatar] User not found - Client: ${clientId}, User: ${externalUserId}`,
+        );
         throw new NotFoundException('User not found');
       }
 
@@ -257,7 +302,9 @@ export class AvatarService {
       });
 
       if (!avatar) {
-        this.logger.warn(`[deleteAvatar] Avatar not found - Client: ${clientId}, User: ${externalUserId}`);
+        this.logger.warn(
+          `[deleteAvatar] Avatar not found - Client: ${clientId}, User: ${externalUserId}`,
+        );
         throw new NotFoundException('Avatar not found');
       }
 
@@ -268,12 +315,16 @@ export class AvatarService {
       const domain = client?.domain || clientId;
 
       // Delete files
-      this.logger.debug(`[deleteAvatar] Deleting files - Client: ${clientId}, User: ${user.id}`);
+      this.logger.debug(
+        `[deleteAvatar] Deleting files - Client: ${clientId}, User: ${user.id}`,
+      );
       const avatarPath = this.storage.getAvatarPath(domain, user.id);
       await this.storage.deleteDirectory(avatarPath);
 
       // Delete from database
-      this.logger.debug(`[deleteAvatar] Deleting from database - Client: ${clientId}, User: ${user.id}`);
+      this.logger.debug(
+        `[deleteAvatar] Deleting from database - Client: ${clientId}, User: ${user.id}`,
+      );
       await this.prisma.avatar.delete({
         where: {
           clientId_userId: {
@@ -284,23 +335,25 @@ export class AvatarService {
       });
 
       // Send webhook notification (non-blocking)
-      this.webhook.sendWebhook(clientId, WebhookEvent.AVATAR_DELETED, {
-        id: avatar.id,
-        timestamp: new Date().toISOString(),
-      }).catch((error) => {
-        this.logger.warn(
-          `[deleteAvatar] Failed to send webhook for avatar ${avatar.id}:`,
-          error instanceof Error ? error.message : error
-        );
-      });
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.AVATAR_DELETED, {
+          id: avatar.id,
+          timestamp: new Date().toISOString(),
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `[deleteAvatar] Failed to send webhook for avatar ${avatar.id}:`,
+            error instanceof Error ? error.message : error,
+          );
+        });
 
       this.logger.log(
-        `[deleteAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${avatar.size} bytes`
+        `[deleteAvatar] Success - Client: ${clientId}, User: ${externalUserId}, Size: ${avatar.size} bytes`,
       );
       return this.formatDeleteResponse('Avatar deleted successfully');
     } catch (error) {
       this.logger.error(
-        `[deleteAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`
+        `[deleteAvatar] Failed - Client: ${clientId}, User: ${externalUserId}, Error: ${error.message}`,
       );
       throw error;
     }
@@ -311,10 +364,7 @@ export class AvatarService {
    * and adds admin-specific includes (user, client join).
    * The caller is responsible for computing skip and take.
    */
-  async findAdminAvatars(
-    where: any,
-    options: { skip: number; take: number },
-  ) {
+  async findAdminAvatars(where: any, options: { skip: number; take: number }) {
     const [avatars, total] = await Promise.all([
       this.prisma.avatar.findMany({
         where,
@@ -352,7 +402,10 @@ export class AvatarService {
   /**
    * Delete avatar by its internal ID (admin use — bypasses externalUserId lookup).
    */
-  async deleteAvatarById(avatarId: string, clientId: string): Promise<DeleteAvatarResponseDto> {
+  async deleteAvatarById(
+    avatarId: string,
+    clientId: string,
+  ): Promise<DeleteAvatarResponseDto> {
     const avatar = await this.prisma.avatar.findFirst({
       where: { id: avatarId, clientId },
       include: { user: { select: { externalUserId: true } } },
@@ -361,7 +414,8 @@ export class AvatarService {
     if (!avatar) throw new NotFoundException('Avatar not found');
 
     const externalUserId = avatar.user?.externalUserId;
-    if (!externalUserId) throw new NotFoundException('User not found for avatar');
+    if (!externalUserId)
+      throw new NotFoundException('User not found for avatar');
 
     return this.deleteAvatar(clientId, externalUserId);
   }
@@ -421,9 +475,13 @@ export class AvatarService {
   /**
    * Format avatar response using class-transformer
    */
-  private formatAvatarResponse(avatar: any, externalUserId: string): AvatarResponseDto {
+  private formatAvatarResponse(
+    avatar: any,
+    externalUserId: string,
+  ): AvatarResponseDto {
     const url = this.route.path('avatars', externalUserId);
-    const thumbnailUrl = this.route.path('avatars', externalUserId) + '?thumb=true';
+    const thumbnailUrl =
+      this.route.path('avatars', externalUserId) + '?thumb=true';
 
     return plainToInstance(
       AvatarResponseDto,
@@ -431,7 +489,7 @@ export class AvatarService {
         ...avatar,
         url,
         thumbnailUrl,
-        fullPath: this.route.fullUrl('avatars', externalUserId)
+        fullPath: this.route.fullUrl('avatars', externalUserId),
       },
       { excludeExtraneousValues: true },
     );

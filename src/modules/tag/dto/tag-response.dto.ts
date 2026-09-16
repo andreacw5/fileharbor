@@ -27,10 +27,16 @@ export class TagListItemDto {
   @ApiPropertyOptional({ type: TagTagClientDto })
   client?: TagTagClientDto;
 
-  @ApiProperty({ description: 'Number of images associated with this tag', example: 42 })
+  @ApiProperty({
+    description: 'Number of images associated with this tag',
+    example: 42,
+  })
   imageCount: number;
 
-  @ApiProperty({ description: 'Number of videos associated with this tag', example: 3 })
+  @ApiProperty({
+    description: 'Number of videos associated with this tag',
+    example: 3,
+  })
   videoCount: number;
 }
 

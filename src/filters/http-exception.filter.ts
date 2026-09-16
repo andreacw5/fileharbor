@@ -4,7 +4,7 @@ import {
   ArgumentsHost,
   HttpException,
   Logger,
-  BadRequestException
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 
@@ -13,90 +13,87 @@ export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
   // Exact paths to ignore (case-sensitive)
-  private readonly ignoredPaths: string[] = [
-    '/favicon.ico',
-    '/sw.js',
-  ];
+  private readonly ignoredPaths: string[] = ['/favicon.ico', '/sw.js'];
 
   // Pattern to match workbox files and other common browser requests
   // This prevents log pollution from legitimate browser requests for missing assets
   private readonly ignoredPatterns: RegExp[] = [
     // Service worker and PWA files
-    /^\/workbox-[a-f0-9]+\.js$/,           // workbox files with hash
-    /^\/sw\.js$/,                          // service worker
-    /^\/manifest\.json$/,                  // PWA manifest
-    /^\/.*\.webmanifest$/,                 // Web app manifest
+    /^\/workbox-[a-f0-9]+\.js$/, // workbox files with hash
+    /^\/sw\.js$/, // service worker
+    /^\/manifest\.json$/, // PWA manifest
+    /^\/.*\.webmanifest$/, // Web app manifest
 
     // Icons and favicons
-    /^\/favicon\.(ico|png|jpg|svg)$/,      // favicon variants
-    /^\/(apple-)?touch-icon.*\.(png|jpg)$/,// Apple touch icons
-    /^\/icon-\d+x\d+\.(png|jpg|svg)$/,     // PWA icons
-    /^\/apple-icon.*\.(png|jpg)$/,         // Apple icons
-    /^\/android-icon.*\.(png|jpg)$/,       // Android icons
-    /^\/mstile-.*\.(png|jpg)$/,            // Microsoft tile icons
+    /^\/favicon\.(ico|png|jpg|svg)$/, // favicon variants
+    /^\/(apple-)?touch-icon.*\.(png|jpg)$/, // Apple touch icons
+    /^\/icon-\d+x\d+\.(png|jpg|svg)$/, // PWA icons
+    /^\/apple-icon.*\.(png|jpg)$/, // Apple icons
+    /^\/android-icon.*\.(png|jpg)$/, // Android icons
+    /^\/mstile-.*\.(png|jpg)$/, // Microsoft tile icons
 
     // Browser security files
-    /^\/robots\.txt$/,                     // robots.txt
-    /^\/sitemap\.xml$/,                    // sitemap
-    /^\/security\.txt$/,                   // security.txt
-    /^\/\.well-known\/.*$/,                // well-known directory
-    /^\/humans\.txt$/,                     // humans.txt
+    /^\/robots\.txt$/, // robots.txt
+    /^\/sitemap\.xml$/, // sitemap
+    /^\/security\.txt$/, // security.txt
+    /^\/\.well-known\/.*$/, // well-known directory
+    /^\/humans\.txt$/, // humans.txt
 
     // Browser auto-requests
-    /^\/browserconfig\.xml$/,              // IE/Edge browser config
-    /^\/crossdomain\.xml$/,                // Flash crossdomain policy
-    /^\/clientaccesspolicy\.xml$/,         // Silverlight policy
+    /^\/browserconfig\.xml$/, // IE/Edge browser config
+    /^\/crossdomain\.xml$/, // Flash crossdomain policy
+    /^\/clientaccesspolicy\.xml$/, // Silverlight policy
 
     // Development and build artifacts
-    /^\/webpack-.*\.js$/,                  // webpack files
-    /^\/.*\.hot-update\.js$/,              // webpack hot reload
-    /^\/.*\.hot-update\.json$/,            // webpack hot reload
-    /^\/.*\.map$/,                         // source maps
+    /^\/webpack-.*\.js$/, // webpack files
+    /^\/.*\.hot-update\.js$/, // webpack hot reload
+    /^\/.*\.hot-update\.json$/, // webpack hot reload
+    /^\/.*\.map$/, // source maps
 
     // Common attack patterns (scanner bots)
-    /^\/wp-.*$/,                           // WordPress paths
-    /^\/admin\.php.*$/,                    // admin.php paths (WordPress/PHP)
-    /^\/phpmyadmin.*$/,                    // phpMyAdmin
-    /^\/\.env$/,                           // .env file requests
-    /^\/\.git\/.*$/,                       // git directory
-    /^\/config\/.*$/,                      // config paths
-    /^\/backup.*$/,                        // backup files
-    /^\/.*\.(sql|bak|old|tmp|log)$/,       // sensitive file extensions
+    /^\/wp-.*$/, // WordPress paths
+    /^\/admin\.php.*$/, // admin.php paths (WordPress/PHP)
+    /^\/phpmyadmin.*$/, // phpMyAdmin
+    /^\/\.env$/, // .env file requests
+    /^\/\.git\/.*$/, // git directory
+    /^\/config\/.*$/, // config paths
+    /^\/backup.*$/, // backup files
+    /^\/.*\.(sql|bak|old|tmp|log)$/, // sensitive file extensions
 
     // Mobile app assets
-    /^\/app-ads\.txt$/,                    // app ads.txt
-    /^\/assetlinks\.json$/,                // Android app links
-    /^\/\.well-known\/assetlinks\.json$/,  // Android app links (well-known)
+    /^\/app-ads\.txt$/, // app ads.txt
+    /^\/assetlinks\.json$/, // Android app links
+    /^\/\.well-known\/assetlinks\.json$/, // Android app links (well-known)
     /^\/\.well-known\/apple-app-site-association$/, // iOS app links
 
     // CDN and static assets commonly requested
-    /^\/static\/.*$/,                      // static assets folder
-    /^\/assets\/.*$/,                      // assets folder
-    /^\/public\/.*$/,                      // public assets folder
-    /^\/uploads\/.*$/,                     // uploads folder (if not serving)
-    /^\/media\/.*$/,                       // media folder
+    /^\/static\/.*$/, // static assets folder
+    /^\/assets\/.*$/, // assets folder
+    /^\/public\/.*$/, // public assets folder
+    /^\/uploads\/.*$/, // uploads folder (if not serving)
+    /^\/media\/.*$/, // media folder
 
     // Development tools and frameworks
-    /^\/node_modules\/.*$/,                // Node.js modules
-    /^\/vendor\/.*$/,                      // Vendor assets
-    /^\/build\/.*$/,                       // Build artifacts
-    /^\/dist\/.*$/,                        // Distribution files
+    /^\/node_modules\/.*$/, // Node.js modules
+    /^\/vendor\/.*$/, // Vendor assets
+    /^\/build\/.*$/, // Build artifacts
+    /^\/dist\/.*$/, // Distribution files
 
     // Browser extension and addon requests
-    /^\/chrome-extension\/.*$/,            // Chrome extensions
-    /^\/moz-extension\/.*$/,               // Firefox extensions
+    /^\/chrome-extension\/.*$/, // Chrome extensions
+    /^\/moz-extension\/.*$/, // Firefox extensions
 
     // Common CMS and framework paths
-    /^\/administrator\/.*$/,               // Joomla admin
-    /^\/typo3\/.*$/,                       // TYPO3 CMS
-    /^\/drupal\/.*$/,                      // Drupal paths
-    /^\/magento\/.*$/,                     // Magento paths
+    /^\/administrator\/.*$/, // Joomla admin
+    /^\/typo3\/.*$/, // TYPO3 CMS
+    /^\/drupal\/.*$/, // Drupal paths
+    /^\/magento\/.*$/, // Magento paths
 
     // API documentation and health checks commonly probed
-    /^\/health$/,                          // health check (if not implemented)
-    /^\/ping$/,                            // ping endpoint
-    /^\/version$/,                         // version endpoint
-    /^\/info$/,                            // info endpoint
+    /^\/health$/, // health check (if not implemented)
+    /^\/ping$/, // ping endpoint
+    /^\/version$/, // version endpoint
+    /^\/info$/, // info endpoint
   ];
 
   /**
@@ -105,15 +102,38 @@ export class HttpExceptionFilter implements ExceptionFilter {
    */
   private isLikelyAssetRequest(url: string): boolean {
     const assetExtensions = [
-      '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
-      '.webp', '.woff', '.woff2', '.ttf', '.eot', '.otf',
-      '.mp3', '.mp4', '.webm', '.ogg', '.wav',
-      '.pdf', '.zip', '.rar', '.tar', '.gz',
-      '.xml', '.json', '.txt', '.md'
+      '.js',
+      '.css',
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.gif',
+      '.svg',
+      '.ico',
+      '.webp',
+      '.woff',
+      '.woff2',
+      '.ttf',
+      '.eot',
+      '.otf',
+      '.mp3',
+      '.mp4',
+      '.webm',
+      '.ogg',
+      '.wav',
+      '.pdf',
+      '.zip',
+      '.rar',
+      '.tar',
+      '.gz',
+      '.xml',
+      '.json',
+      '.txt',
+      '.md',
     ];
 
     const urlLower = url.toLowerCase();
-    return assetExtensions.some(ext => urlLower.endsWith(ext));
+    return assetExtensions.some((ext) => urlLower.endsWith(ext));
   }
 
   catch(exception: HttpException, host: ArgumentsHost) {
@@ -127,7 +147,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let errors = null;
 
     // Extract validation errors if present
-    if (exception instanceof BadRequestException && typeof exceptionResponse === 'object') {
+    if (
+      exception instanceof BadRequestException &&
+      typeof exceptionResponse === 'object'
+    ) {
       const res: any = exceptionResponse;
       message = res.message || message;
       errors = res.message || null;
@@ -143,7 +166,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     // Check patterns (also check the full URL with query params)
-    if (this.ignoredPatterns.some(pattern => pattern.test(urlPath) || pattern.test(request.url))) {
+    if (
+      this.ignoredPatterns.some(
+        (pattern) => pattern.test(urlPath) || pattern.test(request.url),
+      )
+    ) {
       Logger.debug(`Ignoring ${urlPath} request (pattern match)`);
       return;
     }

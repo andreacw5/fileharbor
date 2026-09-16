@@ -13,4 +13,3 @@ import { AvatarCleanupJob } from '@/modules/avatar/avatar.cleanup.job';
   exports: [AvatarService],
 })
 export class AvatarModule {}
-

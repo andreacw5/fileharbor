@@ -9,7 +9,10 @@ import { VideoService } from './video.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import {
+  WebhookService,
+  WebhookEvent,
+} from '@/modules/webhook/webhook.service';
 import { UserService } from '@/modules/user/user.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
@@ -72,12 +75,18 @@ describe('VideoService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     videoTags: [],
-    user: { id: mockUserId, externalUserId: mockExternalUserId, username: null },
+    user: {
+      id: mockUserId,
+      externalUserId: mockExternalUserId,
+      username: null,
+    },
     client: { id: mockClientId, name: 'Test Client', domain: mockDomain },
   };
 
   // MP4 magic: bytes 4-7 must be 'ftyp' (0x66 0x74 0x79 0x70)
-  const mockMp4Magic = Buffer.from([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]);
+  const mockMp4Magic = Buffer.from([
+    0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70,
+  ]);
 
   const mockFile: Express.Multer.File = {
     fieldname: 'file',
@@ -134,7 +143,9 @@ describe('VideoService', () => {
 
   const mockRouteHelperService = {
     path: jest.fn((...segments: string[]) => '/' + segments.join('/')),
-    fullUrl: jest.fn((...segments: string[]) => 'http://localhost:3000/' + segments.join('/')),
+    fullUrl: jest.fn(
+      (...segments: string[]) => 'http://localhost:3000/' + segments.join('/'),
+    ),
     apiPrefix: 'v2',
     baseUrl: 'http://localhost:3000',
   };
@@ -191,7 +202,11 @@ describe('VideoService', () => {
     });
 
     it('should upload video successfully with user', async () => {
-      const result = await service.uploadVideo(mockClientId, mockExternalUserId, mockFile);
+      const result = await service.uploadVideo(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+      );
 
       expect(result).toBeDefined();
       expect(result.id).toBe(mockVideoId);
@@ -252,7 +267,10 @@ describe('VideoService', () => {
 
       expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
         where: {
-          clientId_externalUserId: { clientId: mockClientId, externalUserId: 'system' },
+          clientId_externalUserId: {
+            clientId: mockClientId,
+            externalUserId: 'system',
+          },
         },
       });
       expect(mockUserService.resolveUser).not.toHaveBeenCalled();
@@ -267,33 +285,43 @@ describe('VideoService', () => {
     });
 
     it('should continue when thumbnail extraction fails', async () => {
-      mockStorageService.extractVideoThumbnail.mockRejectedValue(new Error('ffmpeg error'));
+      mockStorageService.extractVideoThumbnail.mockRejectedValue(
+        new Error('ffmpeg error'),
+      );
 
-      const result = await service.uploadVideo(mockClientId, mockExternalUserId, mockFile);
+      const result = await service.uploadVideo(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+      );
 
       expect(result).toBeDefined();
       expect(mockPrismaService.video.create).toHaveBeenCalled();
     });
 
     it('should store null duration/dimensions when metadata extraction fails', async () => {
-      mockStorageService.getVideoMetadata.mockRejectedValue(new Error('probe error'));
+      mockStorageService.getVideoMetadata.mockRejectedValue(
+        new Error('probe error'),
+      );
 
       await service.uploadVideo(mockClientId, mockExternalUserId, mockFile);
 
       expect(mockPrismaService.video.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ duration: null, width: null, height: null }),
+          data: expect.objectContaining({
+            duration: null,
+            width: null,
+            height: null,
+          }),
         }),
       );
     });
 
     it('should store video with tags when provided', async () => {
-      await service.uploadVideo(
-        mockClientId,
-        mockExternalUserId,
-        mockFile,
-        ['comedy', 'short'],
-      );
+      await service.uploadVideo(mockClientId, mockExternalUserId, mockFile, [
+        'comedy',
+        'short',
+      ]);
 
       expect(mockPrismaService.video.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -322,7 +350,10 @@ describe('VideoService', () => {
     });
 
     it('should use clientId as domain when client has no domain', async () => {
-      mockPrismaService.client.findUnique.mockResolvedValue({ ...mockClient, domain: null });
+      mockPrismaService.client.findUnique.mockResolvedValue({
+        ...mockClient,
+        domain: null,
+      });
 
       await service.uploadVideo(mockClientId, mockExternalUserId, mockFile);
 
@@ -361,9 +392,9 @@ describe('VideoService', () => {
     it('should throw NotFoundException when video not found', async () => {
       mockPrismaService.video.findFirst.mockResolvedValue(null);
 
-      await expect(service.getVideoById(mockVideoId, mockClientId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getVideoById(mockVideoId, mockClientId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -373,7 +404,10 @@ describe('VideoService', () => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
       mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
-      const result = await service.getVideoStreamPath(mockVideoId, mockClientId);
+      const result = await service.getVideoStreamPath(
+        mockVideoId,
+        mockClientId,
+      );
 
       expect(result.storagePath).toBe(mockVideo.storagePath);
       expect(result.domain).toBe(mockDomain);
@@ -381,7 +415,10 @@ describe('VideoService', () => {
     });
 
     it('should throw ForbiddenException for private video', async () => {
-      mockPrismaService.video.findFirst.mockResolvedValue({ ...mockVideo, isPrivate: true });
+      mockPrismaService.video.findFirst.mockResolvedValue({
+        ...mockVideo,
+        isPrivate: true,
+      });
 
       await expect(
         service.getVideoStreamPath(mockVideoId, mockClientId),
@@ -403,10 +440,16 @@ describe('VideoService', () => {
 
     it('should use clientId as domain when client has no domain', async () => {
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.client.findUnique.mockResolvedValue({ ...mockClient, domain: null });
+      mockPrismaService.client.findUnique.mockResolvedValue({
+        ...mockClient,
+        domain: null,
+      });
       mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
-      const result = await service.getVideoStreamPath(mockVideoId, mockClientId);
+      const result = await service.getVideoStreamPath(
+        mockVideoId,
+        mockClientId,
+      );
 
       expect(result.domain).toBe(mockClientId);
     });
@@ -479,7 +522,11 @@ describe('VideoService', () => {
     });
 
     it('should calculate correct skip for page 3 with perPage 10', async () => {
-      await service.listVideos({ clientId: mockClientId, page: 3, perPage: 10 });
+      await service.listVideos({
+        clientId: mockClientId,
+        page: 3,
+        perPage: 10,
+      });
 
       expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ skip: 20, take: 10 }),
@@ -525,15 +572,19 @@ describe('VideoService', () => {
     it('should throw NotFoundException when video not found', async () => {
       mockPrismaService.video.findFirst.mockResolvedValue(null);
 
-      await expect(service.deleteVideo(mockVideoId, mockClientId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.deleteVideo(mockVideoId, mockClientId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('updateVideoMetadata', () => {
     it('should update description and privacy', async () => {
-      const updated = { ...mockVideo, description: 'New desc', isPrivate: true };
+      const updated = {
+        ...mockVideo,
+        description: 'New desc',
+        isPrivate: true,
+      };
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
       mockPrismaService.video.update.mockResolvedValue(updated);
 
@@ -549,7 +600,10 @@ describe('VideoService', () => {
       expect(result).toBeDefined();
       expect(mockPrismaService.video.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ description: 'New desc', isPrivate: true }),
+          data: expect.objectContaining({
+            description: 'New desc',
+            isPrivate: true,
+          }),
         }),
       );
     });
@@ -566,12 +620,9 @@ describe('VideoService', () => {
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
       mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
-      await service.updateVideoMetadata(
-        mockVideoId,
-        mockClientId,
-        mockUserId,
-        ['new-tag'],
-      );
+      await service.updateVideoMetadata(mockVideoId, mockClientId, mockUserId, [
+        'new-tag',
+      ]);
 
       expect(mockPrismaService.video.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -586,7 +637,13 @@ describe('VideoService', () => {
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
       mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
-      await service.updateVideoMetadata(mockVideoId, mockClientId, mockUserId, undefined, 'desc');
+      await service.updateVideoMetadata(
+        mockVideoId,
+        mockClientId,
+        mockUserId,
+        undefined,
+        'desc',
+      );
 
       const callData = mockPrismaService.video.update.mock.calls[0][0].data;
       expect(callData.videoTags).toBeUndefined();
@@ -612,7 +669,9 @@ describe('VideoService', () => {
     });
 
     it('should throw BadRequestException when userId is undefined', () => {
-      expect(() => service.validateUserId(undefined)).toThrow(BadRequestException);
+      expect(() => service.validateUserId(undefined)).toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw BadRequestException when userId is empty string', () => {

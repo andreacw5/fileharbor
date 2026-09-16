@@ -1,24 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { ImageService } from './image.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import {
+  WebhookService,
+  WebhookEvent,
+} from '@/modules/webhook/webhook.service';
 import { HttpService } from '@nestjs/axios';
 import { UserService } from '@/modules/user/user.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
 describe('ImageService', () => {
   let service: ImageService;
-  let prismaService: PrismaService;
-  let storageService: StorageService;
-  let configService: ConfigService;
-  let webhookService: WebhookService;
 
   // Mock data
   const mockClientId = 'client-123';
@@ -200,7 +195,10 @@ describe('ImageService', () => {
           provide: RouteHelperService,
           useValue: {
             path: jest.fn((...segments: string[]) => '/' + segments.join('/')),
-            fullUrl: jest.fn((...segments: string[]) => 'http://localhost:3000/' + segments.join('/')),
+            fullUrl: jest.fn(
+              (...segments: string[]) =>
+                'http://localhost:3000/' + segments.join('/'),
+            ),
             apiPrefix: 'v2',
             baseUrl: 'http://localhost:3000',
           },
@@ -209,10 +207,6 @@ describe('ImageService', () => {
     }).compile();
 
     service = module.get<ImageService>(ImageService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    storageService = module.get<StorageService>(StorageService);
-    configService = module.get<ConfigService>(ConfigService);
-    webhookService = module.get<WebhookService>(WebhookService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();
@@ -228,11 +222,18 @@ describe('ImageService', () => {
       mockPrismaService.user.upsert.mockResolvedValue(mockUser);
       mockUserServiceMock.resolveUser.mockResolvedValue(mockUser);
       mockStorageService.getImageMetadata.mockResolvedValue(mockImageMetadata);
-      mockStorageService.convertToWebP.mockResolvedValue(Buffer.from('webp-data'));
-      mockStorageService.createThumbnail.mockResolvedValue(Buffer.from('thumb-data'));
-      mockStorageService.getImagePath.mockReturnValue(`storage/${mockDomain}/images/${mockImageId}`);
-      mockStorageService.getImageFilePath.mockImplementation((domain, imageId, variant) =>
-        `storage/${domain}/images/${imageId}/${variant}.webp`
+      mockStorageService.convertToWebP.mockResolvedValue(
+        Buffer.from('webp-data'),
+      );
+      mockStorageService.createThumbnail.mockResolvedValue(
+        Buffer.from('thumb-data'),
+      );
+      mockStorageService.getImagePath.mockReturnValue(
+        `storage/${mockDomain}/images/${mockImageId}`,
+      );
+      mockStorageService.getImageFilePath.mockImplementation(
+        (domain, imageId, variant) =>
+          `storage/${domain}/images/${imageId}/${variant}.webp`,
       );
       mockPrismaService.image.create.mockResolvedValue(mockImage);
     });
@@ -281,7 +282,16 @@ describe('ImageService', () => {
     });
 
     it('should upsert user with username when provided', async () => {
-      await service.uploadImage(mockClientId, mockExternalUserId, mockFile, undefined, undefined, undefined, undefined, 'Andrea');
+      await service.uploadImage(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'Andrea',
+      );
 
       expect(mockUserServiceMock.resolveUser).toHaveBeenCalledWith(
         mockClientId,
@@ -492,7 +502,9 @@ describe('ImageService', () => {
     beforeEach(() => {
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockStorageService.getImagePath.mockReturnValue(`storage/${mockDomain}/images/${mockImageId}`);
+      mockStorageService.getImagePath.mockReturnValue(
+        `storage/${mockDomain}/images/${mockImageId}`,
+      );
     });
 
     it('should delete image successfully', async () => {
@@ -526,7 +538,7 @@ describe('ImageService', () => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
       mockStorageService.getImageFilePath.mockReturnValue(
-        `storage/${mockDomain}/images/${mockImageId}/original.webp`
+        `storage/${mockDomain}/images/${mockImageId}/original.webp`,
       );
       mockStorageService.readFile.mockResolvedValue(Buffer.from('image-data'));
       mockStorageService.fileExists.mockResolvedValue(true);
@@ -542,10 +554,17 @@ describe('ImageService', () => {
 
     it('should return thumbnail when requested', async () => {
       mockStorageService.getImageFilePath.mockReturnValue(
-        `storage/${mockDomain}/images/${mockImageId}/thumb.webp`
+        `storage/${mockDomain}/images/${mockImageId}/thumb.webp`,
       );
 
-      const result = await service.getImageFile(mockImageId, undefined, undefined, 'webp', 85, true);
+      const result = await service.getImageFile(
+        mockImageId,
+        undefined,
+        undefined,
+        'webp',
+        85,
+        true,
+      );
 
       expect(mockStorageService.getImageFilePath).toHaveBeenCalledWith(
         mockDomain,
@@ -556,7 +575,9 @@ describe('ImageService', () => {
     });
 
     it('should resize image with custom dimensions', async () => {
-      mockStorageService.resizeImage = jest.fn().mockResolvedValue(Buffer.from('resized-data'));
+      mockStorageService.resizeImage = jest
+        .fn()
+        .mockResolvedValue(Buffer.from('resized-data'));
 
       const result = await service.getImageFile(mockImageId, 800, 600);
 
@@ -564,9 +585,16 @@ describe('ImageService', () => {
     });
 
     it('should convert image to different format', async () => {
-      mockStorageService.resizeImage = jest.fn().mockResolvedValue(Buffer.from('converted-data'));
+      mockStorageService.resizeImage = jest
+        .fn()
+        .mockResolvedValue(Buffer.from('converted-data'));
 
-      const result = await service.getImageFile(mockImageId, undefined, undefined, 'jpeg');
+      const result = await service.getImageFile(
+        mockImageId,
+        undefined,
+        undefined,
+        'jpeg',
+      );
 
       expect(result.mimeType).toBe('image/jpeg');
     });
@@ -631,9 +659,7 @@ describe('ImageService', () => {
 
   describe('getUnoptimizedImages', () => {
     it('should return unoptimized images', async () => {
-      const unoptimizedImages = [
-        { ...mockImage, isOptimized: false },
-      ];
+      const unoptimizedImages = [{ ...mockImage, isOptimized: false }];
       mockPrismaService.image.findMany.mockResolvedValue(unoptimizedImages);
 
       const result = await service.getUnoptimizedImages();
@@ -672,10 +698,7 @@ describe('ImageService', () => {
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
         description: 'Updated description',
-        imageTags: [
-          { tag: { name: 'nature' } },
-          { tag: { name: 'sunset' } },
-        ],
+        imageTags: [{ tag: { name: 'nature' } }, { tag: { name: 'sunset' } }],
       });
 
       const result = await service.updateImageMetadata(
@@ -726,7 +749,9 @@ describe('ImageService', () => {
 
   describe('deleteExpiredShareLinks', () => {
     it('should delete expired share links', async () => {
-      mockPrismaService.imageShareLink.deleteMany.mockResolvedValue({ count: 5 });
+      mockPrismaService.imageShareLink.deleteMany.mockResolvedValue({
+        count: 5,
+      });
 
       const result = await service.deleteExpiredShareLinks();
 

@@ -4,9 +4,9 @@ import { BastionTokenVerifier } from '../bastion-token-verifier.service';
 
 /**
  * Bastion user identity attached to `request.bastionUser` by `BastionUserJwtGuard`.
- * Unlike `AdminJwtPayload`, this carries no local enrichment (no AdminUser row,
- * no role/permissions gate) — any signed-in Bastion user of an accepted app
- * passes. Used by self-service endpoints (e.g. `/me/avatar`) where the caller
+ * Unlike `AdminJwtPayload`, this carries no local enrichment (no principal, no
+ * client scope) and passes no permission check — any signed-in Bastion user of
+ * an accepted app passes. Used by self-service endpoints (e.g. `/me/avatar`) where the caller
  * is acting on their own behalf, not as a console admin.
  */
 export interface BastionUserPayload {
@@ -31,7 +31,9 @@ export class BastionUserJwtGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const payload = await this.tokenVerifier.verifyAuthHeader(request.headers['authorization']);
+    const payload = await this.tokenVerifier.verifyAuthHeader(
+      request.headers['authorization'],
+    );
 
     (request as any).bastionUser = {
       sub: payload.sub,

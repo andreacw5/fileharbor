@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { UserService } from '@/modules/user/user.service';
 import { UserResponseDto } from '@/modules/user/dto/user-response.dto';
@@ -29,6 +30,7 @@ import { CreateUserAdminDto } from '@/modules/admin/dto/create-user-admin.dto';
 @Controller('admin/users')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-library.manage')
 export class UsersAdminController {
   constructor(private readonly userService: UserService) {}
 
@@ -36,9 +38,15 @@ export class UsersAdminController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new user for a client' })
   @ApiResponse({ status: 201, type: UserResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid data or reserved externalUserId' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid data or reserved externalUserId',
+  })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  @ApiResponse({ status: 409, description: 'User already exists for this client' })
+  @ApiResponse({
+    status: 409,
+    description: 'User already exists for this client',
+  })
   createUser(
     @AdminUser() adminUser: AdminJwtPayload,
     @Body() dto: CreateUserAdminDto,
@@ -47,9 +55,19 @@ export class UsersAdminController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List users (scoped to accessible clients, system user excluded)' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Scope to a specific client' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by externalUserId or username' })
+  @ApiOperation({
+    summary: 'List users (scoped to accessible clients, system user excluded)',
+  })
+  @ApiQuery({
+    name: 'clientId',
+    required: false,
+    description: 'Scope to a specific client',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by externalUserId or username',
+  })
   @ApiQuery({
     name: 'isBookmarked',
     required: false,
@@ -58,29 +76,36 @@ export class UsersAdminController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'Paginated user list (email is never returned)' })
-   listUsers(
-     @AdminUser() adminUser: AdminJwtPayload,
-     @Query('clientId') clientId?: string,
-     @Query('search') search?: string,
-     @Query('isBookmarked') isBookmarked?: string,
-     @Query('page') page?: string,
-     @Query('perPage') perPage?: string,
-   ) {
-     const bookmarkedOnly =
-       isBookmarked !== undefined && ['true', '1'].includes(isBookmarked.toLowerCase());
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated user list (email is never returned)',
+  })
+  listUsers(
+    @AdminUser() adminUser: AdminJwtPayload,
+    @Query('clientId') clientId?: string,
+    @Query('search') search?: string,
+    @Query('isBookmarked') isBookmarked?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    const bookmarkedOnly =
+      isBookmarked !== undefined &&
+      ['true', '1'].includes(isBookmarked.toLowerCase());
 
-     return this.userService.listUsers(adminUser, {
-       clientId,
-       search,
-       ...(bookmarkedOnly && { isBookmarked: true }),
-       page: Number(page) || 1,
-       perPage: Number(perPage) || 20,
-     });
-   }
+    return this.userService.listUsers(adminUser, {
+      clientId,
+      search,
+      ...(bookmarkedOnly && { isBookmarked: true }),
+      page: Number(page) || 1,
+      perPage: Number(perPage) || 20,
+    });
+  }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user details by internal UUID (email and sensitive data excluded)' })
+  @ApiOperation({
+    summary:
+      'Get user details by internal UUID (email and sensitive data excluded)',
+  })
   @ApiResponse({ status: 200, type: UserResponseDto })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -94,10 +119,14 @@ export class UsersAdminController {
   @Patch(':id')
   @ApiOperation({
     summary: 'Update user details (externalUserId, email, username)',
-    description: 'Admin can update users from accessible clients. System user cannot be updated.',
+    description:
+      'Admin can update users from accessible clients. System user cannot be updated.',
   })
   @ApiResponse({ status: 200, type: UserResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid data or system user update attempt' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid data or system user update attempt',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   updateUser(
@@ -108,4 +137,3 @@ export class UsersAdminController {
     return this.userService.updateUserAdmin(id, dto, adminUser);
   }
 }
-

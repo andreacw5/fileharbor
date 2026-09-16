@@ -26,7 +26,9 @@ export class ClientInitService implements OnModuleInit {
       const clientCount = await this.prisma.client.count();
 
       if (clientCount === 0) {
-        this.logger.log('Database is empty. Creating default client and admin user...');
+        this.logger.log(
+          'Database is empty. Creating default client and admin user...',
+        );
 
         // Create default client using ClientService
         const defaultClient = await this.clientService.createClient({
@@ -35,7 +37,9 @@ export class ClientInitService implements OnModuleInit {
           active: true,
         });
 
-        this.logger.log(`Created default client: ${defaultClient.name} (ID: ${defaultClient.id})`);
+        this.logger.log(
+          `Created default client: ${defaultClient.name} (ID: ${defaultClient.id})`,
+        );
         this.logger.log(`API Key: ${defaultClient.apiKey}`);
 
         // Get the default users that were auto-created by ClientService
@@ -46,13 +50,17 @@ export class ClientInitService implements OnModuleInit {
         if (defaultUsers.length > 0) {
           this.logger.log(`Created ${defaultUsers.length} default users:`);
           for (const user of defaultUsers) {
-            this.logger.log(`  - ${user.username} (externalUserId: ${user.externalUserId}, ID: ${user.id})`);
+            this.logger.log(
+              `  - ${user.username} (externalUserId: ${user.externalUserId}, ID: ${user.id})`,
+            );
           }
         }
 
         this.logger.log('Default client initialization completed.');
       } else {
-        this.logger.log(`Found ${clientCount} existing client(s). Skipping initialization.`);
+        this.logger.log(
+          `Found ${clientCount} existing client(s). Skipping initialization.`,
+        );
 
         // In development mode, log existing clients info
         if (isDevelopment) {
@@ -82,7 +90,9 @@ export class ClientInitService implements OnModuleInit {
             this.logger.log(`  Users (${client.users.length}):`);
 
             for (const user of client.users) {
-              this.logger.log(`    - ${user.username || user.externalUserId} (ID: ${user.id}, External: ${user.externalUserId})`);
+              this.logger.log(
+                `    - ${user.username || user.externalUserId} (ID: ${user.id}, External: ${user.externalUserId})`,
+              );
               if (user.email) {
                 this.logger.log(`      Email: ${user.email}`);
               }
@@ -96,6 +106,4 @@ export class ClientInitService implements OnModuleInit {
       // Don't throw - allow app to start even if initialization fails
     }
   }
-
 }
-

@@ -36,6 +36,10 @@ export class VideoResponseDto {
   tags: string[];
 
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
-  @ApiProperty({ description: 'Full absolute stream URL' }) @Expose() fullPath: string;
-  @ApiProperty({ description: 'Full absolute thumbnail URL' }) @Expose() fullThumbnailUrl: string;
+  @ApiProperty({ description: 'Full absolute stream URL' })
+  @Expose()
+  fullPath: string;
+  @ApiProperty({ description: 'Full absolute thumbnail URL' })
+  @Expose()
+  fullThumbnailUrl: string;
 }

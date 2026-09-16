@@ -9,7 +9,10 @@ import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import { WebhookService, WebhookEvent } from '@/modules/webhook/webhook.service';
+import {
+  WebhookService,
+  WebhookEvent,
+} from '@/modules/webhook/webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import { lastValueFrom } from 'rxjs';
@@ -22,9 +25,11 @@ import {
   PaginationMetaDto,
   TinifyCompressionResponseDto,
 } from './dto';
-import { buildImageTagCreateInput, extractTagNames } from '@/modules/tag/tag.utils';
+import {
+  buildImageTagCreateInput,
+  extractTagNames,
+} from '@/modules/tag/tag.utils';
 import { UserService } from '@/modules/user/user.service';
-
 
 @Injectable()
 export class ImageService {
@@ -43,9 +48,13 @@ export class ImageService {
     private route: RouteHelperService,
   ) {
     // Original should be high quality to preserve image fidelity
-    this.originalQuality = parseInt(this.config.get('ORIGINAL_QUALITY') || '100');
+    this.originalQuality = parseInt(
+      this.config.get('ORIGINAL_QUALITY') || '100',
+    );
     // Thumbnail can use lower quality to reduce file size
-    this.thumbnailQuality = parseInt(this.config.get('THUMBNAIL_QUALITY') || '70');
+    this.thumbnailQuality = parseInt(
+      this.config.get('THUMBNAIL_QUALITY') || '70',
+    );
     this.thumbnailSize = parseInt(this.config.get('THUMBNAIL_SIZE') || '800');
   }
 
@@ -64,14 +73,14 @@ export class ImageService {
   ) {
     const imageId = uuidv4();
     this.logger.debug(
-      `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, User: ${externalUserId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`
+      `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, User: ${externalUserId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`,
     );
 
     try {
       // Validate file
       if (!file.mimetype.startsWith('image/')) {
         this.logger.warn(
-          `[uploadImage] Invalid MIME type - ID: ${imageId}, Client: ${clientId}, Type: ${file.mimetype}`
+          `[uploadImage] Invalid MIME type - ID: ${imageId}, Client: ${clientId}, Type: ${file.mimetype}`,
         );
         throw new BadRequestException('Only image files are allowed');
       }
@@ -81,7 +90,9 @@ export class ImageService {
         where: { id: clientId },
       });
       if (!client) {
-        this.logger.error(`[uploadImage] Client not found - ID: ${imageId}, Client: ${clientId}`);
+        this.logger.error(
+          `[uploadImage] Client not found - ID: ${imageId}, Client: ${clientId}`,
+        );
         throw new BadRequestException('Client not found');
       }
       const domain = client.domain || clientId;
@@ -89,8 +100,14 @@ export class ImageService {
       // Get or create user
       let user;
       if (externalUserId) {
-        this.logger.debug(`[uploadImage] Resolving user - ID: ${imageId}, External: ${externalUserId}, Username: ${username || 'auto'}`);
-        user = await this.userService.resolveUser(clientId, externalUserId, username);
+        this.logger.debug(
+          `[uploadImage] Resolving user - ID: ${imageId}, External: ${externalUserId}, Username: ${username || 'auto'}`,
+        );
+        user = await this.userService.resolveUser(
+          clientId,
+          externalUserId,
+          username,
+        );
       } else {
         // If no externalUserId, use the system user
         user = await this.prisma.user.findUnique({
@@ -102,7 +119,9 @@ export class ImageService {
           },
         });
         if (!user) {
-          this.logger.error(`[uploadImage] System user not found - ID: ${imageId}, Client: ${clientId}`);
+          this.logger.error(
+            `[uploadImage] System user not found - ID: ${imageId}, Client: ${clientId}`,
+          );
           throw new BadRequestException('System user not found for client');
         }
       }
@@ -114,35 +133,51 @@ export class ImageService {
       this.logger.debug(`[uploadImage] Extracting metadata - ID: ${imageId}`);
       const metadata = await this.storage.getImageMetadata(file.buffer);
       this.logger.debug(
-        `[uploadImage] Metadata extracted - ID: ${imageId}, Dimensions: ${metadata.width}x${metadata.height}`
+        `[uploadImage] Metadata extracted - ID: ${imageId}, Dimensions: ${metadata.width}x${metadata.height}`,
       );
 
       // Convert to WebP for original (high quality)
-      this.logger.debug(`[uploadImage] Converting to WebP - ID: ${imageId}, Quality: ${this.originalQuality}`);
+      this.logger.debug(
+        `[uploadImage] Converting to WebP - ID: ${imageId}, Quality: ${this.originalQuality}`,
+      );
       const webpBuffer = await this.storage.convertToWebP(
         file.buffer,
         this.originalQuality,
       );
 
       // Save original
-      this.logger.debug(`[uploadImage] Saving original - ID: ${imageId}, Size: ${webpBuffer.length} bytes`);
-      const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+      this.logger.debug(
+        `[uploadImage] Saving original - ID: ${imageId}, Size: ${webpBuffer.length} bytes`,
+      );
+      const originalPath = this.storage.getImageFilePath(
+        domain,
+        imageId,
+        'original',
+      );
       await this.storage.saveFile(originalPath, webpBuffer);
 
       // Create thumbnail (lower quality for smaller size)
-      this.logger.debug(`[uploadImage] Creating thumbnail - ID: ${imageId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`);
+      this.logger.debug(
+        `[uploadImage] Creating thumbnail - ID: ${imageId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`,
+      );
       const thumbBuffer = await this.storage.createThumbnail(
         webpBuffer,
         this.thumbnailSize,
         this.thumbnailQuality,
       );
-      const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      const thumbnailPath = this.storage.getImageFilePath(
+        domain,
+        imageId,
+        'thumb',
+      );
       await this.storage.saveFile(thumbnailPath, thumbBuffer);
-      this.logger.debug(`[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`);
+      this.logger.debug(
+        `[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`,
+      );
 
       // Save to database (storagePath is the base path without extension)
       this.logger.debug(
-        `[uploadImage] Saving to database - ID: ${imageId}, Tags: ${tags?.length || 0}, Private: ${isPrivate}`
+        `[uploadImage] Saving to database - ID: ${imageId}, Tags: ${tags?.length || 0}, Private: ${isPrivate}`,
       );
       const imageTagsInput = buildImageTagCreateInput(clientId, tags);
       const image = await this.prisma.image.create({
@@ -160,7 +195,9 @@ export class ImageService {
           isOptimized: false,
           isPrivate: isPrivate || false,
           description: description || null,
-          ...(imageTagsInput.length > 0 && { imageTags: { create: imageTagsInput } }),
+          ...(imageTagsInput.length > 0 && {
+            imageTags: { create: imageTagsInput },
+          }),
         },
         include: {
           imageTags: {
@@ -176,34 +213,38 @@ export class ImageService {
       });
 
       // Send webhook notification (non-blocking)
-      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, {
-        imageId: image.id,
-        originalName: image.originalName,
-        width: image.width,
-        height: image.height,
-        size: image.size,
-        format: image.format,
-        userId: user.externalUserId,
-      }).catch((error) => {
-        this.logger.warn(
-          `[uploadImage] Failed to send webhook for image ${imageId}:`,
-          error instanceof Error ? error.message : error
-        );
-      });
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, {
+          imageId: image.id,
+          originalName: image.originalName,
+          width: image.width,
+          height: image.height,
+          size: image.size,
+          format: image.format,
+          userId: user.externalUserId,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `[uploadImage] Failed to send webhook for image ${imageId}:`,
+            error instanceof Error ? error.message : error,
+          );
+        });
 
       // Add to album if specified
       if (albumId) {
-        this.logger.debug(`[uploadImage] Adding to album - ID: ${imageId}, Album: ${albumId}`);
+        this.logger.debug(
+          `[uploadImage] Adding to album - ID: ${imageId}, Album: ${albumId}`,
+        );
         await this.addImageToAlbum(imageId, albumId, clientId);
       }
 
       this.logger.log(
-        `[uploadImage] Success - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Size: ${webpBuffer.length}`
+        `[uploadImage] Success - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Size: ${webpBuffer.length}`,
       );
       return this.formatImageResponse(image);
     } catch (error) {
       this.logger.error(
-        `[uploadImage] Failed - ID: ${imageId}, Client: ${clientId}, Error: ${error.message}`
+        `[uploadImage] Failed - ID: ${imageId}, Client: ${clientId}, Error: ${error.message}`,
       );
       throw error;
     }
@@ -269,7 +310,11 @@ export class ImageService {
     }
 
     // Load original
-    const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+    const originalPath = this.storage.getImageFilePath(
+      domain,
+      imageId,
+      'original',
+    );
     const originalBuffer = await this.storage.readFile(originalPath);
 
     // If no resize needed and format matches
@@ -371,16 +416,16 @@ export class ImageService {
               id: true,
               externalUserId: true,
               username: true,
-            }
+            },
           },
           client: {
             select: {
               id: true,
               name: true,
               domain: true,
-            }
+            },
           },
-        }
+        },
       }),
       this.prisma.image.count({ where }),
     ]);
@@ -407,9 +452,12 @@ export class ImageService {
   /**
    * Delete image
    */
-  async deleteImage(imageId: string, clientId: string): Promise<DeleteResponseDto> {
+  async deleteImage(
+    imageId: string,
+    clientId: string,
+  ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}`
+      `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}`,
     );
 
     const image = await this.prisma.image.findFirst({
@@ -421,7 +469,7 @@ export class ImageService {
 
     if (!image) {
       this.logger.warn(
-        `[deleteImage] Image not found - ID: ${imageId}, Client: ${clientId}`
+        `[deleteImage] Image not found - ID: ${imageId}, Client: ${clientId}`,
       );
       throw new NotFoundException('Image not found');
     }
@@ -435,33 +483,39 @@ export class ImageService {
 
       // Delete files
       const imagePath = this.storage.getImagePath(domain, imageId);
-      this.logger.debug(`[deleteImage] Deleting files - ID: ${imageId}, Path: ${imagePath}`);
+      this.logger.debug(
+        `[deleteImage] Deleting files - ID: ${imageId}, Path: ${imagePath}`,
+      );
       await this.storage.deleteDirectory(imagePath);
 
       // Delete from database
-      this.logger.debug(`[deleteImage] Deleting from database - ID: ${imageId}`);
+      this.logger.debug(
+        `[deleteImage] Deleting from database - ID: ${imageId}`,
+      );
       await this.prisma.image.delete({
         where: { id: imageId },
       });
 
       // Send webhook notification (non-blocking)
-      this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_DELETED, {
-        id: imageId,
-        timestamp: new Date().toISOString(),
-      }).catch((error) => {
-        this.logger.warn(
-          `[deleteImage] Failed to send webhook for image ${imageId}:`,
-          error instanceof Error ? error.message : error
-        );
-      });
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.IMAGE_DELETED, {
+          id: imageId,
+          timestamp: new Date().toISOString(),
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `[deleteImage] Failed to send webhook for image ${imageId}:`,
+            error instanceof Error ? error.message : error,
+          );
+        });
 
       this.logger.log(
-        `[deleteImage] Success - ID: ${imageId}, Client: ${clientId}, Size: ${image.size} bytes`
+        `[deleteImage] Success - ID: ${imageId}, Client: ${clientId}, Size: ${image.size} bytes`,
       );
       return this.formatDeleteResponse('Image deleted successfully');
     } catch (error) {
       this.logger.error(
-        `[deleteImage] Failed - ID: ${imageId}, Error: ${error.message}`
+        `[deleteImage] Failed - ID: ${imageId}, Error: ${error.message}`,
       );
       throw error;
     }
@@ -533,7 +587,7 @@ export class ImageService {
     description?: string,
   ) {
     this.logger.debug(
-      `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Tags: ${tags?.length || 0}`
+      `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Tags: ${tags?.length || 0}`,
     );
 
     const image = await this.prisma.image.findFirst({
@@ -546,12 +600,13 @@ export class ImageService {
 
     if (!image) {
       this.logger.warn(
-        `[updateImageMetadata] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+        `[updateImageMetadata] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`,
       );
       throw new NotFoundException('Image not found');
     }
 
-    const imageTagsInput = tags !== undefined ? buildImageTagCreateInput(clientId, tags) : undefined;
+    const imageTagsInput =
+      tags !== undefined ? buildImageTagCreateInput(clientId, tags) : undefined;
     const updatedImage = await this.prisma.image.update({
       where: { id: imageId },
       data: {
@@ -576,7 +631,9 @@ export class ImageService {
       },
     });
 
-    this.logger.log(`[updateImageMetadata] Success - ID: ${imageId}, Client: ${clientId}`);
+    this.logger.log(
+      `[updateImageMetadata] Success - ID: ${imageId}, Client: ${clientId}`,
+    );
     return this.formatImageResponse(updatedImage);
   }
 
@@ -596,7 +653,7 @@ export class ImageService {
    * Increment downloads counter
    */
   async incrementDownloads(imageId: string, clientId: string) {
-    const image = await this.getImageById(imageId, clientId);
+    await this.getImageById(imageId, clientId);
 
     await this.prisma.image.update({
       where: { id: imageId },
@@ -616,7 +673,7 @@ export class ImageService {
     expiresAt?: Date,
   ): Promise<ShareLinkResponseDto> {
     this.logger.debug(
-      `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Expires: ${expiresAt?.toISOString() || 'never'}`
+      `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
 
     const image = await this.prisma.image.findFirst({
@@ -629,7 +686,7 @@ export class ImageService {
 
     if (!image) {
       this.logger.warn(
-        `[createShareLink] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`
+        `[createShareLink] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`,
       );
       throw new NotFoundException('Image not found');
     }
@@ -645,7 +702,7 @@ export class ImageService {
     });
 
     this.logger.log(
-      `[createShareLink] Success - ID: ${imageId}, Token: ${readToken}, Expires: ${expiresAt?.toISOString() || 'never'}`
+      `[createShareLink] Success - ID: ${imageId}, Token: ${readToken}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
     return this.formatShareLinkResponse(shareLink);
   }
@@ -653,7 +710,11 @@ export class ImageService {
   /**
    * Get share links for an image
    */
-  async getShareLinks(imageId: string, clientId: string, userId: string): Promise<ShareLinkResponseDto[]> {
+  async getShareLinks(
+    imageId: string,
+    clientId: string,
+    userId: string,
+  ): Promise<ShareLinkResponseDto[]> {
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
@@ -683,7 +744,7 @@ export class ImageService {
     userId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[deleteShareLink] Start - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}`
+      `[deleteShareLink] Start - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}`,
     );
 
     const shareLink = await this.prisma.imageShareLink.findUnique({
@@ -693,14 +754,17 @@ export class ImageService {
 
     if (!shareLink) {
       this.logger.warn(
-        `[deleteShareLink] Share link not found - LinkID: ${shareLinkId}, Client: ${clientId}`
+        `[deleteShareLink] Share link not found - LinkID: ${shareLinkId}, Client: ${clientId}`,
       );
       throw new NotFoundException('Share link not found');
     }
 
-    if (shareLink.image.clientId !== clientId || shareLink.image.userId !== userId) {
+    if (
+      shareLink.image.clientId !== clientId ||
+      shareLink.image.userId !== userId
+    ) {
       this.logger.warn(
-        `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}, ImageClient: ${shareLink.image.clientId}`
+        `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}, ImageClient: ${shareLink.image.clientId}`,
       );
       throw new NotFoundException('Share link not found');
     }
@@ -709,10 +773,11 @@ export class ImageService {
       where: { id: shareLinkId },
     });
 
-    this.logger.log(`[deleteShareLink] Success - LinkID: ${shareLinkId}, ImageID: ${shareLink.imageId}`);
+    this.logger.log(
+      `[deleteShareLink] Success - LinkID: ${shareLinkId}, ImageID: ${shareLink.imageId}`,
+    );
     return this.formatDeleteResponse('Share link deleted successfully');
   }
-
 
   /**
    * Get image by share token
@@ -814,7 +879,9 @@ export class ImageService {
     }
 
     if (!clientId) {
-      throw new ForbiddenException('This image is private. Authentication required.');
+      throw new ForbiddenException(
+        'This image is private. Authentication required.',
+      );
     }
 
     const hasAccess = await this.checkImageAccess(
@@ -826,7 +893,9 @@ export class ImageService {
 
     if (!hasAccess) {
       throw new ForbiddenException(
-        token ? 'Invalid token or access denied.' : 'You do not have access to this private image.',
+        token
+          ? 'Invalid token or access denied.'
+          : 'You do not have access to this private image.',
       );
     }
   }
@@ -892,9 +961,11 @@ export class ImageService {
     where: any,
     options: { skip: number; take: number; page: number },
     sort?: { field: string; order: 'asc' | 'desc' },
-    adminUserId?: string,
+    actorId?: string,
   ) {
-    const orderBy: any = sort ? { [sort.field]: sort.order } : { createdAt: 'desc' };
+    const orderBy: any = sort
+      ? { [sort.field]: sort.order }
+      : { createdAt: 'desc' };
 
     const [images, total] = await Promise.all([
       this.prisma.image.findMany({
@@ -912,9 +983,9 @@ export class ImageService {
     ]);
 
     let bookmarkedIds = new Set<string>();
-    if (adminUserId && images.length > 0) {
+    if (actorId && images.length > 0) {
       const bookmarks = await this.prisma.adminImageBookmark.findMany({
-        where: { adminUserId, imageId: { in: images.map((i) => i.id) } },
+        where: { actorId, imageId: { in: images.map((i) => i.id) } },
         select: { imageId: true },
       });
       bookmarkedIds = new Set(bookmarks.map((b) => b.imageId));
@@ -942,7 +1013,7 @@ export class ImageService {
    * Admin full image fetch — includes albums, active share-link count, user.
    * Returns null if not found.
    */
-  async findAdminImageById(imageId: string, adminUserId?: string) {
+  async findAdminImageById(imageId: string, actorId?: string) {
     const now = new Date();
     const image = await this.prisma.image.findUnique({
       where: { id: imageId },
@@ -953,12 +1024,21 @@ export class ImageService {
         albumItems: {
           where: { resourceType: 'IMAGE' },
           include: {
-            album: { select: { id: true, name: true, externalAlbumId: true, isPublic: true } },
+            album: {
+              select: {
+                id: true,
+                name: true,
+                externalAlbumId: true,
+                isPublic: true,
+              },
+            },
           },
         },
         _count: {
           select: {
-            shareLinks: { where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+            shareLinks: {
+              where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+            },
           },
         },
       },
@@ -967,9 +1047,9 @@ export class ImageService {
     if (!image) return null;
 
     let isBookmarked = false;
-    if (adminUserId) {
+    if (actorId) {
       const bookmark = await this.prisma.adminImageBookmark.findUnique({
-        where: { adminUserId_imageId: { adminUserId, imageId } },
+        where: { actorId_imageId: { actorId, imageId } },
         select: { imageId: true },
       });
       isBookmarked = !!bookmark;
@@ -1014,7 +1094,9 @@ export class ImageService {
    * Compress image with Tinify (TinyPNG) API
    * Replaces the original image and regenerates thumbnail
    */
-  async compressImageWithTinify(imageId: string): Promise<TinifyCompressionResponseDto> {
+  async compressImageWithTinify(
+    imageId: string,
+  ): Promise<TinifyCompressionResponseDto> {
     this.logger.debug(`[compressImageWithTinify] Start - ID: ${imageId}`);
 
     // Get image from database
@@ -1034,14 +1116,20 @@ export class ImageService {
     });
 
     if (!image) {
-      this.logger.warn(`[compressImageWithTinify] Image not found - ID: ${imageId}`);
+      this.logger.warn(
+        `[compressImageWithTinify] Image not found - ID: ${imageId}`,
+      );
       throw new NotFoundException('Image not found');
     }
 
     // Check if image was already compressed with Tinify to avoid reprocessing
     if (image.tinifyOptimized) {
-      this.logger.warn(`[compressImageWithTinify] Image already compressed with Tinify - ID: ${imageId}`);
-      throw new BadRequestException('This image has already been compressed with Tinify');
+      this.logger.warn(
+        `[compressImageWithTinify] Image already compressed with Tinify - ID: ${imageId}`,
+      );
+      throw new BadRequestException(
+        'This image has already been compressed with Tinify',
+      );
     }
 
     // Get client to retrieve Tinify configuration
@@ -1050,59 +1138,87 @@ export class ImageService {
     });
 
     if (!client) {
-      this.logger.error(`[compressImageWithTinify] Client not found - ID: ${image.clientId}`);
+      this.logger.error(
+        `[compressImageWithTinify] Client not found - ID: ${image.clientId}`,
+      );
       throw new NotFoundException('Client not found');
     }
 
     // Check if Tinify is enabled for this client
     if (!client.tinifyActive) {
-      this.logger.error(`[compressImageWithTinify] Tinify not enabled for client - ID: ${client.id}`);
-      throw new BadRequestException('Tinify compression is not enabled for this client');
+      this.logger.error(
+        `[compressImageWithTinify] Tinify not enabled for client - ID: ${client.id}`,
+      );
+      throw new BadRequestException(
+        'Tinify compression is not enabled for this client',
+      );
     }
 
     // Get API key from client
     const tinifyKey = client.tinifyApiKey;
     if (!tinifyKey || !tinifyKey.trim()) {
-      this.logger.error(`[compressImageWithTinify] Tinify API key not configured for client - ID: ${client.id}`);
-      throw new BadRequestException('Tinify API key not configured for this client');
+      this.logger.error(
+        `[compressImageWithTinify] Tinify API key not configured for client - ID: ${client.id}`,
+      );
+      throw new BadRequestException(
+        'Tinify API key not configured for this client',
+      );
     }
 
     // Check usage limit (configurable per client, default 500)
     if (client.currentTinifyUsage >= client.currentTinifyLimit) {
-      this.logger.warn(`[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Usage: ${client.currentTinifyUsage}/${client.currentTinifyLimit}`);
-      throw new BadRequestException(`Monthly Tinify compression limit reached (${client.currentTinifyUsage}/${client.currentTinifyLimit}). Limit will reset next month.`);
+      this.logger.warn(
+        `[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Usage: ${client.currentTinifyUsage}/${client.currentTinifyLimit}`,
+      );
+      throw new BadRequestException(
+        `Monthly Tinify compression limit reached (${client.currentTinifyUsage}/${client.currentTinifyLimit}). Limit will reset next month.`,
+      );
     }
 
     try {
       const domain = client.domain || image.clientId;
 
       // Read the current original file
-      const originalPath = this.storage.getImageFilePath(domain, imageId, 'original');
+      const originalPath = this.storage.getImageFilePath(
+        domain,
+        imageId,
+        'original',
+      );
       const originalBuffer = await this.storage.readFile(originalPath);
       const originalSize = originalBuffer.length;
 
-      this.logger.debug(`[compressImageWithTinify] Original size: ${originalSize} bytes - ID: ${imageId}`);
+      this.logger.debug(
+        `[compressImageWithTinify] Original size: ${originalSize} bytes - ID: ${imageId}`,
+      );
 
       // Prepare Basic Auth header (api:YOUR_API_KEY)
-      const authString = Buffer.from(`api:${tinifyKey.trim()}`).toString('base64');
+      const authString = Buffer.from(`api:${tinifyKey.trim()}`).toString(
+        'base64',
+      );
       const headers = {
-        'Authorization': `Basic ${authString}`,
+        Authorization: `Basic ${authString}`,
         'Content-Type': 'application/octet-stream',
       };
 
       // Step 1: Upload image to Tinify API
-      this.logger.debug(`[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`);
+      this.logger.debug(
+        `[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`,
+      );
       const uploadResponse = await lastValueFrom(
         this.httpService.post('https://api.tinify.com/shrink', originalBuffer, {
           headers,
           responseType: 'json',
-        })
+        }),
       );
 
       // Check for successful upload
-      if (!uploadResponse.data || !uploadResponse.data.output || !uploadResponse.data.output.url) {
+      if (
+        !uploadResponse.data ||
+        !uploadResponse.data.output ||
+        !uploadResponse.data.output.url
+      ) {
         this.logger.error(
-          `[compressImageWithTinify] Invalid response from Tinify API - ID: ${imageId}`
+          `[compressImageWithTinify] Invalid response from Tinify API - ID: ${imageId}`,
         );
         throw new BadRequestException('Failed to compress image with Tinify');
       }
@@ -1113,36 +1229,48 @@ export class ImageService {
       const savedPercentage = ((savedBytes / originalSize) * 100).toFixed(2);
 
       this.logger.debug(
-        `[compressImageWithTinify] Compressed size: ${compressedSize} bytes (saved ${savedBytes} bytes, ${savedPercentage}%) - ID: ${imageId}`
+        `[compressImageWithTinify] Compressed size: ${compressedSize} bytes (saved ${savedBytes} bytes, ${savedPercentage}%) - ID: ${imageId}`,
       );
 
       // Step 2: Download compressed image
-      this.logger.debug(`[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`);
+      this.logger.debug(
+        `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
+      );
       const downloadResponse = await lastValueFrom(
         this.httpService.get(compressedUrl, {
           headers: {
-            'Authorization': `Basic ${authString}`,
+            Authorization: `Basic ${authString}`,
           },
           responseType: 'arraybuffer',
-        })
+        }),
       );
 
       const compressedBuffer = Buffer.from(downloadResponse.data);
 
       // Save compressed file, replacing the original
       await this.storage.saveFile(originalPath, compressedBuffer);
-      this.logger.debug(`[compressImageWithTinify] Compressed file saved - ID: ${imageId}`);
+      this.logger.debug(
+        `[compressImageWithTinify] Compressed file saved - ID: ${imageId}`,
+      );
 
       // Regenerate thumbnail from compressed image
-      this.logger.debug(`[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`);
+      this.logger.debug(
+        `[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`,
+      );
       const thumbBuffer = await this.storage.createThumbnail(
         compressedBuffer,
         this.thumbnailSize,
         this.thumbnailQuality,
       );
-      const thumbnailPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      const thumbnailPath = this.storage.getImageFilePath(
+        domain,
+        imageId,
+        'thumb',
+      );
       await this.storage.saveFile(thumbnailPath, thumbBuffer);
-      this.logger.debug(`[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`);
+      this.logger.debug(
+        `[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`,
+      );
 
       // Update database with new size, mark as Tinify-optimized, and increment usage counter
       const [updatedImage] = await this.prisma.$transaction([
@@ -1175,27 +1303,29 @@ export class ImageService {
       ]);
 
       this.logger.log(
-        `[compressImageWithTinify] Tinify usage updated for client ${client.id}: ${client.currentTinifyUsage + 1}/${client.currentTinifyLimit}`
+        `[compressImageWithTinify] Tinify usage updated for client ${client.id}: ${client.currentTinifyUsage + 1}/${client.currentTinifyLimit}`,
       );
 
       // Send webhook notification (non-blocking)
-      this.webhook.sendWebhook(image.clientId, WebhookEvent.IMAGE_UPLOADED, {
-        imageId: image.id,
-        originalName: image.originalName,
-        action: 'tinify_compressed',
-        originalSize,
-        compressedSize,
-        savedBytes,
-        savedPercentage: `${savedPercentage}%`,
-      }).catch((error) => {
-        this.logger.warn(
-          `[compressImageWithTinify] Failed to send webhook for image ${imageId}:`,
-          error instanceof Error ? error.message : error
-        );
-      });
+      this.webhook
+        .sendWebhook(image.clientId, WebhookEvent.IMAGE_UPLOADED, {
+          imageId: image.id,
+          originalName: image.originalName,
+          action: 'tinify_compressed',
+          originalSize,
+          compressedSize,
+          savedBytes,
+          savedPercentage: `${savedPercentage}%`,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `[compressImageWithTinify] Failed to send webhook for image ${imageId}:`,
+            error instanceof Error ? error.message : error,
+          );
+        });
 
       this.logger.log(
-        `[compressImageWithTinify] Success - ID: ${imageId}, Saved: ${savedBytes} bytes (${savedPercentage}%)`
+        `[compressImageWithTinify] Success - ID: ${imageId}, Saved: ${savedBytes} bytes (${savedPercentage}%)`,
       );
 
       const imageResponse = this.formatImageResponse(updatedImage);
@@ -1211,17 +1341,17 @@ export class ImageService {
             savedPercentage: `${savedPercentage}%`,
           },
         },
-        { excludeExtraneousValues: true }
+        { excludeExtraneousValues: true },
       );
     } catch (error) {
       // Log detailed error information
       if (error.response) {
         this.logger.error(
-          `[compressImageWithTinify] Tinify API error - ID: ${imageId}, Status: ${error.response.status}, Message: ${JSON.stringify(error.response.data)}`
+          `[compressImageWithTinify] Tinify API error - ID: ${imageId}, Status: ${error.response.status}, Message: ${JSON.stringify(error.response.data)}`,
         );
       } else {
         this.logger.error(
-          `[compressImageWithTinify] Failed - ID: ${imageId}, Error: ${error.message}`
+          `[compressImageWithTinify] Failed - ID: ${imageId}, Error: ${error.message}`,
         );
       }
       throw error;

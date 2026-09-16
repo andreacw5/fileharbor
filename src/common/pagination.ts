@@ -33,7 +33,11 @@ export interface PaginatedResult<T> {
   };
 }
 
-export function paginate<T>(data: T[], total: number, params: PageParams): PaginatedResult<T> {
+export function paginate<T>(
+  data: T[],
+  total: number,
+  params: PageParams,
+): PaginatedResult<T> {
   return {
     data,
     meta: {

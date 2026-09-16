@@ -49,4 +49,3 @@ export class TinifyCompressionResponseDto {
   @Type(() => CompressionStatsDto)
   compressionStats: CompressionStatsDto;
 }
-

@@ -13,10 +13,19 @@ export function normalizeTagNames(tags?: string[] | null): string[] {
     return [];
   }
 
-  return [...new Set(tags.map((tag) => tag?.trim()).filter((tag): tag is string => Boolean(tag)))];
+  return [
+    ...new Set(
+      tags
+        .map((tag) => tag?.trim())
+        .filter((tag): tag is string => Boolean(tag)),
+    ),
+  ];
 }
 
-export function buildImageTagCreateInput(clientId: string, tags?: string[] | null) {
+export function buildImageTagCreateInput(
+  clientId: string,
+  tags?: string[] | null,
+) {
   return normalizeTagNames(tags).map((name) => ({
     tag: {
       connectOrCreate: {
@@ -47,7 +56,10 @@ type VideoTagContainer = {
   videoTags?: Array<{ tag?: { name?: string | null } | null } | null> | null;
 };
 
-export function buildVideoTagCreateInput(clientId: string, tags?: string[] | null) {
+export function buildVideoTagCreateInput(
+  clientId: string,
+  tags?: string[] | null,
+) {
   return normalizeTagNames(tags).map((name) => ({
     tag: {
       connectOrCreate: {
@@ -65,5 +77,3 @@ export function extractVideoTagNames(entity: VideoTagContainer): string[] {
       .filter((name): name is string => Boolean(name)),
   );
 }
-
-

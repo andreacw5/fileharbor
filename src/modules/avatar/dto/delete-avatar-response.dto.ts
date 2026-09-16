@@ -16,4 +16,3 @@ export class DeleteAvatarResponseDto {
   @Expose()
   message: string;
 }
-

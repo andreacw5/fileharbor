@@ -2,7 +2,9 @@ import * as Joi from 'joi';
 
 export const configValidationSchema = Joi.object({
   // Environment
-  NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+  NODE_ENV: Joi.string()
+    .valid('development', 'production', 'test')
+    .default('development'),
 
   // Server
   PORT: Joi.number().positive().default(3000),
@@ -15,7 +17,9 @@ export const configValidationSchema = Joi.object({
   // Storage
   STORAGE_PATH: Joi.string().default('./storage'),
   MAX_FILE_SIZE: Joi.number().positive().default(10485760),
-  ALLOWED_IMAGE_TYPES: Joi.string().default('image/jpeg,image/png,image/webp,image/gif'),
+  ALLOWED_IMAGE_TYPES: Joi.string().default(
+    'image/jpeg,image/png,image/webp,image/gif',
+  ),
 
   // Image Processing
   THUMBNAIL_SIZE: Joi.number().positive().default(800),
@@ -28,7 +32,9 @@ export const configValidationSchema = Joi.object({
   THROTTLE_LIMIT: Joi.number().positive().default(10),
 
   // Logging
-  LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'debug', 'verbose').default('info'),
+  LOG_LEVEL: Joi.string()
+    .valid('error', 'warn', 'info', 'debug', 'verbose')
+    .default('info'),
 
   // Video Processing
   MAX_VIDEO_SIZE: Joi.number().positive().default(524288000),
@@ -43,8 +49,6 @@ export const configValidationSchema = Joi.object({
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),
   BASTION_APP_SLUG: Joi.string().default('fileharbor'),
-  BASTION_TENANT_SLUG: Joi.string().allow('').default(''),
   // Comma-separated app slugs accepted by AdminJwtGuard. Empty falls back to BASTION_APP_SLUG.
   ADMIN_ACCEPTED_APP_SLUGS: Joi.string().allow('').default(''),
-  FRONTEND_URL: Joi.string().uri().default('http://localhost:3000'),
 });

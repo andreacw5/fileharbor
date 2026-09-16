@@ -5,7 +5,7 @@ export class UpdateImageMetadataDto {
   @ApiPropertyOptional({
     description: 'Image tags',
     type: [String],
-    example: ['nature', 'landscape']
+    example: ['nature', 'landscape'],
   })
   @IsOptional()
   @IsArray()
@@ -14,10 +14,9 @@ export class UpdateImageMetadataDto {
 
   @ApiPropertyOptional({
     description: 'Image description',
-    example: 'Beautiful sunset over the mountains'
+    example: 'Beautiful sunset over the mountains',
   })
   @IsOptional()
   @IsString()
   description?: string;
 }
-

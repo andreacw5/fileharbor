@@ -31,14 +31,19 @@ export class VideoCleanupJob {
           if (!exists) {
             const videoDir = this.storage.getVideoPath(domain, videoId);
             await this.storage.deleteDirectory(videoDir);
-            this.logger.log(`[cleanOrphanedVideos] Deleted orphaned video dir: ${videoDir}`);
+            this.logger.log(
+              `[cleanOrphanedVideos] Deleted orphaned video dir: ${videoDir}`,
+            );
           }
         }
       }
 
       this.logger.log('Orphaned video cleanup completed');
     } catch (error) {
-      this.logger.error('Orphaned video cleanup failed:', error instanceof Error ? error.message : error);
+      this.logger.error(
+        'Orphaned video cleanup failed:',
+        error instanceof Error ? error.message : error,
+      );
     }
   }
 }

@@ -14,7 +14,8 @@ import {
   NotFoundException,
   ForbiddenException,
   Req,
-  Logger, StreamableFile,
+  Logger,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -57,11 +58,11 @@ export class ImageController {
     private storageService: StorageService,
   ) {}
 
-
   @Post()
   @ApiOperation({
     summary: 'Upload image',
-    description: 'Upload new image (JPEG, PNG, WebP, GIF). Auto-converts to WebP and optimizes. Optional album and privacy.',
+    description:
+      'Upload new image (JPEG, PNG, WebP, GIF). Auto-converts to WebP and optimizes. Optional album and privacy.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -74,11 +75,19 @@ export class ImageController {
         tags: { type: 'array', items: { type: 'string' } },
         description: { type: 'string' },
         isPrivate: { type: 'boolean', default: false },
-        username: { type: 'string', description: 'Username of the uploader (saved/updated on the user record)' },
+        username: {
+          type: 'string',
+          description:
+            'Username of the uploader (saved/updated on the user record)',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Uploaded successfully', type: ImageResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Uploaded successfully',
+    type: ImageResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
   @UseInterceptors(FileInterceptor('file'))
@@ -94,14 +103,14 @@ export class ImageController {
     }
 
     this.logger.debug(
-      `[Upload] Starting - Client: ${clientId}, User: ${userId || 'anonymous'}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`
+      `[Upload] Starting - Client: ${clientId}, User: ${userId || 'anonymous'}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
     );
 
     try {
       // Use userId from DTO if provided, otherwise use from decorator (X-User-Id header)
       const effectiveUserId = dto.userId || userId;
       this.logger.debug(
-        `[Upload] Effective User ID: ${effectiveUserId || 'system'}`
+        `[Upload] Effective User ID: ${effectiveUserId || 'system'}`,
       );
 
       const result = await this.imageService.uploadImage(
@@ -116,13 +125,13 @@ export class ImageController {
       );
 
       this.logger.log(
-        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, User: ${effectiveUserId || 'system'}, Size: ${file.size} bytes`
+        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, User: ${effectiveUserId || 'system'}, Size: ${file.size} bytes`,
       );
 
       return result;
     } catch (error) {
       this.logger.error(
-        `[Upload] Failed - Client: ${clientId}, File: ${file.originalname}, Error: ${error.message}`
+        `[Upload] Failed - Client: ${clientId}, File: ${file.originalname}, Error: ${error.message}`,
       );
       throw error;
     }
@@ -152,13 +161,13 @@ export class ImageController {
     };
 
     this.logger.debug(
-      `[ListImages] Client: ${clientId}, User: ${query.userId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`
+      `[ListImages] Client: ${clientId}, User: ${query.userId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`,
     );
 
     const result = await this.imageService.listImages(filters);
 
     this.logger.log(
-      `[ListImages] Success - Client: ${clientId}, Total: ${result.pagination.total}, Returned: ${result.data.length}`
+      `[ListImages] Success - Client: ${clientId}, Total: ${result.pagination.total}, Returned: ${result.data.length}`,
     );
 
     return result;
@@ -168,7 +177,8 @@ export class ImageController {
   @Get(':imageId')
   @ApiOperation({
     summary: 'Get image',
-    description: 'Unified endpoint: retrieve image file, thumbnail, metadata, or download. Supports transformations (resize, format, quality). Use ?token for private images or share links. Use ?t for cache busting. Public for non-private images.',
+    description:
+      'Unified endpoint: retrieve image file, thumbnail, metadata, or download. Supports transformations (resize, format, quality). Use ?token for private images or share links. Use ?t for cache busting. Public for non-private images.',
   })
   @ApiResponse({
     status: 200,
@@ -177,10 +187,15 @@ export class ImageController {
       'image/webp': {},
       'image/jpeg': {},
       'image/png': {},
-      'application/json': { schema: { $ref: '#/components/schemas/ImageResponseDto' } },
+      'application/json': {
+        schema: { $ref: '#/components/schemas/ImageResponseDto' },
+      },
     },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden - Authentication or valid token required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Authentication or valid token required',
+  })
   @ApiResponse({ status: 404, description: 'Image not found' })
   async getImage(
     @Param('imageId') imageId: string,
@@ -190,11 +205,17 @@ export class ImageController {
   ) {
     const clientId = req['clientId'];
     const userId = req['userId'];
-    const requestType = query.info ? 'metadata' : query.download ? 'download' : query.thumb ? 'thumb' : 'view';
+    const requestType = query.info
+      ? 'metadata'
+      : query.download
+        ? 'download'
+        : query.thumb
+          ? 'thumb'
+          : 'view';
 
     // Single comprehensive log for request start
     this.logger.debug(
-      `[GetImage] ${requestType} | ${imageId} | client:${clientId || 'public'} | user:${userId || 'anon'} | token:${!!query.token}`
+      `[GetImage] ${requestType} | ${imageId} | client:${clientId || 'public'} | user:${userId || 'anon'} | token:${!!query.token}`,
     );
 
     try {
@@ -208,11 +229,22 @@ export class ImageController {
         } catch {
           // Fallback to normal access with token validation
           image = await this.imageService.getImageById(imageId);
-          await this.imageService.validateImageAccess(image, imageId, clientId, userId, query.token);
+          await this.imageService.validateImageAccess(
+            image,
+            imageId,
+            clientId,
+            userId,
+            query.token,
+          );
         }
       } else {
         image = await this.imageService.getImageById(imageId);
-        await this.imageService.validateImageAccess(image, imageId, clientId, userId);
+        await this.imageService.validateImageAccess(
+          image,
+          imageId,
+          clientId,
+          userId,
+        );
       }
 
       // Handle metadata request early return
@@ -238,37 +270,47 @@ export class ImageController {
       );
 
       // Wait for both file and counter update
-      const [{ buffer, mimeType }] = await Promise.all([filePromise, counterPromise]);
+      const [{ buffer, mimeType }] = await Promise.all([
+        filePromise,
+        counterPromise,
+      ]);
 
       // Set response headers
       const headers: Record<string, string> = {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
-        'ETag': `"${imageId}${query.thumb ? '-thumb' : ''}"`,
+        ETag: `"${imageId}${query.thumb ? '-thumb' : ''}"`,
       };
 
       if (query.download) {
-        headers['Content-Disposition'] = `attachment; filename="${image.originalName}"`;
+        headers['Content-Disposition'] =
+          `attachment; filename="${image.originalName}"`;
       }
 
       res.set(headers);
 
       this.logger.log(
-        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`
+        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,
       );
 
       return new StreamableFile(Readable.from(buffer), {
         type: mimeType,
         length: buffer.length,
       });
-
     } catch (error) {
       // Return default images for 404 and 403 errors (only for file requests, not metadata)
-      if (!query.info && (error instanceof NotFoundException || error instanceof ForbiddenException)) {
-        const defaultType = error instanceof NotFoundException ? 'not_found' : 'permission_denied';
+      if (
+        !query.info &&
+        (error instanceof NotFoundException ||
+          error instanceof ForbiddenException)
+      ) {
+        const defaultType =
+          error instanceof NotFoundException
+            ? 'not_found'
+            : 'permission_denied';
 
         this.logger.warn(
-          `[GetImage] ${defaultType.toUpperCase()} | ${imageId} | Returning default image | ${error.message}`
+          `[GetImage] ${defaultType.toUpperCase()} | ${imageId} | Returning default image | ${error.message}`,
         );
 
         try {
@@ -287,7 +329,7 @@ export class ImageController {
           });
         } catch (defaultError) {
           this.logger.error(
-            `[GetImage] FAILED to load default image | ${defaultType} | ${defaultError.message}`
+            `[GetImage] FAILED to load default image | ${defaultType} | ${defaultError.message}`,
           );
           // If default image fails, throw the original error
           throw error;
@@ -302,10 +344,15 @@ export class ImageController {
   @Patch(':imageId')
   @ApiOperation({
     summary: 'Update image metadata',
-    description: 'Update tags, description, or other metadata. Only owner can update.',
+    description:
+      'Update tags, description, or other metadata. Only owner can update.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
-  @ApiResponse({ status: 200, description: 'Updated successfully', type: ImageResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated successfully',
+    type: ImageResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Invalid data or missing User ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -316,7 +363,7 @@ export class ImageController {
     @Body() dto: UpdateImageMetadataDto,
   ): Promise<ImageResponseDto> {
     this.logger.debug(
-      `[UpdateImage] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+      `[UpdateImage] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`,
     );
 
     const validUserId = this.imageService.validateUserId(userId);
@@ -331,26 +378,30 @@ export class ImageController {
       );
 
       this.logger.log(
-        `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+        `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`,
       );
 
       return result;
     } catch (error) {
       this.logger.error(
-        `[UpdateImage] Failed - ImageId: ${imageId}, Error: ${error.message}`
+        `[UpdateImage] Failed - ImageId: ${imageId}, Error: ${error.message}`,
       );
       throw error;
     }
   }
 
-
   @Post(':imageId/share')
   @ApiOperation({
     summary: 'Create share link',
-    description: 'Generate shareable link with optional expiration. Only owner can create.',
+    description:
+      'Generate shareable link with optional expiration. Only owner can create.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
-  @ApiResponse({ status: 201, description: 'Share link created', type: ShareLinkResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Share link created',
+    type: ShareLinkResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Missing User ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -361,32 +412,44 @@ export class ImageController {
     @Body() dto: CreateShareLinkDto,
   ): Promise<ShareLinkResponseDto> {
     this.logger.debug(
-      `[CreateShareLink] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`
+      `[CreateShareLink] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`,
     );
 
     const validUserId = this.imageService.validateUserId(userId);
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
 
     try {
-      const result = await this.imageService.createShareLink(imageId, clientId, validUserId, expiresAt);
+      const result = await this.imageService.createShareLink(
+        imageId,
+        clientId,
+        validUserId,
+        expiresAt,
+      );
 
       this.logger.log(
-        `[CreateShareLink] Success - ImageId: ${imageId}, Expires: ${expiresAt ? expiresAt.toISOString() : 'never'}`
+        `[CreateShareLink] Success - ImageId: ${imageId}, Expires: ${expiresAt ? expiresAt.toISOString() : 'never'}`,
       );
 
       return result;
     } catch (error) {
       this.logger.error(
-        `[CreateShareLink] Failed - ImageId: ${imageId}, Error: ${error.message}`
+        `[CreateShareLink] Failed - ImageId: ${imageId}, Error: ${error.message}`,
       );
       throw error;
     }
   }
 
   @Delete('share/:shareId')
-  @ApiOperation({ summary: 'Revoke share link', description: 'Delete/revoke share link. Only owner can revoke.' })
+  @ApiOperation({
+    summary: 'Revoke share link',
+    description: 'Delete/revoke share link. Only owner can revoke.',
+  })
   @ApiParam({ name: 'shareId', description: 'Share link UUID' })
-  @ApiResponse({ status: 200, description: 'Revoked successfully', type: DeleteResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Revoked successfully',
+    type: DeleteResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Missing User ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -396,37 +459,47 @@ export class ImageController {
     @Param('shareId') shareId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[DeleteShareLink] Starting - ShareId: ${shareId}, Client: ${clientId}, User: ${userId}`
+      `[DeleteShareLink] Starting - ShareId: ${shareId}, Client: ${clientId}, User: ${userId}`,
     );
 
     const validUserId = this.imageService.validateUserId(userId);
 
     try {
-      const result = await this.imageService.deleteShareLink(shareId, clientId, validUserId);
+      const result = await this.imageService.deleteShareLink(
+        shareId,
+        clientId,
+        validUserId,
+      );
 
       this.logger.log(`[DeleteShareLink] Success - ShareId: ${shareId}`);
 
       return result;
     } catch (error) {
       this.logger.error(
-        `[DeleteShareLink] Failed - ShareId: ${shareId}, Error: ${error.message}`
+        `[DeleteShareLink] Failed - ShareId: ${shareId}, Error: ${error.message}`,
       );
       throw error;
     }
   }
 
-
   @Delete(':imageId')
-  @ApiOperation({ summary: 'Delete image', description: 'Permanently delete image and files.' })
+  @ApiOperation({
+    summary: 'Delete image',
+    description: 'Permanently delete image and files.',
+  })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
-  @ApiResponse({ status: 200, description: 'Deleted successfully', type: DeleteResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Deleted successfully',
+    type: DeleteResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Not found' })
   async deleteImage(
     @ClientId() clientId: string,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[DeleteImage] Starting - ImageId: ${imageId}, Client: ${clientId}`
+      `[DeleteImage] Starting - ImageId: ${imageId}, Client: ${clientId}`,
     );
 
     try {
@@ -437,7 +510,7 @@ export class ImageController {
       return result;
     } catch (error) {
       this.logger.error(
-        `[DeleteImage] Failed - ImageId: ${imageId}, Error: ${error.message}`
+        `[DeleteImage] Failed - ImageId: ${imageId}, Error: ${error.message}`,
       );
       throw error;
     }

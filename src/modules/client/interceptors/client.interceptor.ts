@@ -66,7 +66,8 @@ export class ClientInterceptor implements NestInterceptor {
     // This is the user ID from the client's system, not Fileharbor's internal user ID
     let externalUserId = externalUserIdHeader;
     if (!externalUserId) {
-      externalUserId = request.query?.externalUserId || request.body?.externalUserId;
+      externalUserId =
+        request.query?.externalUserId || request.body?.externalUserId;
     }
     // Treat empty string as missing
     if (typeof externalUserId === 'string' && externalUserId.trim() === '') {

@@ -9,7 +9,10 @@ const trimOrUndefined = ({ value }: { value: unknown }): unknown => {
 };
 
 export class UpdateUserAdminDto {
-  @ApiPropertyOptional({ description: 'External user ID from the client system', maxLength: 100 })
+  @ApiPropertyOptional({
+    description: 'External user ID from the client system',
+    maxLength: 100,
+  })
   @IsOptional()
   @Transform(trimOrUndefined)
   @IsString()
@@ -29,7 +32,10 @@ export class UpdateUserAdminDto {
   @IsEmail()
   email?: string;
 
-  @ApiPropertyOptional({ description: 'Updated website URL or label', maxLength: 255 })
+  @ApiPropertyOptional({
+    description: 'Updated website URL or label',
+    maxLength: 255,
+  })
   @IsOptional()
   @Transform(trimOrUndefined)
   @IsString()
@@ -43,5 +49,3 @@ export class UpdateUserAdminDto {
   @MaxLength(1000)
   bio?: string;
 }
-
-

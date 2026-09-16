@@ -4,7 +4,10 @@ import { Type } from 'class-transformer';
 import { AlbumResourceType } from '@prisma/client';
 
 export class ListAlbumItemsDto {
-  @ApiPropertyOptional({ enum: AlbumResourceType, description: 'Filter by resource type' })
+  @ApiPropertyOptional({
+    enum: AlbumResourceType,
+    description: 'Filter by resource type',
+  })
   @IsOptional()
   @IsEnum(AlbumResourceType)
   resourceType?: AlbumResourceType;
