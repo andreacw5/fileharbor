@@ -162,12 +162,12 @@ describe('ClientService', () => {
     });
 
     it('should update existing creator with new email and username', async () => {
-      const updatedUser = {
+      const updatedCreator = {
         ...mockCreator,
         email: 'updated@example.com',
         username: 'updateduser',
       };
-      mockPrismaService.creator.upsert.mockResolvedValue(updatedUser);
+      mockPrismaService.creator.upsert.mockResolvedValue(updatedCreator);
 
       const result = await service.getOrCreateUser(
         'client-123',
@@ -176,7 +176,7 @@ describe('ClientService', () => {
         'updateduser',
       );
 
-      expect(result).toEqual(updatedUser);
+      expect(result).toEqual(updatedCreator);
     });
 
     it('should handle undefined email and username', async () => {
@@ -213,11 +213,11 @@ describe('ClientService', () => {
     });
   });
 
-  describe('getUserByExternalId', () => {
+  describe('getCreatorByExternalId', () => {
     it('should return creator when found', async () => {
       mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
 
-      const result = await service.getUserByExternalId(
+      const result = await service.getCreatorByExternalId(
         'client-123',
         'ext-creator-123',
       );
@@ -236,7 +236,7 @@ describe('ClientService', () => {
     it('should return null when creator is not found', async () => {
       mockPrismaService.creator.findUnique.mockResolvedValue(null);
 
-      const result = await service.getUserByExternalId(
+      const result = await service.getCreatorByExternalId(
         'client-123',
         'non-existent-creator',
       );

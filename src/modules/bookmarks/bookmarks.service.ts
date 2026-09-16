@@ -132,7 +132,7 @@ export class BookmarksService {
     return this.getBookmarkByAdminAndImage(adminUser.actorId, imageId);
   }
 
-  async bookmarkUser(adminUser: AdminJwtPayload, creatorId: string) {
+  async bookmarkCreator(adminUser: AdminJwtPayload, creatorId: string) {
     const creator = await this.prisma.creator.findUnique({
       where: { id: creatorId },
       select: { id: true, clientId: true },
@@ -190,7 +190,7 @@ export class BookmarksService {
     return { removed: result.count };
   }
 
-  async removeUserBookmark(
+  async removeCreatorBookmark(
     adminUser: AdminJwtPayload,
     creatorId: string,
   ): Promise<{ removed: number }> {
@@ -247,14 +247,14 @@ export class BookmarksService {
           creatorId,
         },
       },
-      include: this.buildUserBookmarkInclude(),
+      include: this.buildCreatorBookmarkInclude(),
     });
 
     if (!bookmark) {
       throw new BadRequestException('Bookmark could not be created');
     }
 
-    return this.mapUserBookmark(bookmark);
+    return this.mapCreatorBookmark(bookmark);
   }
 
   private buildBookmarkInclude(now: Date) {
@@ -295,7 +295,7 @@ export class BookmarksService {
     };
   }
 
-  private buildUserBookmarkInclude() {
+  private buildCreatorBookmarkInclude() {
     return {
       creator: {
         include: {
@@ -462,7 +462,7 @@ export class BookmarksService {
     };
   }
 
-  private mapUserBookmark(bookmark: any) {
+  private mapCreatorBookmark(bookmark: any) {
     const creator = bookmark.creator;
 
     return {

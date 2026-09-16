@@ -84,7 +84,7 @@ export class AvatarService {
       this.logger.debug(
         `[uploadAvatar] Resolving creator - Client: ${clientId}, Creator: ${externalId}`,
       );
-      const creator = await this.creatorService.resolveUser(
+      const creator = await this.creatorService.resolveCreator(
         clientId,
         externalId,
       );

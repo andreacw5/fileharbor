@@ -145,11 +145,11 @@ export class BookmarksAdminController {
   @ApiResponse({ status: 201, type: AdminCreatorBookmarkResponseDto })
   @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  async bookmarkUser(
+  async bookmarkCreator(
     @Param('creatorId') creatorId: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminCreatorBookmarkResponseDto> {
-    const bookmark = await this.bookmarksService.bookmarkUser(
+    const bookmark = await this.bookmarksService.bookmarkCreator(
       adminUser,
       creatorId,
     );
@@ -166,11 +166,11 @@ export class BookmarksAdminController {
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
   @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  async removeUserBookmark(
+  async removeCreatorBookmark(
     @Param('creatorId') creatorId: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
-    const result = await this.bookmarksService.removeUserBookmark(
+    const result = await this.bookmarksService.removeCreatorBookmark(
       adminUser,
       creatorId,
     );

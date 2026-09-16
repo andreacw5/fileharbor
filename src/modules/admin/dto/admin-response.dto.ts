@@ -44,7 +44,7 @@ export class AdminClientResponseDto {
   @ApiPropertyOptional() @Expose() totalAvatars?: number;
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
   @ApiPropertyOptional() @Expose() totalVideos?: number;
-  @ApiPropertyOptional() @Expose() totalUsers?: number;
+  @ApiPropertyOptional() @Expose() totalCreators?: number;
   @ApiPropertyOptional() @Expose() totalStorage?: number;
 }
 
@@ -79,7 +79,7 @@ export class StatsTrendDto {
   newVideos: number;
   @ApiProperty({ description: 'New items in the last 7 days' })
   @Expose()
-  newUsers: number;
+  newCreators: number;
   @ApiProperty({ description: 'Storage added in the last 7 days (bytes)' })
   @Expose()
   newStorage: number;
@@ -95,7 +95,7 @@ export class AdminStatsResponseDto {
   @ApiProperty() @Expose() totalAlbums: number;
   @ApiProperty() @Expose() totalVideos: number;
   @ApiProperty() @Expose() totalStorage: number;
-  @ApiProperty() @Expose() totalUsers: number;
+  @ApiProperty() @Expose() totalCreators: number;
 
   @ApiProperty({
     description: 'New counts in the last 7 days',
@@ -114,7 +114,7 @@ export class AdminStatsResponseDto {
   dailyChart: DailyDataPointDto[];
 }
 
-export class AdminAlbumUserDto {
+export class AdminAlbumCreatorDto {
   @ApiProperty() @Expose() externalId: string;
   @ApiPropertyOptional() @Expose() username?: string;
 }
@@ -144,10 +144,10 @@ export class AdminAlbumResponseDto {
   @Type(() => AdminClientCreatorClientDto)
   client?: AdminClientCreatorClientDto;
 
-  @ApiPropertyOptional({ type: AdminAlbumUserDto })
+  @ApiPropertyOptional({ type: AdminAlbumCreatorDto })
   @Expose()
-  @Type(() => AdminAlbumUserDto)
-  creator?: AdminAlbumUserDto;
+  @Type(() => AdminAlbumCreatorDto)
+  creator?: AdminAlbumCreatorDto;
 
   @ApiPropertyOptional({
     description: 'Total items (images + videos) in the album',
@@ -172,7 +172,7 @@ export class AdminDeleteResponseDto {
   @ApiProperty() @Expose() message: string;
 }
 
-export class AdminImageUserDto {
+export class AdminImageCreatorDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() externalId: string;
   @ApiPropertyOptional() @Expose() username?: string;
@@ -215,10 +215,10 @@ export class AdminImageResponseDto {
   @Type(() => AdminClientCreatorClientDto)
   client?: AdminClientCreatorClientDto;
 
-  @ApiPropertyOptional({ type: AdminImageUserDto })
+  @ApiPropertyOptional({ type: AdminImageCreatorDto })
   @Expose()
-  @Type(() => AdminImageUserDto)
-  creator?: AdminImageUserDto;
+  @Type(() => AdminImageCreatorDto)
+  creator?: AdminImageCreatorDto;
 
   @ApiPropertyOptional({
     description: 'Albums this image belongs to',
@@ -263,10 +263,10 @@ export class AdminAvatarResponseDto {
   @Type(() => AdminClientCreatorClientDto)
   client?: AdminClientCreatorClientDto;
 
-  @ApiPropertyOptional({ type: AdminImageUserDto })
+  @ApiPropertyOptional({ type: AdminImageCreatorDto })
   @Expose()
-  @Type(() => AdminImageUserDto)
-  creator?: AdminImageUserDto;
+  @Type(() => AdminImageCreatorDto)
+  creator?: AdminImageCreatorDto;
 }
 
 export class AdminAlbumImageEntryDto {
@@ -355,7 +355,7 @@ export class AdminBookmarkListResponseDto {
   pagination: AdminPaginationResponseDto;
 }
 
-export class AdminBookmarkedUserDto {
+export class AdminBookmarkedCreatorDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() clientId: string;
   @ApiProperty() @Expose() externalId: string;
@@ -383,10 +383,10 @@ export class AdminCreatorBookmarkResponseDto {
   @Type(() => Date)
   bookmarkedAt: Date;
 
-  @ApiProperty({ type: AdminBookmarkedUserDto })
+  @ApiProperty({ type: AdminBookmarkedCreatorDto })
   @Expose()
-  @Type(() => AdminBookmarkedUserDto)
-  creator: AdminBookmarkedUserDto;
+  @Type(() => AdminBookmarkedCreatorDto)
+  creator: AdminBookmarkedCreatorDto;
 }
 
 export class AdminCreatorBookmarkListResponseDto {
@@ -423,10 +423,10 @@ export class AdminVideoResponseDto {
   @Type(() => AdminClientCreatorClientDto)
   client?: AdminClientCreatorClientDto;
 
-  @ApiPropertyOptional({ type: AdminImageUserDto })
+  @ApiPropertyOptional({ type: AdminImageCreatorDto })
   @Expose()
-  @Type(() => AdminImageUserDto)
-  creator?: AdminImageUserDto;
+  @Type(() => AdminImageCreatorDto)
+  creator?: AdminImageCreatorDto;
 
   @ApiProperty({ description: 'Full absolute stream URL' })
   @Expose()

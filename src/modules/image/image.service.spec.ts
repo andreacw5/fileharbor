@@ -159,7 +159,7 @@ describe('ImageService', () => {
   };
 
   const mockCreatorServiceMock = {
-    resolveUser: jest.fn(),
+    resolveCreator: jest.fn(),
     findOrCreate: jest.fn(),
   };
 
@@ -220,7 +220,7 @@ describe('ImageService', () => {
     beforeEach(() => {
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
       mockPrismaService.creator.upsert.mockResolvedValue(mockCreator);
-      mockCreatorServiceMock.resolveUser.mockResolvedValue(mockCreator);
+      mockCreatorServiceMock.resolveCreator.mockResolvedValue(mockCreator);
       mockStorageService.getImageMetadata.mockResolvedValue(mockImageMetadata);
       mockStorageService.convertToWebP.mockResolvedValue(
         Buffer.from('webp-data'),
@@ -293,7 +293,7 @@ describe('ImageService', () => {
         'Andrea',
       );
 
-      expect(mockCreatorServiceMock.resolveUser).toHaveBeenCalledWith(
+      expect(mockCreatorServiceMock.resolveCreator).toHaveBeenCalledWith(
         mockClientId,
         mockExternalUserId,
         'Andrea',
@@ -461,12 +461,12 @@ describe('ImageService', () => {
     });
   });
 
-  describe('getUserImages', () => {
+  describe('getCreatorImages', () => {
     it('should return creator images', async () => {
       const images = [mockImage];
       mockPrismaService.image.findMany.mockResolvedValue(images);
 
-      const result = await service.getUserImages(
+      const result = await service.getCreatorImages(
         mockClientId,
         mockCreatorExternalId,
       );
@@ -495,7 +495,7 @@ describe('ImageService', () => {
     it('should handle empty results', async () => {
       mockPrismaService.image.findMany.mockResolvedValue([]);
 
-      const result = await service.getUserImages(
+      const result = await service.getCreatorImages(
         mockClientId,
         mockCreatorExternalId,
       );

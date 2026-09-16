@@ -47,13 +47,13 @@ export class CreatorClientController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
-  listUsers(
+  listCreators(
     @ClientId() clientId: string,
     @Query('search') search?: string,
     @Query('page') page?: number,
     @Query('perPage') perPage?: number,
   ) {
-    return this.creatorService.listUsersForClient(clientId, {
+    return this.creatorService.listCreatorsForClient(clientId, {
       search,
       page,
       perPage,
@@ -76,11 +76,11 @@ export class CreatorClientController {
     status: 409,
     description: 'Creator with that externalId already exists',
   })
-  createUser(
+  createCreator(
     @ClientId() clientId: string,
     @Body() dto: CreateCreatorDto,
   ): Promise<CreatorResponseDto> {
-    return this.creatorService.createUserForClient(clientId, dto);
+    return this.creatorService.createCreatorForClient(clientId, dto);
   }
 
   @Patch('external/:externalId')
@@ -98,12 +98,12 @@ export class CreatorClientController {
     status: 404,
     description: 'Creator not found for this client',
   })
-  updateUserByExternalId(
+  updateCreatorByExternalId(
     @ClientId() clientId: string,
     @Param('externalId') externalId: string,
     @Body() dto: UpdateCreatorByExternalIdDto,
   ): Promise<CreatorResponseDto> {
-    return this.creatorService.updateUserByExternalId(
+    return this.creatorService.updateCreatorByExternalId(
       clientId,
       externalId,
       dto,

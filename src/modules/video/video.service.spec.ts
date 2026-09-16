@@ -138,7 +138,7 @@ describe('VideoService', () => {
   };
 
   const mockCreatorService = {
-    resolveUser: jest.fn(),
+    resolveCreator: jest.fn(),
   };
 
   const mockRouteHelperService = {
@@ -186,7 +186,7 @@ describe('VideoService', () => {
       (fsPromises.unlink as jest.Mock).mockResolvedValue(undefined);
 
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockCreatorService.resolveUser.mockResolvedValue(mockCreator);
+      mockCreatorService.resolveCreator.mockResolvedValue(mockCreator);
       mockStorageService.getVideoFilePath.mockImplementation(
         (domain: string, id: string, variant: string) =>
           `storage/${domain}/videos/${id}/${variant}.mp4`,
@@ -273,7 +273,7 @@ describe('VideoService', () => {
           },
         },
       });
-      expect(mockCreatorService.resolveUser).not.toHaveBeenCalled();
+      expect(mockCreatorService.resolveCreator).not.toHaveBeenCalled();
     });
 
     it('should throw when system creator not found', async () => {

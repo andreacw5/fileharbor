@@ -205,7 +205,7 @@ export class AlbumService {
     };
   }
 
-  async getUserAlbums(clientId: string, creatorId: string) {
+  async getCreatorAlbums(clientId: string, creatorId: string) {
     const albums = await this.prisma.album.findMany({
       where: { clientId, creatorId },
       include: {

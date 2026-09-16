@@ -43,13 +43,15 @@ export class ClientInitService implements OnModuleInit {
         this.logger.log(`API Key: ${defaultClient.apiKey}`);
 
         // Get the default creators that were auto-created by ClientService
-        const defaultUsers = await this.prisma.creator.findMany({
+        const defaultCreators = await this.prisma.creator.findMany({
           where: { clientId: defaultClient.id },
         });
 
-        if (defaultUsers.length > 0) {
-          this.logger.log(`Created ${defaultUsers.length} default creators:`);
-          for (const creator of defaultUsers) {
+        if (defaultCreators.length > 0) {
+          this.logger.log(
+            `Created ${defaultCreators.length} default creators:`,
+          );
+          for (const creator of defaultCreators) {
             this.logger.log(
               `  - ${creator.username} (externalId: ${creator.externalId}, ID: ${creator.id})`,
             );

@@ -69,7 +69,7 @@ export class ClientService {
   /**
    * Get creator by external ID
    */
-  async getUserByExternalId(clientId: string, externalId: string) {
+  async getCreatorByExternalId(clientId: string, externalId: string) {
     return this.prisma.creator.findUnique({
       where: {
         clientId_externalId: {
@@ -251,7 +251,7 @@ export class ClientService {
       totalAvatars: c._count.avatars,
       totalAlbums: c._count.albums,
       totalVideos: c._count.videos,
-      totalUsers: c._count.creators,
+      totalCreators: c._count.creators,
       totalStorage: storageMap.get(c.id) || 0,
     }));
   }
@@ -289,7 +289,7 @@ export class ClientService {
       totalAvatars: client._count.avatars,
       totalAlbums: client._count.albums,
       totalVideos: client._count.videos,
-      totalUsers: client._count.creators,
+      totalCreators: client._count.creators,
       totalStorage: storageAgg._sum.size || 0,
     };
   }

@@ -103,7 +103,7 @@ export class ImageService {
         this.logger.debug(
           `[uploadImage] Resolving creator - ID: ${imageId}, External: ${externalId}, Username: ${username || 'auto'}`,
         );
-        creator = await this.creatorService.resolveUser(
+        creator = await this.creatorService.resolveCreator(
           clientId,
           externalId,
           username,
@@ -338,7 +338,7 @@ export class ImageService {
   /**
    * Get creator images
    */
-  async getUserImages(clientId: string, creatorId: string) {
+  async getCreatorImages(clientId: string, creatorId: string) {
     const images = await this.prisma.image.findMany({
       where: {
         clientId,

@@ -48,7 +48,7 @@ export class CreatorService {
    * Flattens Prisma `_count` relations and any extra fields onto the raw record,
    * then transforms the result into the given response DTO class.
    */
-  private mapUser<T extends object>(
+  private mapCreator<T extends object>(
     ctor: new (...args: any[]) => T,
     creator: any,
     extra: Record<string, unknown> = {},
@@ -76,13 +76,13 @@ export class CreatorService {
    * - If the creator already exists and a username is supplied, it is updated.
    * Returns the raw Prisma Creator record (not a response DTO).
    */
-  async resolveUser(
+  async resolveCreator(
     clientId: string,
     externalId: string,
     username?: string,
   ): Promise<Creator> {
     this.logger.debug(
-      `resolveUser clientId=${clientId} externalId=${externalId} username=${username ?? '(auto)'}`,
+      `resolveCreator clientId=${clientId} externalId=${externalId} username=${username ?? '(auto)'}`,
     );
 
     return this.prisma.creator.upsert({
@@ -96,12 +96,12 @@ export class CreatorService {
     });
   }
 
-  async listUsersForClient(
+  async listCreatorsForClient(
     clientId: string,
     filters: { search?: string; page?: number; perPage?: number } = {},
   ) {
     this.logger.log(
-      `listUsersForClient clientId=${clientId} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
+      `listCreatorsForClient clientId=${clientId} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
     );
 
     const { page, take, skip } = this.buildPagination(
@@ -132,10 +132,10 @@ export class CreatorService {
     ]);
 
     this.logger.debug(
-      `listUsersForClient returned ${creators.length}/${total} creators`,
+      `listCreatorsForClient returned ${creators.length}/${total} creators`,
     );
 
-    const data = creators.map((u) => this.mapUser(CreatorListResponseDto, u));
+    const data = creators.map((u) => this.mapCreator(CreatorListResponseDto, u));
 
     return {
       data,
@@ -148,12 +148,12 @@ export class CreatorService {
     };
   }
 
-  async createUserForClient(
+  async createCreatorForClient(
     clientId: string,
     dto: CreateCreatorDto,
   ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `createUserForClient clientId=${clientId} externalId=${dto.externalId}`,
+      `createCreatorForClient clientId=${clientId} externalId=${dto.externalId}`,
     );
 
     if (dto.externalId === SYSTEM_USER_ID) {
@@ -191,15 +191,15 @@ export class CreatorService {
     });
 
     this.logger.log(
-      `createUserForClient created creator=${creator.id} clientId=${clientId}`,
+      `createCreatorForClient created creator=${creator.id} clientId=${clientId}`,
     );
 
-    return this.mapUser(CreatorResponseDto, creator);
+    return this.mapCreator(CreatorResponseDto, creator);
   }
 
   // ─── Creators ────────────────────────────────────────────────────────────────
 
-  async listUsers(
+  async listCreators(
     admin: AdminJwtPayload,
     filters: {
       clientId?: string;
@@ -210,7 +210,7 @@ export class CreatorService {
     } = {},
   ) {
     this.logger.log(
-      `listUsers called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${filters.page ?? 1}`,
+      `listCreators called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${filters.page ?? 1}`,
     );
 
     const { page, take, skip } = this.buildPagination(
@@ -275,7 +275,7 @@ export class CreatorService {
     }
 
     this.logger.debug(
-      `listUsers returned ${creators.length}/${total} creators`,
+      `listCreators returned ${creators.length}/${total} creators`,
     );
 
     const data = creators.map((u) => {
@@ -283,7 +283,7 @@ export class CreatorService {
         u.avatars.length > 0
           ? this.route.fullUrl('avatars', u.externalId)
           : undefined;
-      return this.mapUser(CreatorListResponseDto, u, {
+      return this.mapCreator(CreatorListResponseDto, u, {
         isBookmarked: bookmarkedCreatorExternalIds.has(u.id),
         avatarUrl,
       });
@@ -300,12 +300,12 @@ export class CreatorService {
     };
   }
 
-  async getUser(
+  async getCreator(
     creatorId: string,
     admin: AdminJwtPayload,
   ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `getUser called by admin=${admin.sub} creatorId=${creatorId}`,
+      `getCreator called by admin=${admin.sub} creatorId=${creatorId}`,
     );
 
     const creator = await this.prisma.creator.findUnique({
@@ -323,7 +323,7 @@ export class CreatorService {
     });
 
     if (!creator) {
-      this.logger.warn(`getUser: creator not found creatorId=${creatorId}`);
+      this.logger.warn(`getCreator: creator not found creatorId=${creatorId}`);
       throw new NotFoundException('Creator not found');
     }
 
@@ -340,7 +340,7 @@ export class CreatorService {
     });
 
     this.logger.debug(
-      `getUser: found creator=${creatorId} clientId=${creator.clientId}`,
+      `getCreator: found creator=${creatorId} clientId=${creator.clientId}`,
     );
 
     const avatarUrl =
@@ -348,31 +348,31 @@ export class CreatorService {
         ? this.route.fullUrl('avatars', creator.externalId)
         : undefined;
 
-    return this.mapUser(CreatorResponseDto, creator, {
+    return this.mapCreator(CreatorResponseDto, creator, {
       isBookmarked: !!bookmark,
       avatarUrl,
     });
   }
 
-  async createUserAdmin(
+  async createCreatorAdmin(
     admin: AdminJwtPayload,
     clientId: string,
     dto: CreateCreatorDto,
   ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `createUserAdmin called by admin=${admin.sub} clientId=${clientId} externalId=${dto.externalId}`,
+      `createCreatorAdmin called by admin=${admin.sub} clientId=${clientId} externalId=${dto.externalId}`,
     );
     assertClientAccess(admin, clientId);
-    return this.createUserForClient(clientId, dto);
+    return this.createCreatorForClient(clientId, dto);
   }
 
-  async updateUserAdmin(
+  async updateCreatorAdmin(
     creatorId: string,
     dto: UpdateCreatorAdminDto,
     admin: AdminJwtPayload,
   ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `updateUserAdmin called by admin=${admin.sub} creatorId=${creatorId}`,
+      `updateCreatorAdmin called by admin=${admin.sub} creatorId=${creatorId}`,
     );
 
     if (
@@ -394,7 +394,7 @@ export class CreatorService {
 
     if (!creator) {
       this.logger.warn(
-        `updateUserAdmin: creator not found creatorId=${creatorId}`,
+        `updateCreatorAdmin: creator not found creatorId=${creatorId}`,
       );
       throw new NotFoundException('Creator not found');
     }
@@ -442,19 +442,19 @@ export class CreatorService {
     });
 
     this.logger.log(
-      `updateUserAdmin: updated creator=${updated.id} clientId=${updated.clientId}`,
+      `updateCreatorAdmin: updated creator=${updated.id} clientId=${updated.clientId}`,
     );
 
-    return this.mapUser(CreatorResponseDto, updated);
+    return this.mapCreator(CreatorResponseDto, updated);
   }
 
-  async updateUserByExternalId(
+  async updateCreatorByExternalId(
     clientId: string,
     externalId: string,
     dto: UpdateCreatorByExternalIdDto,
   ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `updateUserByExternalId called for clientId=${clientId} externalId=${externalId}`,
+      `updateCreatorByExternalId called for clientId=${clientId} externalId=${externalId}`,
     );
 
     if (!dto.username && !dto.email && !dto.website && !dto.bio) {
@@ -485,10 +485,10 @@ export class CreatorService {
       });
 
       this.logger.log(
-        `updateUserByExternalId updated creator=${updated.id} clientId=${updated.clientId}`,
+        `updateCreatorByExternalId updated creator=${updated.id} clientId=${updated.clientId}`,
       );
 
-      return this.mapUser(CreatorResponseDto, updated);
+      return this.mapCreator(CreatorResponseDto, updated);
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&

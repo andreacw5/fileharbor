@@ -79,7 +79,10 @@ export class VideoService {
 
       let creator;
       if (externalId) {
-        creator = await this.creatorService.resolveUser(clientId, externalId);
+        creator = await this.creatorService.resolveCreator(
+          clientId,
+          externalId,
+        );
       } else {
         creator = await this.prisma.creator.findUnique({
           where: {

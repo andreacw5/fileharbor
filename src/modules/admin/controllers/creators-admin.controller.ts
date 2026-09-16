@@ -58,11 +58,11 @@ export class CreatorsAdminController {
       externalId: r.externalId,
     }),
   })
-  createUser(
+  createCreator(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Body() dto: CreateCreatorAdminDto,
   ): Promise<CreatorResponseDto> {
-    return this.creatorService.createUserAdmin(adminUser, dto.clientId, dto);
+    return this.creatorService.createCreatorAdmin(adminUser, dto.clientId, dto);
   }
 
   @Get()
@@ -93,7 +93,7 @@ export class CreatorsAdminController {
     status: 200,
     description: 'Paginated creator list (email is never returned)',
   })
-  listUsers(
+  listCreators(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('search') search?: string,
@@ -105,7 +105,7 @@ export class CreatorsAdminController {
       isBookmarked !== undefined &&
       ['true', '1'].includes(isBookmarked.toLowerCase());
 
-    return this.creatorService.listUsers(adminUser, {
+    return this.creatorService.listCreators(adminUser, {
       clientId,
       search,
       ...(bookmarkedOnly && { isBookmarked: true }),
@@ -122,11 +122,11 @@ export class CreatorsAdminController {
   @ApiResponse({ status: 200, type: CreatorResponseDto })
   @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  getUser(
+  getCreator(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<CreatorResponseDto> {
-    return this.creatorService.getUser(id, adminUser);
+    return this.creatorService.getCreator(id, adminUser);
   }
 
   @Patch(':id')
@@ -148,11 +148,11 @@ export class CreatorsAdminController {
       fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
     }),
   })
-  updateUser(
+  updateCreator(
     @Param('id') id: string,
     @Body() dto: UpdateCreatorAdminDto,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<CreatorResponseDto> {
-    return this.creatorService.updateUserAdmin(id, dto, adminUser);
+    return this.creatorService.updateCreatorAdmin(id, dto, adminUser);
   }
 }

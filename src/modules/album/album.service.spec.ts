@@ -318,7 +318,7 @@ describe('AlbumService', () => {
 
   // ---------------------------------------------------------------------------
 
-  describe('getUserAlbums', () => {
+  describe('getCreatorAlbums', () => {
     it('should return all albums for a creator', async () => {
       const albums = [
         mockAlbumWithItems,
@@ -326,7 +326,7 @@ describe('AlbumService', () => {
       ];
       mockPrismaService.album.findMany.mockResolvedValue(albums);
 
-      const result = await service.getUserAlbums(
+      const result = await service.getCreatorAlbums(
         mockClientId,
         mockCreatorExternalId,
       );
@@ -338,7 +338,7 @@ describe('AlbumService', () => {
     it('should return empty array when creator has no albums', async () => {
       mockPrismaService.album.findMany.mockResolvedValue([]);
 
-      const result = await service.getUserAlbums(
+      const result = await service.getCreatorAlbums(
         mockClientId,
         mockCreatorExternalId,
       );
