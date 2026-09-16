@@ -596,7 +596,7 @@ export class ImageService {
    * Increment downloads counter
    */
   async incrementDownloads(imageId: string, clientId: string) {
-    const image = await this.getImageById(imageId, clientId);
+    await this.getImageById(imageId, clientId);
 
     await this.prisma.image.update({
       where: { id: imageId },

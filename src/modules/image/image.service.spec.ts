@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { ImageService } from './image.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -15,10 +14,6 @@ import { RouteHelperService } from '@/utils/route.utils';
 
 describe('ImageService', () => {
   let service: ImageService;
-  let prismaService: PrismaService;
-  let storageService: StorageService;
-  let configService: ConfigService;
-  let webhookService: WebhookService;
 
   // Mock data
   const mockClientId = 'client-123';
@@ -209,10 +204,6 @@ describe('ImageService', () => {
     }).compile();
 
     service = module.get<ImageService>(ImageService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    storageService = module.get<StorageService>(StorageService);
-    configService = module.get<ConfigService>(ConfigService);
-    webhookService = module.get<WebhookService>(WebhookService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();

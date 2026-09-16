@@ -7,9 +7,6 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 
 describe('WebhookService', () => {
   let service: WebhookService;
-  let httpService: HttpService;
-  let prismaService: PrismaService;
-  let configService: ConfigService;
 
   // Mock data
   const mockClientId = 'client-123';
@@ -71,9 +68,6 @@ describe('WebhookService', () => {
     }).compile();
 
     service = module.get<WebhookService>(WebhookService);
-    httpService = module.get<HttpService>(HttpService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    configService = module.get<ConfigService>(ConfigService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();

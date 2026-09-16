@@ -19,7 +19,6 @@ import {
   ApiQuery,
   ApiBody,
 } from '@nestjs/swagger';
-import { plainToInstance } from 'class-transformer';
 import { AlbumService } from './album.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { ClientId, UserId } from '@/modules/client/decorators/client.decorator';

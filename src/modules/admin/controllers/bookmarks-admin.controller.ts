@@ -24,7 +24,6 @@ import {
   AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
   AdminDeleteResponseDto,
-  AdminUserBookmarkListResponseDto,
   AdminUserBookmarkResponseDto,
   AdminVideoBookmarkListResponseDto,
   AdminVideoBookmarkResponseDto,

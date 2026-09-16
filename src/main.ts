@@ -87,7 +87,7 @@ async function bootstrap() {
 }
 
 bootstrap()
-  .then((app) => {
+  .then(() => {
     Logger.log('🎉 App running now!', 'Bootstrap');
   })
   .catch((error) => {

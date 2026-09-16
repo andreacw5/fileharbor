@@ -324,7 +324,7 @@ export class AlbumService {
       orderBy: { order: 'desc' },
       select: { order: true },
     });
-    let nextOrder = (maxOrder?.order ?? -1) + 1;
+    const nextOrder = (maxOrder?.order ?? -1) + 1;
 
     const results = await Promise.all(
       items.map(async (item, idx) => {
