@@ -5,7 +5,7 @@ import { VideoController } from './video.controller';
 import { StorageModule } from '@/modules/storage/storage.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { WebhookModule } from '@/modules/webhook/webhook.module';
-import { UserModule } from '@/modules/user/user.module';
+import { CreatorModule } from '@/modules/creator/creator.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { RouteHelperModule } from '@/utils/route.utils';
 import { VideoCleanupJob } from './jobs/video.cleanup.job';
@@ -16,7 +16,7 @@ import { VideoCleanupJob } from './jobs/video.cleanup.job';
     PrismaModule,
     WebhookModule,
     HttpModule,
-    UserModule,
+    CreatorModule,
     ClientModule,
     RouteHelperModule,
   ],

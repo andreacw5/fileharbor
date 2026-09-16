@@ -84,18 +84,22 @@ export class AlbumsAdminController {
   ): Promise<AdminAlbumResponseDto> {
     assertClientAccess(adminUser, dto.clientId);
 
-    const externalUserId = dto.externalUserId || 'system';
-    const user = await this.clientService.getOrCreateUser(
+    const externalId = dto.externalId || 'system';
+    const creator = await this.clientService.getOrCreateUser(
       dto.clientId,
-      externalUserId,
+      externalId,
     );
 
-    const album = await this.albumService.createAlbum(dto.clientId, user.id, {
-      name: dto.name,
-      description: dto.description,
-      isPublic: dto.isPublic,
-      externalAlbumId: dto.externalAlbumId,
-    });
+    const album = await this.albumService.createAlbum(
+      dto.clientId,
+      creator.id,
+      {
+        name: dto.name,
+        description: dto.description,
+        isPublic: dto.isPublic,
+        externalAlbumId: dto.externalAlbumId,
+      },
+    );
 
     const enriched = await this.albumService.findAdminAlbumById(album.id);
     if (!enriched) throw new NotFoundException('Album not found');
@@ -117,7 +121,7 @@ export class AlbumsAdminController {
   @Get()
   @ApiOperation({ summary: 'List albums (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'public', required: false, type: Boolean })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -125,7 +129,7 @@ export class AlbumsAdminController {
   async listAlbums(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
-    @Query('userId') userId?: string,
+    @Query('creatorId') creatorId?: string,
     @Query('search') search?: string,
     @Query('public') publicFilter?: string,
     @Query('page') page?: string,
@@ -136,7 +140,7 @@ export class AlbumsAdminController {
     const skip = (pageNum - 1) * take;
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (userId) where.user = { externalUserId: userId };
+    if (creatorId) where.creator = { externalId: creatorId };
     if (search) where.name = { contains: search, mode: 'insensitive' };
     if (publicFilter !== undefined) {
       where.isPublic =

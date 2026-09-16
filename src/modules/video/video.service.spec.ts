@@ -13,7 +13,7 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { UserService } from '@/modules/user/user.service';
+import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
 jest.mock('fs/promises');
@@ -22,8 +22,8 @@ describe('VideoService', () => {
   let service: VideoService;
 
   const mockClientId = 'client-123';
-  const mockUserId = 'user-123';
-  const mockExternalUserId = 'ext-user-123';
+  const mockCreatorExternalId = 'creator-123';
+  const mockExternalUserId = 'ext-creator-123';
   const mockVideoId = 'video-123';
   const mockDomain = 'test.fileharbor.local';
 
@@ -37,20 +37,20 @@ describe('VideoService', () => {
     updatedAt: new Date(),
   };
 
-  const mockUser = {
-    id: mockUserId,
+  const mockCreator = {
+    id: mockCreatorExternalId,
     clientId: mockClientId,
-    externalUserId: mockExternalUserId,
+    externalId: mockExternalUserId,
     email: null,
     username: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  const mockSystemUser = {
-    id: 'system-user-id',
+  const mockSystemCreator = {
+    id: 'system-creator-id',
     clientId: mockClientId,
-    externalUserId: 'system',
+    externalId: 'system',
     email: null,
     username: 'system',
     createdAt: new Date(),
@@ -60,7 +60,7 @@ describe('VideoService', () => {
   const mockVideo = {
     id: mockVideoId,
     clientId: mockClientId,
-    userId: mockUserId,
+    creatorId: mockCreatorExternalId,
     originalName: 'test.mp4',
     storagePath: `${mockDomain}/videos/${mockVideoId}`,
     mimeType: 'video/mp4',
@@ -75,9 +75,9 @@ describe('VideoService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     videoTags: [],
-    user: {
-      id: mockUserId,
-      externalUserId: mockExternalUserId,
+    creator: {
+      id: mockCreatorExternalId,
+      externalId: mockExternalUserId,
       username: null,
     },
     client: { id: mockClientId, name: 'Test Client', domain: mockDomain },
@@ -103,7 +103,7 @@ describe('VideoService', () => {
 
   const mockPrismaService = {
     client: { findUnique: jest.fn() },
-    user: { findUnique: jest.fn() },
+    creator: { findUnique: jest.fn() },
     video: {
       create: jest.fn(),
       findFirst: jest.fn(),
@@ -137,7 +137,7 @@ describe('VideoService', () => {
     sendWebhook: jest.fn().mockResolvedValue(undefined),
   };
 
-  const mockUserService = {
+  const mockCreatorService = {
     resolveUser: jest.fn(),
   };
 
@@ -158,7 +158,7 @@ describe('VideoService', () => {
         { provide: StorageService, useValue: mockStorageService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: WebhookService, useValue: mockWebhookService },
-        { provide: UserService, useValue: mockUserService },
+        { provide: CreatorService, useValue: mockCreatorService },
         { provide: RouteHelperService, useValue: mockRouteHelperService },
       ],
     }).compile();
@@ -186,7 +186,7 @@ describe('VideoService', () => {
       (fsPromises.unlink as jest.Mock).mockResolvedValue(undefined);
 
       mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockUserService.resolveUser.mockResolvedValue(mockUser);
+      mockCreatorService.resolveUser.mockResolvedValue(mockCreator);
       mockStorageService.getVideoFilePath.mockImplementation(
         (domain: string, id: string, variant: string) =>
           `storage/${domain}/videos/${id}/${variant}.mp4`,
@@ -201,7 +201,7 @@ describe('VideoService', () => {
       mockPrismaService.video.create.mockResolvedValue(mockVideo);
     });
 
-    it('should upload video successfully with user', async () => {
+    it('should upload video successfully with creator', async () => {
       const result = await service.uploadVideo(
         mockClientId,
         mockExternalUserId,
@@ -260,28 +260,28 @@ describe('VideoService', () => {
       ).rejects.toThrow('Client not found');
     });
 
-    it('should use system user when no externalUserId provided', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue(mockSystemUser);
+    it('should use system creator when no externalId provided', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockSystemCreator);
 
       await service.uploadVideo(mockClientId, undefined, mockFile);
 
-      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
         where: {
-          clientId_externalUserId: {
+          clientId_externalId: {
             clientId: mockClientId,
-            externalUserId: 'system',
+            externalId: 'system',
           },
         },
       });
-      expect(mockUserService.resolveUser).not.toHaveBeenCalled();
+      expect(mockCreatorService.resolveUser).not.toHaveBeenCalled();
     });
 
-    it('should throw when system user not found', async () => {
-      mockPrismaService.user.findUnique.mockResolvedValue(null);
+    it('should throw when system creator not found', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
 
       await expect(
         service.uploadVideo(mockClientId, undefined, mockFile),
-      ).rejects.toThrow('System user not found for client');
+      ).rejects.toThrow('System creator not found for client');
     });
 
     it('should continue when thumbnail extraction fails', async () => {
@@ -474,12 +474,15 @@ describe('VideoService', () => {
       );
     });
 
-    it('should filter by userId', async () => {
-      await service.listVideos({ clientId: mockClientId, userId: mockUserId });
+    it('should filter by creatorId', async () => {
+      await service.listVideos({
+        clientId: mockClientId,
+        creatorId: mockCreatorExternalId,
+      });
 
       expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ userId: mockUserId }),
+          where: expect.objectContaining({ creatorId: mockCreatorExternalId }),
         }),
       );
     });
@@ -591,7 +594,7 @@ describe('VideoService', () => {
       const result = await service.updateVideoMetadata(
         mockVideoId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         undefined,
         'New desc',
         true,
@@ -612,7 +615,11 @@ describe('VideoService', () => {
       mockPrismaService.video.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.updateVideoMetadata(mockVideoId, mockClientId, mockUserId),
+        service.updateVideoMetadata(
+          mockVideoId,
+          mockClientId,
+          mockCreatorExternalId,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -620,9 +627,12 @@ describe('VideoService', () => {
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
       mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
-      await service.updateVideoMetadata(mockVideoId, mockClientId, mockUserId, [
-        'new-tag',
-      ]);
+      await service.updateVideoMetadata(
+        mockVideoId,
+        mockClientId,
+        mockCreatorExternalId,
+        ['new-tag'],
+      );
 
       expect(mockPrismaService.video.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -640,7 +650,7 @@ describe('VideoService', () => {
       await service.updateVideoMetadata(
         mockVideoId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         undefined,
         'desc',
       );
@@ -663,19 +673,23 @@ describe('VideoService', () => {
     });
   });
 
-  describe('validateUserId', () => {
-    it('should return userId when provided', () => {
-      expect(service.validateUserId('user-123')).toBe('user-123');
+  describe('validateCreatorExternalId', () => {
+    it('should return creatorId when provided', () => {
+      expect(service.validateCreatorExternalId('creator-123')).toBe(
+        'creator-123',
+      );
     });
 
-    it('should throw BadRequestException when userId is undefined', () => {
-      expect(() => service.validateUserId(undefined)).toThrow(
+    it('should throw BadRequestException when creatorId is undefined', () => {
+      expect(() => service.validateCreatorExternalId(undefined)).toThrow(
         BadRequestException,
       );
     });
 
-    it('should throw BadRequestException when userId is empty string', () => {
-      expect(() => service.validateUserId('')).toThrow(BadRequestException);
+    it('should throw BadRequestException when creatorId is empty string', () => {
+      expect(() => service.validateCreatorExternalId('')).toThrow(
+        BadRequestException,
+      );
     });
   });
 

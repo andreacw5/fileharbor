@@ -11,7 +11,7 @@ describe('AlbumService', () => {
   let service: AlbumService;
 
   const mockClientId = 'client-123';
-  const mockUserId = 'user-123';
+  const mockCreatorExternalId = 'creator-123';
   const mockAlbumId = 'album-123';
   const mockImageId = 'image-123';
   const mockVideoId = 'video-123';
@@ -20,7 +20,7 @@ describe('AlbumService', () => {
   const mockAlbum = {
     id: mockAlbumId,
     clientId: mockClientId,
-    userId: mockUserId,
+    creatorId: mockCreatorExternalId,
     externalAlbumId: 'ext-album-123',
     name: 'Test Album',
     description: 'Test Description',
@@ -39,7 +39,7 @@ describe('AlbumService', () => {
   const mockImage = {
     id: mockImageId,
     clientId: mockClientId,
-    userId: mockUserId,
+    creatorId: mockCreatorExternalId,
     originalName: 'test.jpg',
     mimeType: 'image/jpeg',
     format: 'jpeg',
@@ -52,7 +52,7 @@ describe('AlbumService', () => {
   const mockVideo = {
     id: mockVideoId,
     clientId: mockClientId,
-    userId: mockUserId,
+    creatorId: mockCreatorExternalId,
     originalName: 'test.mp4',
     mimeType: 'video/mp4',
     duration: 120,
@@ -172,7 +172,7 @@ describe('AlbumService', () => {
 
       const result = await service.createAlbum(
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         createDto,
       );
 
@@ -180,7 +180,7 @@ describe('AlbumService', () => {
         id: mockAlbum.id,
         externalAlbumId: mockAlbum.externalAlbumId,
         clientId: mockAlbum.clientId,
-        userId: mockAlbum.userId,
+        creatorId: mockAlbum.creatorId,
         name: mockAlbum.name,
         description: mockAlbum.description,
         isPublic: mockAlbum.isPublic,
@@ -191,7 +191,7 @@ describe('AlbumService', () => {
       expect(mockPrismaService.album.create).toHaveBeenCalledWith({
         data: {
           clientId: mockClientId,
-          userId: mockUserId,
+          creatorId: mockCreatorExternalId,
           externalAlbumId: undefined,
           name: createDto.name,
           description: createDto.description,
@@ -209,7 +209,7 @@ describe('AlbumService', () => {
       };
       mockPrismaService.album.create.mockResolvedValue(mockPublicAlbum);
 
-      await service.createAlbum(mockClientId, mockUserId, createDto);
+      await service.createAlbum(mockClientId, mockCreatorExternalId, createDto);
 
       expect(mockPrismaService.album.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -228,7 +228,7 @@ describe('AlbumService', () => {
         externalAlbumId: 'ext-album-456',
       });
 
-      await service.createAlbum(mockClientId, mockUserId, createDto);
+      await service.createAlbum(mockClientId, mockCreatorExternalId, createDto);
 
       expect(mockPrismaService.album.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -269,7 +269,7 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('getAlbumWithItems', () => {
-    it('should return public album for any user', async () => {
+    it('should return public album for any creator', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(
         mockPublicAlbumWithItems,
       );
@@ -277,7 +277,7 @@ describe('AlbumService', () => {
       const result = await service.getAlbumWithItems(
         mockPublicAlbum.id,
         mockClientId,
-        'different-user',
+        'different-creator',
       );
 
       expect(result.itemCount).toBe(1);
@@ -290,7 +290,7 @@ describe('AlbumService', () => {
       const result = await service.getAlbumWithItems(
         mockAlbumId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
       );
 
       expect(result.itemCount).toBe(1);
@@ -300,10 +300,18 @@ describe('AlbumService', () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.getAlbumWithItems(mockAlbumId, mockClientId, 'different-user'),
+        service.getAlbumWithItems(
+          mockAlbumId,
+          mockClientId,
+          'different-creator',
+        ),
       ).rejects.toThrow(ForbiddenException);
       await expect(
-        service.getAlbumWithItems(mockAlbumId, mockClientId, 'different-user'),
+        service.getAlbumWithItems(
+          mockAlbumId,
+          mockClientId,
+          'different-creator',
+        ),
       ).rejects.toThrow('Access denied to private album');
     });
   });
@@ -311,23 +319,29 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('getUserAlbums', () => {
-    it('should return all albums for a user', async () => {
+    it('should return all albums for a creator', async () => {
       const albums = [
         mockAlbumWithItems,
         { ...mockAlbumWithItems, id: 'album-456' },
       ];
       mockPrismaService.album.findMany.mockResolvedValue(albums);
 
-      const result = await service.getUserAlbums(mockClientId, mockUserId);
+      const result = await service.getUserAlbums(
+        mockClientId,
+        mockCreatorExternalId,
+      );
 
       expect(result).toHaveLength(2);
       expect(result[0].itemCount).toBe(1);
     });
 
-    it('should return empty array when user has no albums', async () => {
+    it('should return empty array when creator has no albums', async () => {
       mockPrismaService.album.findMany.mockResolvedValue([]);
 
-      const result = await service.getUserAlbums(mockClientId, mockUserId);
+      const result = await service.getUserAlbums(
+        mockClientId,
+        mockCreatorExternalId,
+      );
 
       expect(result).toEqual([]);
     });
@@ -400,7 +414,7 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('updateAlbum', () => {
-    it('should update album when user is owner', async () => {
+    it('should update album when creator is owner', async () => {
       const updateDto: UpdateAlbumDto = {
         name: 'Updated Album',
         description: 'Updated Description',
@@ -415,7 +429,7 @@ describe('AlbumService', () => {
       const result = await service.updateAlbum(
         mockAlbumId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         updateDto,
       );
 
@@ -424,7 +438,7 @@ describe('AlbumService', () => {
       expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       const updateDto: UpdateAlbumDto = { name: 'Updated Album' };
 
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
@@ -433,7 +447,7 @@ describe('AlbumService', () => {
         service.updateAlbum(
           mockAlbumId,
           mockClientId,
-          'different-user',
+          'different-creator',
           updateDto,
         ),
       ).rejects.toThrow(ForbiddenException);
@@ -441,7 +455,7 @@ describe('AlbumService', () => {
         service.updateAlbum(
           mockAlbumId,
           mockClientId,
-          'different-user',
+          'different-creator',
           updateDto,
         ),
       ).rejects.toThrow('You can only update your own albums');
@@ -451,14 +465,14 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('deleteAlbum', () => {
-    it('should delete album when user is owner', async () => {
+    it('should delete album when creator is owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.album.delete.mockResolvedValue(mockAlbum);
 
       const result = await service.deleteAlbum(
         mockAlbumId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
       );
 
       expect(result.success).toBe(true);
@@ -469,14 +483,14 @@ describe('AlbumService', () => {
       expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.deleteAlbum(mockAlbumId, mockClientId, 'different-user'),
+        service.deleteAlbum(mockAlbumId, mockClientId, 'different-creator'),
       ).rejects.toThrow(ForbiddenException);
       await expect(
-        service.deleteAlbum(mockAlbumId, mockClientId, 'different-user'),
+        service.deleteAlbum(mockAlbumId, mockClientId, 'different-creator'),
       ).rejects.toThrow('You can only delete your own albums');
     });
   });
@@ -500,7 +514,7 @@ describe('AlbumService', () => {
         mockAlbumId,
         mockClientId,
         [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.albumId).toBe(mockAlbumId);
@@ -526,14 +540,14 @@ describe('AlbumService', () => {
         mockAlbumId,
         mockClientId,
         [{ id: mockVideoId, resourceType: AlbumResourceType.VIDEO }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.count).toBe(1);
       expect(result.items[0].resourceType).toBe(AlbumResourceType.VIDEO);
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
 
       await expect(
@@ -541,7 +555,7 @@ describe('AlbumService', () => {
           mockAlbumId,
           mockClientId,
           [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
-          { userId: 'different-user' },
+          { creatorId: 'different-creator' },
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -556,7 +570,7 @@ describe('AlbumService', () => {
           mockAlbumId,
           mockClientId,
           [{ id: 'nonexistent-image', resourceType: AlbumResourceType.IMAGE }],
-          { userId: mockUserId },
+          { creatorId: mockCreatorExternalId },
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -589,7 +603,7 @@ describe('AlbumService', () => {
         mockAlbumId,
         mockClientId,
         [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.success).toBe(true);
@@ -613,7 +627,7 @@ describe('AlbumService', () => {
         mockAlbumId,
         mockClientId,
         [{ id: mockVideoId, resourceType: AlbumResourceType.VIDEO }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.removed).toBe(1);
@@ -624,7 +638,7 @@ describe('AlbumService', () => {
       });
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
 
       await expect(
@@ -632,7 +646,7 @@ describe('AlbumService', () => {
           mockAlbumId,
           mockClientId,
           [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
-          { userId: 'different-user' },
+          { creatorId: 'different-creator' },
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -647,7 +661,7 @@ describe('AlbumService', () => {
         mockAlbumId,
         mockClientId,
         [{ id: 'nonexistent', resourceType: AlbumResourceType.IMAGE }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.removed).toBe(0);
@@ -665,7 +679,7 @@ describe('AlbumService', () => {
       const result = await service.generateAlbumToken(
         mockAlbumId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         7,
       );
 
@@ -685,7 +699,11 @@ describe('AlbumService', () => {
         }),
       );
 
-      await service.generateAlbumToken(mockAlbumId, mockClientId, mockUserId);
+      await service.generateAlbumToken(
+        mockAlbumId,
+        mockClientId,
+        mockCreatorExternalId,
+      );
 
       expect(mockPrismaService.albumToken.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -694,14 +712,14 @@ describe('AlbumService', () => {
       );
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
         service.generateAlbumToken(
           mockAlbumId,
           mockClientId,
-          'different-user',
+          'different-creator',
           7,
         ),
       ).rejects.toThrow(ForbiddenException);
@@ -804,7 +822,7 @@ describe('AlbumService', () => {
       const result = await service.revokeAlbumToken(
         mockAlbumId,
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
       );
 
       expect(result.success).toBe(true);
@@ -814,11 +832,15 @@ describe('AlbumService', () => {
       });
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
-        service.revokeAlbumToken(mockAlbumId, mockClientId, 'different-user'),
+        service.revokeAlbumToken(
+          mockAlbumId,
+          mockClientId,
+          'different-creator',
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -874,7 +896,7 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('getAlbumWithItemsByExternalId', () => {
-    it('should return public album by external ID for any user', async () => {
+    it('should return public album by external ID for any creator', async () => {
       mockPrismaService.album.findUnique.mockResolvedValue(
         mockPublicAlbumWithItems,
       );
@@ -882,7 +904,7 @@ describe('AlbumService', () => {
       const result = await service.getAlbumWithItemsByExternalId(
         'ext-album-123',
         mockClientId,
-        'any-user',
+        'any-creator',
       );
 
       expect(result.isPublic).toBe(true);
@@ -896,7 +918,7 @@ describe('AlbumService', () => {
         service.getAlbumWithItemsByExternalId(
           'ext-album-123',
           mockClientId,
-          'different-user',
+          'different-creator',
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -917,7 +939,7 @@ describe('AlbumService', () => {
       const result = await service.updateAlbumByExternalId(
         'ext-album-123',
         mockClientId,
-        mockUserId,
+        mockCreatorExternalId,
         updateDto,
       );
 
@@ -925,14 +947,14 @@ describe('AlbumService', () => {
       expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw ForbiddenException when creator is not owner', async () => {
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
 
       await expect(
         service.updateAlbumByExternalId(
           'ext-album-123',
           mockClientId,
-          'different-user',
+          'different-creator',
           {},
         ),
       ).rejects.toThrow(ForbiddenException);
@@ -959,7 +981,7 @@ describe('AlbumService', () => {
         'ext-album-123',
         mockClientId,
         [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.albumId).toBe(mockAlbumId);
@@ -979,7 +1001,7 @@ describe('AlbumService', () => {
         'ext-album-123',
         mockClientId,
         [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
-        { userId: mockUserId },
+        { creatorId: mockCreatorExternalId },
       );
 
       expect(result.success).toBe(true);
@@ -1080,14 +1102,18 @@ describe('AlbumService', () => {
     it('should include expected fields and exclude updatedAt', async () => {
       mockPrismaService.album.create.mockResolvedValue(mockAlbum);
 
-      const result = await service.createAlbum(mockClientId, mockUserId, {
-        name: 'Test',
-      });
+      const result = await service.createAlbum(
+        mockClientId,
+        mockCreatorExternalId,
+        {
+          name: 'Test',
+        },
+      );
 
       expect(result).toHaveProperty('id');
       expect(result).toHaveProperty('externalAlbumId');
       expect(result).toHaveProperty('clientId');
-      expect(result).toHaveProperty('userId');
+      expect(result).toHaveProperty('creatorId');
       expect(result).toHaveProperty('name');
       expect(result).toHaveProperty('description');
       expect(result).toHaveProperty('isPublic');

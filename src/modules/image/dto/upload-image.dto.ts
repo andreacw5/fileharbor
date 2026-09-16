@@ -4,7 +4,7 @@ import { Transform } from 'class-transformer';
 export class UploadImageDto {
   @IsOptional()
   @IsString()
-  userId?: string;
+  creatorId?: string;
 
   @IsOptional()
   @IsString()

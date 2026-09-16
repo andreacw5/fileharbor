@@ -1,18 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
-export class UserClientDto {
+export class CreatorClientDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() name: string;
   @ApiPropertyOptional() @Expose() domain?: string;
 }
 
-/** Full user response — includes bio. Use for single-user detail endpoints. */
-export class UserResponseDto {
-  @ApiProperty({ description: 'Internal user UUID' }) @Expose() id: string;
-  @ApiProperty({ description: 'External user ID from the client system' })
+/** Full creator response — includes bio. Use for single-creator detail endpoints. */
+export class CreatorResponseDto {
+  @ApiProperty({ description: 'Internal creator UUID' }) @Expose() id: string;
+  @ApiProperty({ description: 'External creator ID from the client system' })
   @Expose()
-  externalUserId: string;
+  externalId: string;
   @ApiPropertyOptional() @Expose() username?: string;
   @ApiPropertyOptional() @Expose() website?: string;
   @ApiPropertyOptional() @Expose() bio?: string;
@@ -24,27 +24,27 @@ export class UserResponseDto {
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
   @ApiPropertyOptional() @Expose() totalVideos?: number;
   @ApiPropertyOptional({
-    description: 'Whether the requesting admin has bookmarked this user',
+    description: 'Whether the requesting admin has bookmarked this creator',
   })
   @Expose()
   isBookmarked?: boolean;
   @ApiPropertyOptional() @Expose() avatarUrl?: string;
 
-  @ApiPropertyOptional({ type: UserClientDto })
+  @ApiPropertyOptional({ type: CreatorClientDto })
   @Expose()
-  @Type(() => UserClientDto)
-  client?: UserClientDto;
+  @Type(() => CreatorClientDto)
+  client?: CreatorClientDto;
 }
 
 /**
- * Slim user response for list endpoints — bio intentionally omitted.
- * Use `UserResponseDto` for single-user detail endpoints that expose bio.
+ * Slim creator response for list endpoints — bio intentionally omitted.
+ * Use `CreatorResponseDto` for single-creator detail endpoints that expose bio.
  */
-export class UserListResponseDto {
-  @ApiProperty({ description: 'Internal user UUID' }) @Expose() id: string;
-  @ApiProperty({ description: 'External user ID from the client system' })
+export class CreatorListResponseDto {
+  @ApiProperty({ description: 'Internal creator UUID' }) @Expose() id: string;
+  @ApiProperty({ description: 'External creator ID from the client system' })
   @Expose()
-  externalUserId: string;
+  externalId: string;
   @ApiPropertyOptional() @Expose() username?: string;
   @ApiPropertyOptional() @Expose() website?: string;
   @ApiProperty() @Expose() clientId: string;
@@ -54,14 +54,14 @@ export class UserListResponseDto {
   @ApiPropertyOptional() @Expose() totalAlbums?: number;
   @ApiPropertyOptional() @Expose() totalVideos?: number;
   @ApiPropertyOptional({
-    description: 'Whether the requesting admin has bookmarked this user',
+    description: 'Whether the requesting admin has bookmarked this creator',
   })
   @Expose()
   isBookmarked?: boolean;
   @ApiPropertyOptional() @Expose() avatarUrl?: string;
 
-  @ApiPropertyOptional({ type: UserClientDto })
+  @ApiPropertyOptional({ type: CreatorClientDto })
   @Expose()
-  @Type(() => UserClientDto)
-  client?: UserClientDto;
+  @Type(() => CreatorClientDto)
+  client?: CreatorClientDto;
 }

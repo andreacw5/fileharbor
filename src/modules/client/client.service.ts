@@ -38,19 +38,19 @@ export class ClientService {
   }
 
   /**
-   * Get or create user for client
+   * Get or create creator for client
    */
   async getOrCreateUser(
     clientId: string,
-    externalUserId: string,
+    externalId: string,
     email?: string,
     username?: string,
   ) {
-    return this.prisma.user.upsert({
+    return this.prisma.creator.upsert({
       where: {
-        clientId_externalUserId: {
+        clientId_externalId: {
           clientId,
-          externalUserId,
+          externalId,
         },
       },
       update: {
@@ -59,7 +59,7 @@ export class ClientService {
       },
       create: {
         clientId,
-        externalUserId,
+        externalId,
         email,
         username,
       },
@@ -67,21 +67,21 @@ export class ClientService {
   }
 
   /**
-   * Get user by external ID
+   * Get creator by external ID
    */
-  async getUserByExternalId(clientId: string, externalUserId: string) {
-    return this.prisma.user.findUnique({
+  async getUserByExternalId(clientId: string, externalId: string) {
+    return this.prisma.creator.findUnique({
       where: {
-        clientId_externalUserId: {
+        clientId_externalId: {
           clientId,
-          externalUserId,
+          externalId,
         },
       },
     });
   }
 
   /**
-   * Create a new client and ensure a default admin user exists if no users are present
+   * Create a new client and seed its default 'administrator' and 'system' creators
    */
   async createClient(data: {
     name: string;
@@ -108,27 +108,27 @@ export class ClientService {
       this.mapUniqueConstraintViolation(error);
     }
 
-    // Check if users exist for this client
-    const userCount = await this.prisma.user.count({
+    // Check if creators exist for this client
+    const creatorCount = await this.prisma.creator.count({
       where: { clientId: client.id },
     });
 
-    // If no users, create default users
-    if (userCount === 0) {
-      // Create administrator user
-      await this.prisma.user.create({
+    // If no creators, create default creators
+    if (creatorCount === 0) {
+      // Create administrator creator
+      await this.prisma.creator.create({
         data: {
           clientId: client.id,
-          externalUserId: 'administrator',
+          externalId: 'administrator',
           username: 'administrator',
         },
       });
 
-      // Create system user for images without explicit userId
-      await this.prisma.user.create({
+      // Create system creator for images without explicit creatorId
+      await this.prisma.creator.create({
         data: {
           clientId: client.id,
-          externalUserId: 'system',
+          externalId: 'system',
           username: 'system',
         },
       });
@@ -139,7 +139,7 @@ export class ClientService {
 
   /**
    * Maps a Prisma unique-constraint violation (P2002) on a known client field to a
-   * ConflictException with a user-facing message. `meta.target` is normally a string[]
+   * ConflictException with a creator-facing message. `meta.target` is normally a string[]
    * of field names, but with Prisma 7 driver adapters it can also be absent or a single
    * string (sometimes the constraint name rather than the bare field name) — handled
    * defensively here. Any other error (or an unrecognized target) is rethrown unchanged.
@@ -229,7 +229,7 @@ export class ClientService {
             avatars: true,
             albums: true,
             videos: true,
-            users: true,
+            creators: true,
           },
         },
       },
@@ -251,7 +251,7 @@ export class ClientService {
       totalAvatars: c._count.avatars,
       totalAlbums: c._count.albums,
       totalVideos: c._count.videos,
-      totalUsers: c._count.users,
+      totalUsers: c._count.creators,
       totalStorage: storageMap.get(c.id) || 0,
     }));
   }
@@ -270,7 +270,7 @@ export class ClientService {
             avatars: true,
             albums: true,
             videos: true,
-            users: true,
+            creators: true,
           },
         },
       },
@@ -289,7 +289,7 @@ export class ClientService {
       totalAvatars: client._count.avatars,
       totalAlbums: client._count.albums,
       totalVideos: client._count.videos,
-      totalUsers: client._count.users,
+      totalUsers: client._count.creators,
       totalStorage: storageAgg._sum.size || 0,
     };
   }

@@ -48,13 +48,13 @@ export class AvatarsAdminController {
   @Get()
   @ApiOperation({ summary: 'List avatars (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   async listAvatars(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
-    @Query('userId') userId?: string,
+    @Query('creatorId') creatorId?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
@@ -63,7 +63,7 @@ export class AvatarsAdminController {
     const skip = (pageNum - 1) * take;
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (userId) where.user = { externalUserId: userId };
+    if (creatorId) where.creator = { externalId: creatorId };
 
     const { avatars, total } = await this.avatarService.findAdminAvatars(
       where,
@@ -71,9 +71,9 @@ export class AvatarsAdminController {
     );
 
     const data = avatars.map((avatar) => {
-      const externalUserId = avatar.user?.externalUserId;
-      const fullPath = externalUserId
-        ? this.route.fullUrl('avatars', externalUserId)
+      const externalId = avatar.creator?.externalId;
+      const fullPath = externalId
+        ? this.route.fullUrl('avatars', externalId)
         : null;
       return { ...avatar, fullPath };
     });
@@ -100,9 +100,9 @@ export class AvatarsAdminController {
     if (!avatar) throw new NotFoundException('Avatar not found');
     assertClientAccess(adminUser, avatar.clientId);
 
-    const externalUserId = avatar.user?.externalUserId;
-    const fullPath = externalUserId
-      ? this.route.fullUrl('avatars', externalUserId)
+    const externalId = avatar.creator?.externalId;
+    const fullPath = externalId
+      ? this.route.fullUrl('avatars', externalId)
       : null;
 
     return plainToInstance(

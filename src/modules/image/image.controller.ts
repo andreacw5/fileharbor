@@ -31,7 +31,10 @@ import { Response } from 'express';
 import { ImageService } from './image.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
-import { ClientId, UserId } from '@/modules/client/decorators/client.decorator';
+import {
+  ClientId,
+  CreatorExternalId,
+} from '@/modules/client/decorators/client.decorator';
 import { Public } from '@/modules/client/decorators/public.decorator';
 import {
   UploadImageDto,
@@ -78,7 +81,7 @@ export class ImageController {
         username: {
           type: 'string',
           description:
-            'Username of the uploader (saved/updated on the user record)',
+            'Username of the uploader (saved/updated on the creator record)',
         },
       },
     },
@@ -93,7 +96,7 @@ export class ImageController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadImage(
     @ClientId() clientId: string,
-    @UserId() userId: string | undefined,
+    @CreatorExternalId() creatorId: string | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadImageDto,
   ): Promise<ImageResponseDto> {
@@ -103,19 +106,19 @@ export class ImageController {
     }
 
     this.logger.debug(
-      `[Upload] Starting - Client: ${clientId}, User: ${userId || 'anonymous'}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
+      `[Upload] Starting - Client: ${clientId}, Creator: ${creatorId || 'anonymous'}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
     );
 
     try {
-      // Use userId from DTO if provided, otherwise use from decorator (X-User-Id header)
-      const effectiveUserId = dto.userId || userId;
+      // Use creatorId from DTO if provided, otherwise use from decorator (X-User-Id header)
+      const effectiveCreatorExternalId = dto.creatorId || creatorId;
       this.logger.debug(
-        `[Upload] Effective User ID: ${effectiveUserId || 'system'}`,
+        `[Upload] Effective Creator ID: ${effectiveCreatorExternalId || 'system'}`,
       );
 
       const result = await this.imageService.uploadImage(
         clientId,
-        effectiveUserId,
+        effectiveCreatorExternalId,
         file,
         dto.albumId,
         dto.tags,
@@ -125,7 +128,7 @@ export class ImageController {
       );
 
       this.logger.log(
-        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, User: ${effectiveUserId || 'system'}, Size: ${file.size} bytes`,
+        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, Creator: ${effectiveCreatorExternalId || 'system'}, Size: ${file.size} bytes`,
       );
 
       return result;
@@ -140,7 +143,7 @@ export class ImageController {
   @Get()
   @ApiOperation({
     summary: 'List images',
-    description: 'Paginated list of images with optional user filter.',
+    description: 'Paginated list of images with optional creator filter.',
   })
   @ApiResponse({
     status: 200,
@@ -154,14 +157,14 @@ export class ImageController {
     // Always use the authenticated client's ID
     const filters = {
       clientId: clientId,
-      userId: query.userId,
+      creatorId: query.creatorId,
       albumId: query.albumId,
       page: query.page,
       perPage: query.perPage,
     };
 
     this.logger.debug(
-      `[ListImages] Client: ${clientId}, User: ${query.userId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`,
+      `[ListImages] Client: ${clientId}, Creator: ${query.creatorId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`,
     );
 
     const result = await this.imageService.listImages(filters);
@@ -204,7 +207,7 @@ export class ImageController {
     @Req() req?: import('express').Request,
   ) {
     const clientId = req['clientId'];
-    const userId = req['userId'];
+    const creatorId = req['creatorId'];
     const requestType = query.info
       ? 'metadata'
       : query.download
@@ -215,7 +218,7 @@ export class ImageController {
 
     // Single comprehensive log for request start
     this.logger.debug(
-      `[GetImage] ${requestType} | ${imageId} | client:${clientId || 'public'} | user:${userId || 'anon'} | token:${!!query.token}`,
+      `[GetImage] ${requestType} | ${imageId} | client:${clientId || 'public'} | creator:${creatorId || 'anon'} | token:${!!query.token}`,
     );
 
     try {
@@ -233,7 +236,7 @@ export class ImageController {
             image,
             imageId,
             clientId,
-            userId,
+            creatorId,
             query.token,
           );
         }
@@ -243,7 +246,7 @@ export class ImageController {
           image,
           imageId,
           clientId,
-          userId,
+          creatorId,
         );
       }
 
@@ -353,32 +356,36 @@ export class ImageController {
     description: 'Updated successfully',
     type: ImageResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid data or missing User ID' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid data or missing Creator ID',
+  })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async updateImage(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('imageId') imageId: string,
     @Body() dto: UpdateImageMetadataDto,
   ): Promise<ImageResponseDto> {
     this.logger.debug(
-      `[UpdateImage] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`,
+      `[UpdateImage] Starting - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
     );
 
-    const validUserId = this.imageService.validateUserId(userId);
+    const validCreatorExternalId =
+      this.imageService.validateCreatorExternalId(creatorId);
 
     try {
       const result = await this.imageService.updateImageMetadata(
         imageId,
         clientId,
-        validUserId,
+        validCreatorExternalId,
         dto.tags,
         dto.description,
       );
 
       this.logger.log(
-        `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`,
+        `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
       );
 
       return result;
@@ -402,27 +409,28 @@ export class ImageController {
     description: 'Share link created',
     type: ShareLinkResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Missing User ID' })
+  @ApiResponse({ status: 400, description: 'Missing Creator ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async createShareLink(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('imageId') imageId: string,
     @Body() dto: CreateShareLinkDto,
   ): Promise<ShareLinkResponseDto> {
     this.logger.debug(
-      `[CreateShareLink] Starting - ImageId: ${imageId}, Client: ${clientId}, User: ${userId}`,
+      `[CreateShareLink] Starting - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
     );
 
-    const validUserId = this.imageService.validateUserId(userId);
+    const validCreatorExternalId =
+      this.imageService.validateCreatorExternalId(creatorId);
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
 
     try {
       const result = await this.imageService.createShareLink(
         imageId,
         clientId,
-        validUserId,
+        validCreatorExternalId,
         expiresAt,
       );
 
@@ -450,25 +458,26 @@ export class ImageController {
     description: 'Revoked successfully',
     type: DeleteResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Missing User ID' })
+  @ApiResponse({ status: 400, description: 'Missing Creator ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async deleteShareLink(
     @ClientId() clientId: string,
-    @UserId() userId: string,
+    @CreatorExternalId() creatorId: string,
     @Param('shareId') shareId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[DeleteShareLink] Starting - ShareId: ${shareId}, Client: ${clientId}, User: ${userId}`,
+      `[DeleteShareLink] Starting - ShareId: ${shareId}, Client: ${clientId}, Creator: ${creatorId}`,
     );
 
-    const validUserId = this.imageService.validateUserId(userId);
+    const validCreatorExternalId =
+      this.imageService.validateCreatorExternalId(creatorId);
 
     try {
       const result = await this.imageService.deleteShareLink(
         shareId,
         clientId,
-        validUserId,
+        validCreatorExternalId,
       );
 
       this.logger.log(`[DeleteShareLink] Success - ShareId: ${shareId}`);

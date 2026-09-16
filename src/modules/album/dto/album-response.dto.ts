@@ -14,10 +14,10 @@ export class AlbumResponseDto {
   externalAlbumId?: string;
 
   @ApiProperty({
-    description: 'User identifier who owns the album',
-    example: 'user-123',
+    description: 'Creator identifier who owns the album',
+    example: 'creator-123',
   })
-  userId: string;
+  creatorId: string;
 
   @ApiProperty({
     description: 'Album name',

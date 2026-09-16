@@ -47,13 +47,13 @@ export class StatisticsService {
       this.prisma.avatar.count({ where: clientWhere }),
       this.prisma.album.count({ where: clientWhere }),
       this.prisma.video.count({ where: clientWhere }),
-      this.prisma.user.count({ where: clientWhere }),
+      this.prisma.creator.count({ where: clientWhere }),
       this.prisma.image.aggregate({ where: clientWhere, _sum: { size: true } }),
       this.prisma.image.count({ where: clientWhere7d }),
       this.prisma.avatar.count({ where: clientWhere7d }),
       this.prisma.album.count({ where: clientWhere7d }),
       this.prisma.video.count({ where: clientWhere7d }),
-      this.prisma.user.count({ where: clientWhere7d }),
+      this.prisma.creator.count({ where: clientWhere7d }),
       this.prisma.image.aggregate({
         where: clientWhere7d,
         _sum: { size: true },
@@ -94,7 +94,7 @@ export class StatisticsService {
   }
 
   /**
-   * Build per-day counts for images, avatars, albums and users
+   * Build per-day counts for images, avatars, albums and creators
    * for the 7-day window starting at `from`.
    */
   private async buildDailyChart(

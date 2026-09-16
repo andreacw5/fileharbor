@@ -31,7 +31,7 @@ export type AdminBookmarksListParams = {
   perPage?: number;
 };
 
-export type AdminUserBookmarksListParams = {
+export type AdminCreatorBookmarksListParams = {
   clientId?: string;
   search?: string;
   page?: number;
@@ -132,35 +132,35 @@ export class BookmarksService {
     return this.getBookmarkByAdminAndImage(adminUser.actorId, imageId);
   }
 
-  async bookmarkUser(adminUser: AdminJwtPayload, userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+  async bookmarkUser(adminUser: AdminJwtPayload, creatorId: string) {
+    const creator = await this.prisma.creator.findUnique({
+      where: { id: creatorId },
       select: { id: true, clientId: true },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!creator) {
+      throw new NotFoundException('Creator not found');
     }
 
-    assertClientAccess(adminUser, user.clientId);
+    assertClientAccess(adminUser, creator.clientId);
 
     const prisma = this.prisma as any;
 
-    await prisma.adminUserBookmark.upsert({
+    await prisma.adminCreatorBookmark.upsert({
       where: {
-        actorId_userId: {
+        actorId_creatorId: {
           actorId: adminUser.actorId,
-          userId,
+          creatorId,
         },
       },
       create: {
         actorId: adminUser.actorId,
-        userId,
+        creatorId,
       },
       update: {},
     });
 
-    return this.getBookmarkByAdminAndUser(adminUser.actorId, userId);
+    return this.getBookmarkByAdminAndUser(adminUser.actorId, creatorId);
   }
 
   async removeBookmark(
@@ -192,25 +192,25 @@ export class BookmarksService {
 
   async removeUserBookmark(
     adminUser: AdminJwtPayload,
-    userId: string,
+    creatorId: string,
   ): Promise<{ removed: number }> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const creator = await this.prisma.creator.findUnique({
+      where: { id: creatorId },
       select: { id: true, clientId: true },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!creator) {
+      throw new NotFoundException('Creator not found');
     }
 
-    assertClientAccess(adminUser, user.clientId);
+    assertClientAccess(adminUser, creator.clientId);
 
     const prisma = this.prisma as any;
 
-    const result = await prisma.adminUserBookmark.deleteMany({
+    const result = await prisma.adminCreatorBookmark.deleteMany({
       where: {
         actorId: adminUser.actorId,
-        userId,
+        creatorId,
       },
     });
 
@@ -237,14 +237,14 @@ export class BookmarksService {
     return this.mapBookmark(bookmark);
   }
 
-  private async getBookmarkByAdminAndUser(actorId: string, userId: string) {
+  private async getBookmarkByAdminAndUser(actorId: string, creatorId: string) {
     const prisma = this.prisma as any;
 
-    const bookmark = await prisma.adminUserBookmark.findUnique({
+    const bookmark = await prisma.adminCreatorBookmark.findUnique({
       where: {
-        actorId_userId: {
+        actorId_creatorId: {
           actorId,
-          userId,
+          creatorId,
         },
       },
       include: this.buildUserBookmarkInclude(),
@@ -267,7 +267,7 @@ export class BookmarksService {
             },
           },
           client: { select: { id: true, name: true, domain: true } },
-          user: { select: { externalUserId: true, username: true } },
+          creator: { select: { externalId: true, username: true } },
           albumItems: {
             where: { resourceType: 'IMAGE' },
             include: {
@@ -297,7 +297,7 @@ export class BookmarksService {
 
   private buildUserBookmarkInclude() {
     return {
-      user: {
+      creator: {
         include: {
           client: { select: { id: true, name: true, domain: true } },
           _count: {
@@ -435,7 +435,7 @@ export class BookmarksService {
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
           client: { select: { id: true, name: true, domain: true } },
-          user: { select: { externalUserId: true, username: true } },
+          creator: { select: { externalId: true, username: true } },
         },
       },
     };
@@ -463,18 +463,18 @@ export class BookmarksService {
   }
 
   private mapUserBookmark(bookmark: any) {
-    const user = bookmark.user;
+    const creator = bookmark.creator;
 
     return {
       id: bookmark.id,
       actorId: bookmark.actorId,
-      userId: bookmark.userId,
+      creatorId: bookmark.creatorId,
       bookmarkedAt: bookmark.createdAt,
-      user: {
-        ...user,
-        totalImages: user._count?.images ?? 0,
-        totalAvatars: user._count?.avatars ?? 0,
-        totalAlbums: user._count?.albums ?? 0,
+      creator: {
+        ...creator,
+        totalImages: creator._count?.images ?? 0,
+        totalAvatars: creator._count?.avatars ?? 0,
+        totalAlbums: creator._count?.albums ?? 0,
       },
     };
   }

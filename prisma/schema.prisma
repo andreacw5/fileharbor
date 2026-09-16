@@ -43,7 +43,7 @@ model Client {
   ownerPrincipalId String?
 
   // Relations
-  users          User[]
+  creators       Creator[]
   images         Image[]
   avatars        Avatar[]
   albums         Album[]
@@ -55,13 +55,13 @@ model Client {
   @@map("clients")
 }
 
-// User within a client
-model User {
-  id             String  @id @default(uuid())
-  clientId       String
-  externalUserId String // ID from client's application
-  email          String?
-  username       String?
+// Creator within a client — owns visual content, never authenticates
+model Creator {
+  id         String  @id @default(uuid())
+  clientId   String
+  externalId String // id of this creator in the client's own system
+  email      String?
+  username   String?
 
   website String?
   bio     String?
@@ -70,24 +70,24 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
   images         Image[]
   videos         Video[]
   avatars        Avatar[]
   albums         Album[]
-  adminBookmarks AdminUserBookmark[]
+  adminBookmarks AdminCreatorBookmark[]
 
-  @@unique([clientId, externalUserId])
+  @@unique([clientId, externalId])
   @@index([clientId])
-  @@index([externalUserId])
-  @@map("users")
+  @@index([externalId])
+  @@map("creators")
 }
 
 // Image entity
 model Image {
   id              String    @id @default(uuid())
   clientId        String
-  userId          String
+  creatorId       String
   originalName    String
   storagePath     String // e.g., storage/domain/images/{imageId}
   format          String // webp, jpeg, png
@@ -107,7 +107,7 @@ model Image {
 
   // Relations
   client          Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator         Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   albumItems      AlbumItem[]
   imageTags       ImageTag[]
   shareLinks      ImageShareLink[]
@@ -115,7 +115,7 @@ model Image {
   adminBookmarks  AdminImageBookmark[]
 
   @@index([clientId])
-  @@index([userId])
+  @@index([creatorId])
   @@index([isOptimized])
   @@index([isPrivate])
   @@map("images")
@@ -157,7 +157,7 @@ model ImageTag {
 model Video {
   id           String   @id @default(uuid())
   clientId     String
-  userId       String
+  creatorId    String
   originalName String
   storagePath  String
   mimeType     String
@@ -173,14 +173,14 @@ model Video {
   updatedAt    DateTime @updatedAt
 
   client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator        Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   videoTags      VideoTag[]
   adminBookmarks AdminVideoBookmark[]
   albumItems     AlbumItem[]
 
   @@index([clientId])
-  @@index([userId])
-  @@index([clientId, userId])
+  @@index([creatorId])
+  @@index([clientId, creatorId])
   @@index([isPrivate])
   @@map("videos")
 }
@@ -214,12 +214,12 @@ model AdminVideoBookmark {
   @@map("admin_video_bookmarks")
 }
 
-// Avatar entity - one active per user per client
+// Avatar entity - one active per creator per client
 model Avatar {
   id          String    @id @default(uuid())
   clientId    String
-  userId      String
-  storagePath String // e.g., storage/domain/avatars/{userId}
+  creatorId   String
+  storagePath String // e.g., storage/domain/avatars/{creatorId}
   format      String
   width       Int
   height      Int
@@ -231,12 +231,12 @@ model Avatar {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
-  @@unique([clientId, userId]) // Only one active avatar per user
+  @@unique([clientId, creatorId]) // Only one active avatar per creator
   @@index([clientId])
-  @@index([userId])
+  @@index([creatorId])
   @@map("avatars")
 }
 
@@ -244,8 +244,8 @@ model Avatar {
 model Album {
   id              String   @id @default(uuid())
   clientId        String
-  userId          String
-  externalAlbumId String? // ID from client's application
+  creatorId       String
+  externalAlbumId String? // id of this creator in the client's own system
   name            String
   description     String?
   isPublic        Boolean  @default(false)
@@ -254,15 +254,15 @@ model Album {
   updatedAt       DateTime @updatedAt
 
   // Relations
-  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coverImage  Image?      @relation("AlbumCoverImage", fields: [coverImageId], references: [id], onDelete: SetNull)
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  creator     Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  coverImage  Image?       @relation("AlbumCoverImage", fields: [coverImageId], references: [id], onDelete: SetNull)
   albumItems  AlbumItem[]
   albumTokens AlbumToken[]
 
   @@unique([clientId, externalAlbumId])
   @@index([clientId])
-  @@index([userId])
+  @@index([creatorId])
   @@index([isPublic])
   @@index([coverImageId])
   @@map("albums")
@@ -325,8 +325,8 @@ model AdminPrincipal {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  identities    AdminIdentity[]
-  ownedClients  Client[]
+  identities   AdminIdentity[]
+  ownedClients Client[]
 
   @@map("admin_principals")
 }
@@ -367,19 +367,19 @@ model AdminImageBookmark {
   @@map("admin_image_bookmarks")
 }
 
-// Admin personal bookmark for a user (a content creator, not a login)
-model AdminUserBookmark {
+// Admin personal bookmark for a creator
+model AdminCreatorBookmark {
   id        String   @id @default(uuid())
   actorId   String
-  userId    String
+  creatorId String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
-  @@unique([actorId, userId])
+  @@unique([actorId, creatorId])
   @@index([actorId])
-  @@index([userId])
-  @@map("admin_user_bookmarks")
+  @@index([creatorId])
+  @@map("admin_creator_bookmarks")
 }
 
 // Token for private image sharing

@@ -25,7 +25,7 @@ import {
   AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
   AdminDeleteResponseDto,
-  AdminUserBookmarkResponseDto,
+  AdminCreatorBookmarkResponseDto,
   AdminVideoBookmarkListResponseDto,
   AdminVideoBookmarkResponseDto,
 } from '../dto/admin-response.dto';
@@ -138,41 +138,41 @@ export class BookmarksAdminController {
     );
   }
 
-  @Post('users/:userId')
+  @Post('creators/:creatorId')
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Bookmark a user for the current admin' })
-  @ApiResponse({ status: 201, type: AdminUserBookmarkResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiOperation({ summary: 'Bookmark a creator for the current admin' })
+  @ApiResponse({ status: 201, type: AdminCreatorBookmarkResponseDto })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async bookmarkUser(
-    @Param('userId') userId: string,
+    @Param('creatorId') creatorId: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-  ): Promise<AdminUserBookmarkResponseDto> {
+  ): Promise<AdminCreatorBookmarkResponseDto> {
     const bookmark = await this.bookmarksService.bookmarkUser(
       adminUser,
-      userId,
+      creatorId,
     );
 
-    return plainToInstance(AdminUserBookmarkResponseDto, bookmark, {
+    return plainToInstance(AdminCreatorBookmarkResponseDto, bookmark, {
       excludeExtraneousValues: true,
     });
   }
 
-  @Delete('users/:userId')
+  @Delete('creators/:creatorId')
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove a user from admin bookmarks' })
+  @ApiOperation({ summary: 'Remove a creator from admin bookmarks' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async removeUserBookmark(
-    @Param('userId') userId: string,
+    @Param('creatorId') creatorId: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const result = await this.bookmarksService.removeUserBookmark(
       adminUser,
-      userId,
+      creatorId,
     );
 
     return plainToInstance(

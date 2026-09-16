@@ -100,7 +100,7 @@ export class ImageShareLinksAdminController {
         const links = await this.imageService.getShareLinks(
           image.id,
           image.clientId,
-          image.userId,
+          image.creatorId,
         );
         const mapped = links.map((link) => ({
           id: link.id,
@@ -206,7 +206,7 @@ export class ImageShareLinksAdminController {
         image: {
           select: {
             clientId: true,
-            userId: true,
+            creatorId: true,
           },
         },
       },
@@ -221,7 +221,7 @@ export class ImageShareLinksAdminController {
     await this.imageService.deleteShareLink(
       id,
       shareLink.image.clientId,
-      shareLink.image.userId,
+      shareLink.image.creatorId,
     );
 
     return plainToInstance(

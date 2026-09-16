@@ -29,7 +29,7 @@ import {
   buildImageTagCreateInput,
   extractTagNames,
 } from '@/modules/tag/tag.utils';
-import { UserService } from '@/modules/user/user.service';
+import { CreatorService } from '@/modules/creator/creator.service';
 
 @Injectable()
 export class ImageService {
@@ -44,7 +44,7 @@ export class ImageService {
     private config: ConfigService,
     private webhook: WebhookService,
     private httpService: HttpService,
-    private userService: UserService,
+    private creatorService: CreatorService,
     private route: RouteHelperService,
   ) {
     // Original should be high quality to preserve image fidelity
@@ -63,7 +63,7 @@ export class ImageService {
    */
   async uploadImage(
     clientId: string,
-    externalUserId: string | undefined,
+    externalId: string | undefined,
     file: Express.Multer.File,
     albumId?: string,
     tags?: string[],
@@ -73,7 +73,7 @@ export class ImageService {
   ) {
     const imageId = uuidv4();
     this.logger.debug(
-      `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, User: ${externalUserId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`,
+      `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`,
     );
 
     try {
@@ -97,35 +97,35 @@ export class ImageService {
       }
       const domain = client.domain || clientId;
 
-      // Get or create user
-      let user;
-      if (externalUserId) {
+      // Get or create creator
+      let creator;
+      if (externalId) {
         this.logger.debug(
-          `[uploadImage] Resolving user - ID: ${imageId}, External: ${externalUserId}, Username: ${username || 'auto'}`,
+          `[uploadImage] Resolving creator - ID: ${imageId}, External: ${externalId}, Username: ${username || 'auto'}`,
         );
-        user = await this.userService.resolveUser(
+        creator = await this.creatorService.resolveUser(
           clientId,
-          externalUserId,
+          externalId,
           username,
         );
       } else {
-        // If no externalUserId, use the system user
-        user = await this.prisma.user.findUnique({
+        // If no externalId, use the system creator
+        creator = await this.prisma.creator.findUnique({
           where: {
-            clientId_externalUserId: {
+            clientId_externalId: {
               clientId,
-              externalUserId: 'system',
+              externalId: 'system',
             },
           },
         });
-        if (!user) {
+        if (!creator) {
           this.logger.error(
-            `[uploadImage] System user not found - ID: ${imageId}, Client: ${clientId}`,
+            `[uploadImage] System creator not found - ID: ${imageId}, Client: ${clientId}`,
           );
-          throw new BadRequestException('System user not found for client');
+          throw new BadRequestException('System creator not found for client');
         }
       }
-      const userId = user.id;
+      const creatorId = creator.id;
 
       const imagePath = this.storage.getImagePath(domain, imageId);
 
@@ -184,7 +184,7 @@ export class ImageService {
         data: {
           id: imageId,
           clientId,
-          userId,
+          creatorId,
           originalName: file.originalname,
           storagePath: imagePath,
           format: 'webp',
@@ -221,7 +221,7 @@ export class ImageService {
           height: image.height,
           size: image.size,
           format: image.format,
-          userId: user.externalUserId,
+          creatorId: creator.externalId,
         })
         .catch((error) => {
           this.logger.warn(
@@ -239,7 +239,7 @@ export class ImageService {
       }
 
       this.logger.log(
-        `[uploadImage] Success - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Size: ${webpBuffer.length}`,
+        `[uploadImage] Success - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Size: ${webpBuffer.length}`,
       );
       return this.formatImageResponse(image);
     } catch (error) {
@@ -336,13 +336,13 @@ export class ImageService {
   }
 
   /**
-   * Get user images
+   * Get creator images
    */
-  async getUserImages(clientId: string, userId: string) {
+  async getUserImages(clientId: string, creatorId: string) {
     const images = await this.prisma.image.findMany({
       where: {
         clientId,
-        userId,
+        creatorId,
       },
       include: {
         imageTags: {
@@ -368,7 +368,7 @@ export class ImageService {
    */
   async listImages(filters: {
     clientId?: string;
-    userId?: string;
+    creatorId?: string;
     albumId?: string;
     page?: number;
     perPage?: number;
@@ -381,8 +381,8 @@ export class ImageService {
     if (filters.clientId) {
       where.clientId = filters.clientId;
     }
-    if (filters.userId) {
-      where.userId = filters.userId;
+    if (filters.creatorId) {
+      where.creatorId = filters.creatorId;
     }
     if (filters.albumId) {
       where.albumItems = {
@@ -411,10 +411,10 @@ export class ImageService {
               },
             },
           },
-          user: {
+          creator: {
             select: {
               id: true,
-              externalUserId: true,
+              externalId: true,
               username: true,
             },
           },
@@ -582,25 +582,25 @@ export class ImageService {
   async updateImageMetadata(
     imageId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
     tags?: string[],
     description?: string,
   ) {
     this.logger.debug(
-      `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Tags: ${tags?.length || 0}`,
+      `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Tags: ${tags?.length || 0}`,
     );
 
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
         clientId,
-        userId,
+        creatorId,
       },
     });
 
     if (!image) {
       this.logger.warn(
-        `[updateImageMetadata] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`,
+        `[updateImageMetadata] Image not found - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
       );
       throw new NotFoundException('Image not found');
     }
@@ -669,24 +669,24 @@ export class ImageService {
   async createShareLink(
     imageId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
     expiresAt?: Date,
   ): Promise<ShareLinkResponseDto> {
     this.logger.debug(
-      `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, User: ${userId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
+      `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
 
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
         clientId,
-        userId,
+        creatorId,
       },
     });
 
     if (!image) {
       this.logger.warn(
-        `[createShareLink] Image not found - ID: ${imageId}, Client: ${clientId}, User: ${userId}`,
+        `[createShareLink] Image not found - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
       );
       throw new NotFoundException('Image not found');
     }
@@ -713,13 +713,13 @@ export class ImageService {
   async getShareLinks(
     imageId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
   ): Promise<ShareLinkResponseDto[]> {
     const image = await this.prisma.image.findFirst({
       where: {
         id: imageId,
         clientId,
-        userId,
+        creatorId,
       },
     });
 
@@ -741,10 +741,10 @@ export class ImageService {
   async deleteShareLink(
     shareLinkId: string,
     clientId: string,
-    userId: string,
+    creatorId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
-      `[deleteShareLink] Start - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}`,
+      `[deleteShareLink] Start - LinkID: ${shareLinkId}, Client: ${clientId}, Creator: ${creatorId}`,
     );
 
     const shareLink = await this.prisma.imageShareLink.findUnique({
@@ -761,10 +761,10 @@ export class ImageService {
 
     if (
       shareLink.image.clientId !== clientId ||
-      shareLink.image.userId !== userId
+      shareLink.image.creatorId !== creatorId
     ) {
       this.logger.warn(
-        `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, User: ${userId}, ImageClient: ${shareLink.image.clientId}`,
+        `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, Creator: ${creatorId}, ImageClient: ${shareLink.image.clientId}`,
       );
       throw new NotFoundException('Share link not found');
     }
@@ -815,12 +815,12 @@ export class ImageService {
   }
 
   /**
-   * Check if user has access to image (for private images)
+   * Check if creator has access to image (for private images)
    */
   async checkImageAccess(
     imageId: string,
     clientId: string,
-    userId?: string,
+    creatorId?: string,
     shareToken?: string,
   ): Promise<boolean> {
     const image = await this.getImageById(imageId);
@@ -830,8 +830,12 @@ export class ImageService {
       return true;
     }
 
-    // Check if user owns the image
-    if (userId && image.userId === userId && image.clientId === clientId) {
+    // Check if creator owns the image
+    if (
+      creatorId &&
+      image.creatorId === creatorId &&
+      image.clientId === clientId
+    ) {
       return true;
     }
 
@@ -853,14 +857,16 @@ export class ImageService {
   }
 
   /**
-   * Validate that userId is present
-   * @throws BadRequestException if userId is missing
+   * Validate that creatorId is present
+   * @throws BadRequestException if creatorId is missing
    */
-  validateUserId(userId: string | undefined): string {
-    if (!userId) {
-      throw new BadRequestException('User ID is required (X-User-Id header)');
+  validateCreatorExternalId(creatorId: string | undefined): string {
+    if (!creatorId) {
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
     }
-    return userId;
+    return creatorId;
   }
 
   /**
@@ -871,7 +877,7 @@ export class ImageService {
     image: any,
     imageId: string,
     clientId: string | undefined,
-    userId: string | undefined,
+    creatorId: string | undefined,
     token?: string,
   ): Promise<void> {
     if (!image.isPrivate) {
@@ -887,7 +893,7 @@ export class ImageService {
     const hasAccess = await this.checkImageAccess(
       imageId,
       clientId,
-      userId,
+      creatorId,
       token,
     );
 
@@ -954,7 +960,7 @@ export class ImageService {
 
   /**
    * Admin paginated image listing — accepts a pre-built Prisma where clause
-   * and adds admin-specific includes (user, client join).
+   * and adds admin-specific includes (creator, client join).
    * The caller is responsible for computing skip and take.
    */
   async findAdminImages(
@@ -975,7 +981,7 @@ export class ImageService {
         take: options.take,
         include: {
           imageTags: { include: { tag: { select: { name: true } } } },
-          user: { select: { externalUserId: true, username: true } },
+          creator: { select: { externalId: true, username: true } },
           client: { select: { name: true, domain: true } },
         },
       }),
@@ -1010,7 +1016,7 @@ export class ImageService {
   }
 
   /**
-   * Admin full image fetch — includes albums, active share-link count, user.
+   * Admin full image fetch — includes albums, active share-link count, creator.
    * Returns null if not found.
    */
   async findAdminImageById(imageId: string, actorId?: string) {
@@ -1020,7 +1026,7 @@ export class ImageService {
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        user: { select: { externalUserId: true, username: true } },
+        creator: { select: { externalId: true, username: true } },
         albumItems: {
           where: { resourceType: 'IMAGE' },
           include: {
@@ -1061,7 +1067,7 @@ export class ImageService {
   /**
    * Admin image update — accepts a fully-formed Prisma data object
    * (supports originalName, isPrivate, description, imageTags).
-   * Returns the updated image with tags and user for DTO mapping.
+   * Returns the updated image with tags and creator for DTO mapping.
    */
   async adminUpdateImage(imageId: string, data: Record<string, any>) {
     return this.prisma.image.update({
@@ -1070,7 +1076,7 @@ export class ImageService {
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        user: { select: { externalUserId: true, username: true } },
+        creator: { select: { externalId: true, username: true } },
       },
     });
   }

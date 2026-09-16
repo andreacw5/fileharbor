@@ -3,13 +3,13 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { BastionModule } from '@/modules/bastion/bastion.module';
-import { UserService } from './user.service';
-import { UserClientController } from './user.controller';
+import { CreatorService } from './creator.service';
+import { CreatorClientController } from './creator.controller';
 
 @Module({
   imports: [PrismaModule, ConfigModule, BastionModule, ClientModule],
-  controllers: [UserClientController],
-  providers: [UserService],
-  exports: [UserService],
+  controllers: [CreatorClientController],
+  providers: [CreatorService],
+  exports: [CreatorService],
 })
-export class UserModule {}
+export class CreatorModule {}

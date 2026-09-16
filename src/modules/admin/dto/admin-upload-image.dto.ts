@@ -16,11 +16,11 @@ export class AdminUploadImageDto {
 
   @ApiPropertyOptional({
     description:
-      'External user ID (from client system). Defaults to "system" if omitted.',
+      'External creator ID (from client system). Defaults to "system" if omitted.',
   })
   @IsOptional()
   @IsString()
-  externalUserId?: string;
+  externalId?: string;
 
   @ApiPropertyOptional({ description: 'Album ID to add the image to' })
   @IsOptional()

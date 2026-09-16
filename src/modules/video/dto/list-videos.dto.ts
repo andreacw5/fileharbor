@@ -3,7 +3,7 @@ import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ListVideosDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() userId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() creatorId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
 
   @ApiPropertyOptional({ default: 1 })

@@ -25,49 +25,50 @@ import {
   AuditRequest,
 } from '@/modules/bastion/decorators/audit.decorator';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
-import { UserService } from '@/modules/user/user.service';
-import { UserResponseDto } from '@/modules/user/dto/user-response.dto';
-import { UpdateUserAdminDto } from '@/modules/user/dto/update-user-admin.dto';
-import { CreateUserAdminDto } from '@/modules/admin/dto/create-user-admin.dto';
+import { CreatorService } from '@/modules/creator/creator.service';
+import { CreatorResponseDto } from '@/modules/creator/dto/creator-response.dto';
+import { UpdateCreatorAdminDto } from '@/modules/creator/dto/update-creator-admin.dto';
+import { CreateCreatorAdminDto } from '@/modules/admin/dto/create-creator-admin.dto';
 
-@ApiTags('Admin - Users')
-@Controller('admin/users')
+@ApiTags('Admin - Creators')
+@Controller('admin/creators')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-library.manage')
-export class UsersAdminController {
-  constructor(private readonly userService: UserService) {}
+export class CreatorsAdminController {
+  constructor(private readonly creatorService: CreatorService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a new user for a client' })
-  @ApiResponse({ status: 201, type: UserResponseDto })
+  @ApiOperation({ summary: 'Create a new creator for a client' })
+  @ApiResponse({ status: 201, type: CreatorResponseDto })
   @ApiResponse({
     status: 400,
-    description: 'Invalid data or reserved externalUserId',
+    description: 'Invalid data or reserved externalId',
   })
   @ApiResponse({ status: 403, description: 'Access denied' })
   @ApiResponse({
     status: 409,
-    description: 'User already exists for this client',
+    description: 'Creator already exists for this client',
   })
-  @Audit('fh_user.created', {
-    metadata: (r: UserResponseDto) => ({
-      userId: r.id,
+  @Audit('fh_creator.created', {
+    metadata: (r: CreatorResponseDto) => ({
+      creatorId: r.id,
       clientId: r.clientId,
-      externalUserId: r.externalUserId,
+      externalId: r.externalId,
     }),
   })
   createUser(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Body() dto: CreateUserAdminDto,
-  ): Promise<UserResponseDto> {
-    return this.userService.createUserAdmin(adminUser, dto.clientId, dto);
+    @Body() dto: CreateCreatorAdminDto,
+  ): Promise<CreatorResponseDto> {
+    return this.creatorService.createUserAdmin(adminUser, dto.clientId, dto);
   }
 
   @Get()
   @ApiOperation({
-    summary: 'List users (scoped to accessible clients, system user excluded)',
+    summary:
+      'List creators (scoped to accessible clients, system creator excluded)',
   })
   @ApiQuery({
     name: 'clientId',
@@ -77,19 +78,20 @@ export class UsersAdminController {
   @ApiQuery({
     name: 'search',
     required: false,
-    description: 'Search by externalUserId or username',
+    description: 'Search by externalId or username',
   })
   @ApiQuery({
     name: 'isBookmarked',
     required: false,
     type: Boolean,
-    description: 'If true, returns only users bookmarked by the current admin',
+    description:
+      'If true, returns only creators bookmarked by the current admin',
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({
     status: 200,
-    description: 'Paginated user list (email is never returned)',
+    description: 'Paginated creator list (email is never returned)',
   })
   listUsers(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -103,7 +105,7 @@ export class UsersAdminController {
       isBookmarked !== undefined &&
       ['true', '1'].includes(isBookmarked.toLowerCase());
 
-    return this.userService.listUsers(adminUser, {
+    return this.creatorService.listUsers(adminUser, {
       clientId,
       search,
       ...(bookmarkedOnly && { isBookmarked: true }),
@@ -115,42 +117,42 @@ export class UsersAdminController {
   @Get(':id')
   @ApiOperation({
     summary:
-      'Get user details by internal UUID (email and sensitive data excluded)',
+      'Get creator details by internal UUID (email and sensitive data excluded)',
   })
-  @ApiResponse({ status: 200, type: UserResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 200, type: CreatorResponseDto })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   getUser(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-  ): Promise<UserResponseDto> {
-    return this.userService.getUser(id, adminUser);
+  ): Promise<CreatorResponseDto> {
+    return this.creatorService.getUser(id, adminUser);
   }
 
   @Patch(':id')
   @ApiOperation({
-    summary: 'Update user details (externalUserId, email, username)',
+    summary: 'Update creator details (externalId, email, username)',
     description:
-      'Admin can update users from accessible clients. System user cannot be updated.',
+      'Admin can update creators from accessible clients. System creator cannot be updated.',
   })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiResponse({ status: 200, type: CreatorResponseDto })
   @ApiResponse({
     status: 400,
-    description: 'Invalid data or system user update attempt',
+    description: 'Invalid data or system creator update attempt',
   })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  @Audit('fh_user.updated', {
+  @Audit('fh_creator.updated', {
     metadata: (_r: unknown, req: AuditRequest) => ({
-      userId: req.params.id,
+      creatorId: req.params.id,
       fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
     }),
   })
   updateUser(
     @Param('id') id: string,
-    @Body() dto: UpdateUserAdminDto,
+    @Body() dto: UpdateCreatorAdminDto,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-  ): Promise<UserResponseDto> {
-    return this.userService.updateUserAdmin(id, dto, adminUser);
+  ): Promise<CreatorResponseDto> {
+    return this.creatorService.updateUserAdmin(id, dto, adminUser);
   }
 }

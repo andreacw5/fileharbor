@@ -97,7 +97,7 @@ export class VideosAdminController {
       properties: {
         file: { type: 'string', format: 'binary' },
         clientId: { type: 'string', format: 'uuid' },
-        externalUserId: { type: 'string' },
+        externalId: { type: 'string' },
         tags: { type: 'array', items: { type: 'string' } },
         description: { type: 'string' },
         isPrivate: { type: 'boolean', default: false },
@@ -115,7 +115,7 @@ export class VideosAdminController {
   async uploadVideo(
     @UploadedFile() file: Express.Multer.File,
     @Body('clientId') clientId: string,
-    @Body('externalUserId') externalUserId: string | undefined,
+    @Body('externalId') externalId: string | undefined,
     @Body('description') description: string | undefined,
     @Body('isPrivate') isPrivateRaw: string | undefined,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -127,7 +127,7 @@ export class VideosAdminController {
     const isPrivate = isPrivateRaw === 'true' || isPrivateRaw === '1';
     const result = await this.videoService.uploadVideo(
       clientId,
-      externalUserId,
+      externalId,
       file,
       [],
       description,
@@ -153,7 +153,7 @@ export class VideosAdminController {
   @Get()
   @ApiOperation({ summary: 'List videos (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'albumId', required: false })
   @ApiQuery({ name: 'name', required: false })
   @ApiQuery({ name: 'tags', required: false, isArray: true })
@@ -168,7 +168,7 @@ export class VideosAdminController {
   async listVideos(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
-    @Query('userId') userId?: string,
+    @Query('creatorId') creatorId?: string,
     @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
@@ -203,7 +203,7 @@ export class VideosAdminController {
       sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (userId) where.user = { id: userId };
+    if (creatorId) where.creator = { id: creatorId };
     if (albumId)
       where.albumItems = { some: { albumId, resourceType: 'VIDEO' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };

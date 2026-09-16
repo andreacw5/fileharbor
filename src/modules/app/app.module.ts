@@ -15,7 +15,7 @@ import { AuditInterceptor } from '@/modules/bastion/interceptors/audit.intercept
 import { MeModule } from '@/modules/me/me.module';
 import { VideoModule } from '@/modules/video/video.module';
 import { StatisticsModule } from '@/modules/statistics/statistics.module';
-import { UserModule } from '@/modules/user/user.module';
+import { CreatorModule } from '@/modules/creator/creator.module';
 import { TagModule } from '@/modules/tag/tag.module';
 import { HealthModule } from '@/modules/health/health.module';
 import config from '../../configs/config.schema';
@@ -63,7 +63,7 @@ import { RouteHelperModule } from '@/utils/route.utils';
     ImageModule,
     AvatarModule,
     AlbumModule,
-    UserModule,
+    CreatorModule,
     RouteHelperModule,
     HealthModule,
 

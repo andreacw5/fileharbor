@@ -8,17 +8,14 @@ export const ClientId = createParamDecorator(
 );
 
 /**
- * Extracts the external user ID from X-User-Id header
- * This is the user ID from the client's system, not Fileharbor's internal user ID
+ * Extracts the creator's external id, as supplied by the caller in the
+ * `X-User-Id` header. That header keeps its name: it carries the id of a creator
+ * in the *calling* system, which FileHarbor stores as a Creator — the owner of
+ * the content, who never authenticates here.
  */
-export const ExternalUserId = createParamDecorator(
+export const CreatorExternalId = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest();
-    return request.externalUserId;
+    return request.externalCreatorId;
   },
 );
-
-/**
- * Legacy alias for ExternalUserId - use ExternalUserId instead
- */
-export const UserId = ExternalUserId;

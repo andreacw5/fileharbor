@@ -155,8 +155,8 @@ export class WebhookService {
     }
 
     // Add avatar thumbnail for avatar upload events
-    if (event === WebhookEvent.AVATAR_UPLOADED && payload.data.userId) {
-      const avatarUrl = `${this.baseUrl}/avatars/${payload.data.userId}`;
+    if (event === WebhookEvent.AVATAR_UPLOADED && payload.data.creatorId) {
+      const avatarUrl = `${this.baseUrl}/avatars/${payload.data.creatorId}`;
 
       embed.thumbnail = {
         url: avatarUrl,
@@ -252,7 +252,7 @@ export class WebhookService {
         fields.push(
           { name: 'ID', value: data.imageId || 'N/A' },
           { name: 'Size', value: formatFileSize(data.size), inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true },
+          { name: 'Creator', value: data.creatorId || 'System', inline: true },
         );
         break;
 
@@ -260,7 +260,7 @@ export class WebhookService {
         fields.push(
           { name: 'ID', value: data.avatarId || 'N/A' },
           { name: 'Size', value: formatFileSize(data.size), inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true },
+          { name: 'Creator', value: data.creatorId || 'System', inline: true },
         );
         break;
 
@@ -270,7 +270,7 @@ export class WebhookService {
           { name: 'ID', value: data.albumId || 'N/A' },
           { name: 'Name', value: data.name || 'N/A' },
           { name: 'Public', value: data.isPublic ? 'Yes' : 'No', inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true },
+          { name: 'Creator', value: data.creatorId || 'System', inline: true },
         );
         if (data.description) {
           fields.push({ name: 'Description', value: data.description });
@@ -303,7 +303,7 @@ export class WebhookService {
         fields.push(
           { name: 'ID', value: data.videoId || 'N/A' },
           { name: 'Size', value: formatFileSize(data.size), inline: true },
-          { name: 'User', value: data.userId || 'System', inline: true },
+          { name: 'Creator', value: data.creatorId || 'System', inline: true },
         );
         break;
 

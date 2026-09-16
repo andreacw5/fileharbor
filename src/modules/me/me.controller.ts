@@ -38,7 +38,7 @@ const ALLOWED_AVATAR_MIME_TYPES = [
 
 /**
  * Self-service endpoints for the currently signed-in Bastion user — no console
- * permission required (see BastionSelfServiceGuard). externalUserId is always the
+ * permission required (see BastionSelfServiceGuard). externalId is always the
  * verified token `sub`, never taken from body/headers.
  */
 @ApiTags('Me')

@@ -90,9 +90,9 @@ export class ImagesAdminController {
           format: 'uuid',
           description: 'Target client ID',
         },
-        externalUserId: {
+        externalId: {
           type: 'string',
-          description: 'External user ID (defaults to system)',
+          description: 'External creator ID (defaults to system)',
         },
         albumId: { type: 'string', description: 'Album UUID' },
         tags: { type: 'array', items: { type: 'string' } },
@@ -134,7 +134,7 @@ export class ImagesAdminController {
     for (const file of files) {
       const result = await this.imageService.uploadImage(
         dto.clientId,
-        dto.externalUserId,
+        dto.externalId,
         file,
         dto.albumId,
         dto.tags,
@@ -149,7 +149,7 @@ export class ImagesAdminController {
   @Get()
   @ApiOperation({ summary: 'List images (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'albumId', required: false })
   @ApiQuery({
     name: 'name',
@@ -179,7 +179,7 @@ export class ImagesAdminController {
   async listImages(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
-    @Query('userId') userId?: string,
+    @Query('creatorId') creatorId?: string,
     @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
@@ -215,7 +215,7 @@ export class ImagesAdminController {
       sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (userId) where.user = { id: userId };
+    if (creatorId) where.creator = { id: creatorId };
     if (albumId)
       where.albumItems = { some: { albumId, resourceType: 'IMAGE' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };

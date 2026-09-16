@@ -147,9 +147,13 @@ export class StorageService {
   /**
    * Get storage path for avatar
    */
-  getAvatarPath(domain: string, userId: string): string {
-    const sanitizedUserId = this.sanitizePathComponent(userId);
-    return path.join(this.getClientPath(domain), 'avatars', sanitizedUserId);
+  getAvatarPath(domain: string, creatorId: string): string {
+    const sanitizedCreatorExternalId = this.sanitizePathComponent(creatorId);
+    return path.join(
+      this.getClientPath(domain),
+      'avatars',
+      sanitizedCreatorExternalId,
+    );
   }
 
   /**
@@ -157,10 +161,10 @@ export class StorageService {
    */
   getAvatarFilePath(
     domain: string,
-    userId: string,
+    creatorId: string,
     variant: 'original' | 'thumb' = 'original',
   ): string {
-    return `${this.getAvatarPath(domain, userId)}/${variant}.webp`;
+    return `${this.getAvatarPath(domain, creatorId)}/${variant}.webp`;
   }
 
   /**
@@ -263,9 +267,9 @@ export class StorageService {
   }
 
   /**
-   * Get all avatar user IDs for a client domain
+   * Get all avatar creator IDs for a client domain
    */
-  async getClientAvatarUserIds(domain: string): Promise<string[]> {
+  async getClientAvatarCreatorExternalIds(domain: string): Promise<string[]> {
     const avatarsPath = path.join(this.getClientPath(domain), 'avatars');
     return this.listDirectories(avatarsPath);
   }

@@ -13,14 +13,14 @@
 
 ## Architecture
 
-Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth via `X-API-Key` header validated by `ClientInterceptor`. Users referenced by external ID (`X-User-Id`) — FileHarbor auto-creates internal `User` records on first use.
+Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth via `X-API-Key` header validated by `ClientInterceptor`. Creators referenced by external ID (`X-User-Id`) — FileHarbor auto-creates internal `Creator` records on first use.
 
 **Modules** (`src/modules/`):
 | Module | Role |
 |--------|------|
-| `client` | Auth, tenant resolution, user management |
+| `client` | Auth, tenant resolution, creator identity |
 | `image` | Upload, retrieval, transformations, share links |
-| `avatar` | Single-avatar-per-user lifecycle |
+| `avatar` | Single-avatar-per-creator lifecycle |
 | `album` | Collections, token-based private access |
 | `storage` | All disk I/O and Sharp image processing |
 | `webhook` | Fire-and-forget Discord webhook notifications |
@@ -35,22 +35,22 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 
 Every non-`@Public()` controller goes through `ClientInterceptor` (`src/modules/client/interceptors/client.interceptor.ts`):
 1. Reads `X-API-Key` → resolves `client` → attaches `request.clientId` and `request.client`
-2. Reads `X-User-Id` (or falls back to `request.query.externalUserId` / `request.body.externalUserId`) → attaches `request.externalUserId`
+2. Reads `X-User-Id` (or falls back to `request.query.externalUserId` / `request.body.externalUserId`) → attaches `request.externalCreatorId`
 
 ```typescript
-import { ClientId, UserId } from '@/modules/client/decorators/client.decorator';
-// UserId is an alias for ExternalUserId
+import { ClientId, CreatorExternalId } from '@/modules/client/decorators/client.decorator';
+// CreatorExternalId reads request.externalCreatorId (the X-User-Id header, or its query/body fallback)
 ```
 
 Mark public endpoints with `@Public()` from `src/modules/client/decorators/public.decorator.ts`. On public endpoints the interceptor still populates `clientId` if a valid key is supplied.
 
-## User Identity Pattern
+## Creator Identity Pattern
 
 FileHarbor never receives real user accounts. Services call:
 ```typescript
-prisma.user.findUnique({ where: { clientId_externalUserId: { clientId, externalUserId } } })
+prisma.creator.findUnique({ where: { clientId_externalId: { clientId, externalId } } })
 ```
-Create on first use. When no `X-User-Id` is provided, images are attributed to `externalUserId: 'system'` (auto-created alongside every new client in `createClient()` in `client.service.ts`).
+Create on first use. When no `X-User-Id` is provided, images are attributed to `externalId: 'system'` (auto-created alongside every new client in `createClient()` in `client.service.ts`).
 
 ## Storage Paths
 
@@ -58,7 +58,7 @@ Never construct paths manually — use `StorageService` helpers:
 ```
 storage/{client.domain || clientId}/images/{imageId}/original.webp
 storage/{client.domain || clientId}/images/{imageId}/thumb.webp
-storage/{client.domain || clientId}/avatars/{userId}/original.webp
+storage/{client.domain || clientId}/avatars/{creatorId}/original.webp
 ```
 `StorageService.validatePath()` blocks directory traversal. `sanitizePathComponent()` strips `..`, `/`, `\`, and null bytes.
 
@@ -95,7 +95,7 @@ Three parts:
   `BastionAuditService`, `AuditInterceptor`). No controller — sign-in, refresh, password and profile
   all belong to Bastion, and the console (Meridian) talks to Bastion directly.
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
-  `admin/albums`, `admin/users`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
+  `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
   scoped totals, a 7-day trend and a per-day chart. `totalStorage` sums image bytes only.
 
@@ -242,7 +242,7 @@ Admin writes report to Bastion's audit log. Same mechanism as Herald and Beacon:
   admin's tenant matches the service client's, and falls back to `actorId`/`actorRole`/`actorAppSlug` in
   the metadata when it doesn't — Bastion rejects the whole write for a cross-tenant `userId`.
 - Event names use FileHarbor's `fh_` prefix (`fh_image.uploaded`, `fh_client.updated`, …): Bastion's regex
-  allows exactly two segments and the nouns here (`image`, `client`, `user`) would otherwise collide with
+  allows exactly two segments and the nouns here (`image`, `client`, `creator`) would otherwise collide with
   other services'.
 - Metadata carries ids and **field names**, never field values — a client update body can hold a Tinify
   API key and a webhook URL.
@@ -324,12 +324,12 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 
 ## DB Entities
 
-`Client` → `User` (by `externalUserId`) → `Image`, `Avatar`
+`Client` → `Creator` (by `externalId`) → `Image`, `Avatar`
 `Album` → `AlbumImage` (many-to-many with `Image`) → `AlbumToken` (temp access for private albums)
 `AdminPrincipal` → `AdminIdentity` (Bastion subs) and → `Client` (personal clients)
 
-⚠️ `User` is **not** a login: it is a content creator referenced by `externalUserId`, the anchor for
-images, videos, avatars and albums. Nobody authenticates as a `User`.
+A `Creator` owns content — images, videos, avatars and albums — referenced by `externalId`, and
+authenticates nowhere. Real logins are Bastion users.
 
 Always add indexes on frequently queried fields.
 
@@ -353,7 +353,7 @@ this.config.get('throttle.ttl')      // nested key from config.schema.ts
 
 1. Follow existing structure: `controller` → `service` → `dto/` subdir
 2. Apply `@UseInterceptors(ClientInterceptor)` at controller class level
-3. Use `@ClientId()` / `@UserId()` for tenant/user context
+3. Use `@ClientId()` / `@CreatorExternalId()` for tenant/creator context
 4. Scope all Prisma queries with `where: { clientId }`
 5. Return responses via `plainToInstance(ResponseDto, data, { excludeExtraneousValues: true })`
 6. Fire webhooks non-blocking with `.catch()`

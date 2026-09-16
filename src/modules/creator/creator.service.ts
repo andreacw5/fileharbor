@@ -7,25 +7,28 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, Creator } from '@prisma/client';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   assertClientAccess,
   buildClientWhere,
 } from '@/modules/admin/helpers/admin-access.helper';
-import { UserListResponseDto, UserResponseDto } from './dto/user-response.dto';
-import { UpdateUserByExternalIdDto } from './dto/update-user-by-external-id.dto';
-import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
-import { CreateUserDto } from './dto/create-user.dto';
+import {
+  CreatorListResponseDto,
+  CreatorResponseDto,
+} from './dto/creator-response.dto';
+import { UpdateCreatorByExternalIdDto } from './dto/update-creator-by-external-id.dto';
+import { UpdateCreatorAdminDto } from './dto/update-creator-admin.dto';
+import { CreateCreatorDto } from './dto/create-creator.dto';
 import { generateAnonymousUsername } from '@/utils/username.generator';
 import { RouteHelperService } from '@/utils/route.utils';
 
-/** Reserved external user ID — never expose or mutate this user via API endpoints. */
+/** Reserved external creator ID — never expose or mutate this creator via API endpoints. */
 const SYSTEM_USER_ID = 'system';
 
 @Injectable()
-export class UserService {
-  private readonly logger = new Logger(UserService.name);
+export class CreatorService {
+  private readonly logger = new Logger(CreatorService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -47,17 +50,17 @@ export class UserService {
    */
   private mapUser<T extends object>(
     ctor: new (...args: any[]) => T,
-    user: any,
+    creator: any,
     extra: Record<string, unknown> = {},
   ): T {
     return plainToInstance(
       ctor,
       {
-        ...user,
-        totalImages: user._count?.images,
-        totalAvatars: user._count?.avatars,
-        totalAlbums: user._count?.albums,
-        totalVideos: user._count?.videos,
+        ...creator,
+        totalImages: creator._count?.images,
+        totalAvatars: creator._count?.avatars,
+        totalAlbums: creator._count?.albums,
+        totalVideos: creator._count?.videos,
         ...extra,
       },
       { excludeExtraneousValues: true },
@@ -67,27 +70,27 @@ export class UserService {
   // ─── API-Key scoped methods ───────────────────────────────────────────────
 
   /**
-   * Finds an existing user or creates a new one for the given client + externalUserId.
+   * Finds an existing creator or creates a new one for the given client + externalId.
    * - If creating and no username is supplied, an anonymous one is auto-generated
    *   (e.g. "Witty Raccoon", "Bold Penguin").
-   * - If the user already exists and a username is supplied, it is updated.
-   * Returns the raw Prisma User record (not a response DTO).
+   * - If the creator already exists and a username is supplied, it is updated.
+   * Returns the raw Prisma Creator record (not a response DTO).
    */
   async resolveUser(
     clientId: string,
-    externalUserId: string,
+    externalId: string,
     username?: string,
-  ): Promise<User> {
+  ): Promise<Creator> {
     this.logger.debug(
-      `resolveUser clientId=${clientId} externalUserId=${externalUserId} username=${username ?? '(auto)'}`,
+      `resolveUser clientId=${clientId} externalId=${externalId} username=${username ?? '(auto)'}`,
     );
 
-    return this.prisma.user.upsert({
-      where: { clientId_externalUserId: { clientId, externalUserId } },
+    return this.prisma.creator.upsert({
+      where: { clientId_externalId: { clientId, externalId } },
       update: { ...(username ? { username } : {}) },
       create: {
         clientId,
-        externalUserId,
+        externalId,
         username: username || generateAnonymousUsername(),
       },
     });
@@ -106,17 +109,17 @@ export class UserService {
       filters.perPage,
     );
 
-    const where: any = { clientId, externalUserId: { not: SYSTEM_USER_ID } };
+    const where: any = { clientId, externalId: { not: SYSTEM_USER_ID } };
 
     if (filters.search) {
       where.OR = [
-        { externalUserId: { contains: filters.search, mode: 'insensitive' } },
+        { externalId: { contains: filters.search, mode: 'insensitive' } },
         { username: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
-    const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
+    const [creators, total] = await Promise.all([
+      this.prisma.creator.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip,
@@ -125,14 +128,14 @@ export class UserService {
           _count: { select: { images: true, albums: true, videos: true } },
         },
       }),
-      this.prisma.user.count({ where }),
+      this.prisma.creator.count({ where }),
     ]);
 
     this.logger.debug(
-      `listUsersForClient returned ${users.length}/${total} users`,
+      `listUsersForClient returned ${creators.length}/${total} creators`,
     );
 
-    const data = users.map((u) => this.mapUser(UserListResponseDto, u));
+    const data = creators.map((u) => this.mapUser(CreatorListResponseDto, u));
 
     return {
       data,
@@ -147,21 +150,21 @@ export class UserService {
 
   async createUserForClient(
     clientId: string,
-    dto: CreateUserDto,
-  ): Promise<UserResponseDto> {
+    dto: CreateCreatorDto,
+  ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `createUserForClient clientId=${clientId} externalUserId=${dto.externalUserId}`,
+      `createUserForClient clientId=${clientId} externalId=${dto.externalId}`,
     );
 
-    if (dto.externalUserId === SYSTEM_USER_ID) {
-      throw new BadRequestException('externalUserId "system" is reserved');
+    if (dto.externalId === SYSTEM_USER_ID) {
+      throw new BadRequestException('externalId "system" is reserved');
     }
 
-    const existing = await this.prisma.user.findUnique({
+    const existing = await this.prisma.creator.findUnique({
       where: {
-        clientId_externalUserId: {
+        clientId_externalId: {
           clientId,
-          externalUserId: dto.externalUserId,
+          externalId: dto.externalId,
         },
       },
       select: { id: true },
@@ -169,14 +172,14 @@ export class UserService {
 
     if (existing) {
       throw new ConflictException(
-        `User with externalUserId "${dto.externalUserId}" already exists for this client`,
+        `Creator with externalId "${dto.externalId}" already exists for this client`,
       );
     }
 
-    const user = await this.prisma.user.create({
+    const creator = await this.prisma.creator.create({
       data: {
         clientId,
-        externalUserId: dto.externalUserId,
+        externalId: dto.externalId,
         username: dto.username || generateAnonymousUsername(),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
         ...(dto.website !== undefined ? { website: dto.website } : {}),
@@ -188,13 +191,13 @@ export class UserService {
     });
 
     this.logger.log(
-      `createUserForClient created user=${user.id} clientId=${clientId}`,
+      `createUserForClient created creator=${creator.id} clientId=${clientId}`,
     );
 
-    return this.mapUser(UserResponseDto, user);
+    return this.mapUser(CreatorResponseDto, creator);
   }
 
-  // ─── Users ────────────────────────────────────────────────────────────────
+  // ─── Creators ────────────────────────────────────────────────────────────────
 
   async listUsers(
     admin: AdminJwtPayload,
@@ -218,14 +221,14 @@ export class UserService {
 
     if (filters.search) {
       where.OR = [
-        { externalUserId: { contains: filters.search, mode: 'insensitive' } },
+        { externalId: { contains: filters.search, mode: 'insensitive' } },
         { username: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
-    // Exclude system user
-    where.externalUserId = {
-      ...(where.externalUserId || {}),
+    // Exclude system creator
+    where.externalId = {
+      ...(where.externalId || {}),
       not: SYSTEM_USER_ID,
     };
 
@@ -235,8 +238,8 @@ export class UserService {
       };
     }
 
-    const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
+    const [creators, total] = await Promise.all([
+      this.prisma.creator.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip,
@@ -245,39 +248,43 @@ export class UserService {
           _count: { select: { images: true, avatars: true, videos: true } },
           client: { select: { id: true, name: true, domain: true } },
           avatars: {
-            select: { id: true, userId: true },
+            select: { id: true, creatorId: true },
             take: 1,
           },
         },
       }),
-      this.prisma.user.count({ where }),
+      this.prisma.creator.count({ where }),
     ]);
 
-    let bookmarkedUserIds = new Set<string>();
-    if (users.length > 0) {
+    let bookmarkedCreatorExternalIds = new Set<string>();
+    if (creators.length > 0) {
       if (filters.isBookmarked === true) {
-        bookmarkedUserIds = new Set(users.map((u) => u.id));
+        bookmarkedCreatorExternalIds = new Set(creators.map((u) => u.id));
       } else {
-        const bookmarks = await this.prisma.adminUserBookmark.findMany({
+        const bookmarks = await this.prisma.adminCreatorBookmark.findMany({
           where: {
             actorId: admin.actorId,
-            userId: { in: users.map((u) => u.id) },
+            creatorId: { in: creators.map((u) => u.id) },
           },
-          select: { userId: true },
+          select: { creatorId: true },
         });
-        bookmarkedUserIds = new Set(bookmarks.map((b) => b.userId));
+        bookmarkedCreatorExternalIds = new Set(
+          bookmarks.map((b) => b.creatorId),
+        );
       }
     }
 
-    this.logger.debug(`listUsers returned ${users.length}/${total} users`);
+    this.logger.debug(
+      `listUsers returned ${creators.length}/${total} creators`,
+    );
 
-    const data = users.map((u) => {
+    const data = creators.map((u) => {
       const avatarUrl =
         u.avatars.length > 0
-          ? this.route.fullUrl('avatars', u.externalUserId)
+          ? this.route.fullUrl('avatars', u.externalId)
           : undefined;
-      return this.mapUser(UserListResponseDto, u, {
-        isBookmarked: bookmarkedUserIds.has(u.id),
+      return this.mapUser(CreatorListResponseDto, u, {
+        isBookmarked: bookmarkedCreatorExternalIds.has(u.id),
         avatarUrl,
       });
     });
@@ -294,52 +301,54 @@ export class UserService {
   }
 
   async getUser(
-    userId: string,
+    creatorId: string,
     admin: AdminJwtPayload,
-  ): Promise<UserResponseDto> {
-    this.logger.log(`getUser called by admin=${admin.sub} userId=${userId}`);
+  ): Promise<CreatorResponseDto> {
+    this.logger.log(
+      `getUser called by admin=${admin.sub} creatorId=${creatorId}`,
+    );
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const creator = await this.prisma.creator.findUnique({
+      where: { id: creatorId },
       include: {
         _count: {
           select: { images: true, avatars: true, albums: true, videos: true },
         },
         client: { select: { id: true, name: true, domain: true } },
         avatars: {
-          select: { id: true, userId: true },
+          select: { id: true, creatorId: true },
           take: 1,
         },
       },
     });
 
-    if (!user) {
-      this.logger.warn(`getUser: user not found userId=${userId}`);
-      throw new NotFoundException('User not found');
+    if (!creator) {
+      this.logger.warn(`getUser: creator not found creatorId=${creatorId}`);
+      throw new NotFoundException('Creator not found');
     }
 
-    assertClientAccess(admin, user.clientId);
+    assertClientAccess(admin, creator.clientId);
 
-    const bookmark = await this.prisma.adminUserBookmark.findUnique({
+    const bookmark = await this.prisma.adminCreatorBookmark.findUnique({
       where: {
-        actorId_userId: {
+        actorId_creatorId: {
           actorId: admin.actorId,
-          userId: user.id,
+          creatorId: creator.id,
         },
       },
       select: { id: true },
     });
 
     this.logger.debug(
-      `getUser: found user=${userId} clientId=${user.clientId}`,
+      `getUser: found creator=${creatorId} clientId=${creator.clientId}`,
     );
 
     const avatarUrl =
-      user.avatars.length > 0
-        ? this.route.fullUrl('avatars', user.externalUserId)
+      creator.avatars.length > 0
+        ? this.route.fullUrl('avatars', creator.externalId)
         : undefined;
 
-    return this.mapUser(UserResponseDto, user, {
+    return this.mapUser(CreatorResponseDto, creator, {
       isBookmarked: !!bookmark,
       avatarUrl,
     });
@@ -348,77 +357,77 @@ export class UserService {
   async createUserAdmin(
     admin: AdminJwtPayload,
     clientId: string,
-    dto: CreateUserDto,
-  ): Promise<UserResponseDto> {
+    dto: CreateCreatorDto,
+  ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `createUserAdmin called by admin=${admin.sub} clientId=${clientId} externalUserId=${dto.externalUserId}`,
+      `createUserAdmin called by admin=${admin.sub} clientId=${clientId} externalId=${dto.externalId}`,
     );
     assertClientAccess(admin, clientId);
     return this.createUserForClient(clientId, dto);
   }
 
   async updateUserAdmin(
-    userId: string,
-    dto: UpdateUserAdminDto,
+    creatorId: string,
+    dto: UpdateCreatorAdminDto,
     admin: AdminJwtPayload,
-  ): Promise<UserResponseDto> {
+  ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `updateUserAdmin called by admin=${admin.sub} userId=${userId}`,
+      `updateUserAdmin called by admin=${admin.sub} creatorId=${creatorId}`,
     );
 
     if (
-      !dto.externalUserId &&
+      !dto.externalId &&
       !dto.username &&
       !dto.email &&
       !dto.website &&
       !dto.bio
     ) {
       throw new BadRequestException(
-        'At least one field between externalUserId, username, email, website, and bio must be provided',
+        'At least one field between externalId, username, email, website, and bio must be provided',
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, clientId: true, externalUserId: true },
+    const creator = await this.prisma.creator.findUnique({
+      where: { id: creatorId },
+      select: { id: true, clientId: true, externalId: true },
     });
 
-    if (!user) {
-      this.logger.warn(`updateUserAdmin: user not found userId=${userId}`);
-      throw new NotFoundException('User not found');
+    if (!creator) {
+      this.logger.warn(
+        `updateUserAdmin: creator not found creatorId=${creatorId}`,
+      );
+      throw new NotFoundException('Creator not found');
     }
 
-    assertClientAccess(admin, user.clientId);
+    assertClientAccess(admin, creator.clientId);
 
-    if (user.externalUserId === SYSTEM_USER_ID) {
-      throw new BadRequestException('System user cannot be updated');
+    if (creator.externalId === SYSTEM_USER_ID) {
+      throw new BadRequestException('System creator cannot be updated');
     }
 
-    // Check if new externalUserId conflicts with existing user
-    if (dto.externalUserId && dto.externalUserId !== user.externalUserId) {
-      const existingUser = await this.prisma.user.findUnique({
+    // Check if new externalId conflicts with existing creator
+    if (dto.externalId && dto.externalId !== creator.externalId) {
+      const existingCreator = await this.prisma.creator.findUnique({
         where: {
-          clientId_externalUserId: {
-            clientId: user.clientId,
-            externalUserId: dto.externalUserId,
+          clientId_externalId: {
+            clientId: creator.clientId,
+            externalId: dto.externalId,
           },
         },
         select: { id: true },
       });
 
-      if (existingUser) {
+      if (existingCreator) {
         throw new BadRequestException(
-          `User with externalUserId "${dto.externalUserId}" already exists for this client`,
+          `Creator with externalId "${dto.externalId}" already exists for this client`,
         );
       }
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
+    const updated = await this.prisma.creator.update({
+      where: { id: creatorId },
       data: {
-        ...(dto.externalUserId !== undefined
-          ? { externalUserId: dto.externalUserId }
-          : {}),
+        ...(dto.externalId !== undefined ? { externalId: dto.externalId } : {}),
         ...(dto.username !== undefined ? { username: dto.username } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
         ...(dto.website !== undefined ? { website: dto.website } : {}),
@@ -433,19 +442,19 @@ export class UserService {
     });
 
     this.logger.log(
-      `updateUserAdmin: updated user=${updated.id} clientId=${updated.clientId}`,
+      `updateUserAdmin: updated creator=${updated.id} clientId=${updated.clientId}`,
     );
 
-    return this.mapUser(UserResponseDto, updated);
+    return this.mapUser(CreatorResponseDto, updated);
   }
 
-  async updateUserByExternalUserId(
+  async updateUserByExternalId(
     clientId: string,
-    externalUserId: string,
-    dto: UpdateUserByExternalIdDto,
-  ): Promise<UserResponseDto> {
+    externalId: string,
+    dto: UpdateCreatorByExternalIdDto,
+  ): Promise<CreatorResponseDto> {
     this.logger.log(
-      `updateUserByExternalUserId called for clientId=${clientId} externalUserId=${externalUserId}`,
+      `updateUserByExternalId called for clientId=${clientId} externalId=${externalId}`,
     );
 
     if (!dto.username && !dto.email && !dto.website && !dto.bio) {
@@ -454,15 +463,15 @@ export class UserService {
       );
     }
 
-    if (externalUserId === SYSTEM_USER_ID) {
+    if (externalId === SYSTEM_USER_ID) {
       throw new BadRequestException(
-        'System user cannot be updated with this endpoint',
+        'System creator cannot be updated with this endpoint',
       );
     }
 
     try {
-      const updated = await this.prisma.user.update({
-        where: { clientId_externalUserId: { clientId, externalUserId } },
+      const updated = await this.prisma.creator.update({
+        where: { clientId_externalId: { clientId, externalId } },
         data: {
           ...(dto.username !== undefined ? { username: dto.username } : {}),
           ...(dto.email !== undefined ? { email: dto.email } : {}),
@@ -476,16 +485,16 @@ export class UserService {
       });
 
       this.logger.log(
-        `updateUserByExternalUserId updated user=${updated.id} clientId=${updated.clientId}`,
+        `updateUserByExternalId updated creator=${updated.id} clientId=${updated.clientId}`,
       );
 
-      return this.mapUser(UserResponseDto, updated);
+      return this.mapUser(CreatorResponseDto, updated);
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2025'
       ) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException('Creator not found');
       }
       throw e;
     }
