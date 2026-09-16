@@ -36,6 +36,7 @@ import { plainToInstance } from 'class-transformer';
 import type { Request, Response } from 'express';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.helper';
 import { buildVideoTagCreateInput, extractVideoTagNames, normalizeTagNames } from '@/modules/tag/tag.utils';
@@ -62,6 +63,7 @@ const videoMulterOptions = {
 @Controller('admin/videos')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-library.manage')
 export class VideosAdminController {
   constructor(
     private readonly videoService: VideoService,
@@ -164,7 +166,7 @@ export class VideosAdminController {
       where,
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
-      adminUser.adminUserId,
+      adminUser.actorId,
     );
 
     return {
@@ -190,7 +192,7 @@ export class VideosAdminController {
     @Param('id') id: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoResponseDto> {
-    const video = await this.videoService.findAdminVideoById(id, adminUser.adminUserId);
+    const video = await this.videoService.findAdminVideoById(id, adminUser.actorId);
     if (!video) throw new BadRequestException('Video not found');
     assertClientAccess(adminUser, video.clientId);
 

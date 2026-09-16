@@ -273,7 +273,7 @@ export class AdminImageShareLinksListResponseDto {
 
 export class AdminBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() actorId: string;
   @ApiProperty() @Expose() imageId: string;
   @ApiProperty({ description: 'When the admin bookmarked the image' })
   @Expose()
@@ -319,7 +319,7 @@ export class AdminBookmarkedUserDto {
 
 export class AdminUserBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() actorId: string;
   @ApiProperty() @Expose() userId: string;
   @ApiProperty({ description: 'When the admin bookmarked the user' })
   @Expose()
@@ -381,7 +381,7 @@ export class AdminVideoResponseDto {
 
 export class AdminVideoBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty() @Expose() adminUserId: string;
+  @ApiProperty() @Expose() actorId: string;
   @ApiProperty() @Expose() videoId: string;
   @ApiProperty() @Expose() @Type(() => Date) bookmarkedAt: Date;
 

@@ -13,6 +13,7 @@ import {
 import { TagService } from './tag.service';
 import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { TagPageParams, TagsResponseDto } from './dto/tag-response.dto';
 import { PaginatedResult } from '@/common/pagination';
 import { TagListItemDto } from './dto/tag-response.dto';
@@ -24,6 +25,7 @@ export class TagController {
 
   @Get()
   @UseGuards(AdminJwtGuard)
+  @RequirePermission('fileharbor-media.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List image tags (scoped to accessible clients)' })
   @ApiResponse({ status: 200, type: TagsResponseDto })

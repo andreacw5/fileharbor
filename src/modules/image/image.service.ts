@@ -892,7 +892,7 @@ export class ImageService {
     where: any,
     options: { skip: number; take: number; page: number },
     sort?: { field: string; order: 'asc' | 'desc' },
-    adminUserId?: string,
+    actorId?: string,
   ) {
     const orderBy: any = sort ? { [sort.field]: sort.order } : { createdAt: 'desc' };
 
@@ -912,9 +912,9 @@ export class ImageService {
     ]);
 
     let bookmarkedIds = new Set<string>();
-    if (adminUserId && images.length > 0) {
+    if (actorId && images.length > 0) {
       const bookmarks = await this.prisma.adminImageBookmark.findMany({
-        where: { adminUserId, imageId: { in: images.map((i) => i.id) } },
+        where: { actorId, imageId: { in: images.map((i) => i.id) } },
         select: { imageId: true },
       });
       bookmarkedIds = new Set(bookmarks.map((b) => b.imageId));
@@ -942,7 +942,7 @@ export class ImageService {
    * Admin full image fetch — includes albums, active share-link count, user.
    * Returns null if not found.
    */
-  async findAdminImageById(imageId: string, adminUserId?: string) {
+  async findAdminImageById(imageId: string, actorId?: string) {
     const now = new Date();
     const image = await this.prisma.image.findUnique({
       where: { id: imageId },
@@ -967,9 +967,9 @@ export class ImageService {
     if (!image) return null;
 
     let isBookmarked = false;
-    if (adminUserId) {
+    if (actorId) {
       const bookmark = await this.prisma.adminImageBookmark.findUnique({
-        where: { adminUserId_imageId: { adminUserId, imageId } },
+        where: { actorId_imageId: { actorId, imageId } },
         select: { imageId: true },
       });
       isBookmarked = !!bookmark;

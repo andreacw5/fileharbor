@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { UserService } from '@/modules/user/user.service';
 import { UserResponseDto } from '@/modules/user/dto/user-response.dto';
@@ -29,6 +30,7 @@ import { CreateUserAdminDto } from '@/modules/admin/dto/create-user-admin.dto';
 @Controller('admin/users')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-library.manage')
 export class UsersAdminController {
   constructor(private readonly userService: UserService) {}
 

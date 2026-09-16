@@ -26,9 +26,10 @@ describe('TagService', () => {
     role: 'SUPER_ADMIN',
     appSlug: 'fileharbor',
     permissions: [],
-    adminUserId: 'local-admin-1',
-    allClientsAccess: true,
-    allowedClientIds: [],
+    principalId: 'principal-1',
+    fullAccess: true,
+    actorId: 'principal-1',
+    allowedClientIds: ['client-a', 'client-b'],
   };
 
   beforeEach(async () => {
@@ -70,6 +71,7 @@ describe('TagService', () => {
 
     expect(mockPrismaService.tag.findMany).toHaveBeenCalledWith({
       where: {
+        clientId: { in: ['client-a', 'client-b'] },
         name: {
           contains: 'na',
           mode: 'insensitive',
@@ -196,7 +198,9 @@ describe('TagService', () => {
     const restricted: AdminJwtPayload = {
       ...adminUser,
       role: 'ADMIN',
-      allClientsAccess: false,
+      principalId: null,
+      fullAccess: false,
+      actorId: 'sub:admin-1',
       allowedClientIds: ['client-a', 'client-b'],
     };
 

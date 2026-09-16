@@ -298,7 +298,7 @@ export class VideoService {
     where: any,
     options: { skip: number; take: number; page: number },
     sort?: { field: string; order: 'asc' | 'desc' },
-    adminUserId?: string,
+    actorId?: string,
   ) {
     const orderBy: any = sort ? { [sort.field]: sort.order } : { createdAt: 'desc' };
 
@@ -318,9 +318,9 @@ export class VideoService {
     ]);
 
     let bookmarkedIds = new Set<string>();
-    if (adminUserId && videos.length > 0) {
+    if (actorId && videos.length > 0) {
       const bookmarks = await (this.prisma as any).adminVideoBookmark.findMany({
-        where: { adminUserId, videoId: { in: videos.map((v) => v.id) } },
+        where: { actorId, videoId: { in: videos.map((v) => v.id) } },
         select: { videoId: true },
       });
       bookmarkedIds = new Set(bookmarks.map((b: any) => b.videoId));
@@ -343,7 +343,7 @@ export class VideoService {
     };
   }
 
-  async findAdminVideoById(videoId: string, adminUserId?: string) {
+  async findAdminVideoById(videoId: string, actorId?: string) {
     const video = await this.prisma.video.findUnique({
       where: { id: videoId },
       include: {
@@ -356,9 +356,9 @@ export class VideoService {
     if (!video) return null;
 
     let isBookmarked = false;
-    if (adminUserId) {
+    if (actorId) {
       const bookmark = await (this.prisma as any).adminVideoBookmark.findUnique({
-        where: { adminUserId_videoId: { adminUserId, videoId } },
+        where: { actorId_videoId: { actorId, videoId } },
         select: { videoId: true },
       });
       isBookmarked = !!bookmark;

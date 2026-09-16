@@ -17,6 +17,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ImageService } from '@/modules/image/image.service';
 import {
@@ -30,6 +31,7 @@ import { assertClientAccess, resolveAllowedClients } from '../helpers/admin-acce
 @Controller('admin/image-share-links')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class ImageShareLinksAdminController {
   constructor(
     private readonly imageService: ImageService,

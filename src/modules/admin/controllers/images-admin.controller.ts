@@ -28,6 +28,7 @@ import type { Response } from 'express';
 import { Readable } from 'stream';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUpdateImageDto } from '../dto/admin-update-image.dto';
 import { AdminUploadImageDto } from '../dto/admin-upload-image.dto';
@@ -46,6 +47,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 @Controller('admin/images')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class ImagesAdminController {
   constructor(
     private readonly imageService: ImageService,
@@ -158,7 +160,7 @@ export class ImagesAdminController {
       where,
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
-      adminUser.adminUserId,
+      adminUser.actorId,
     );
   }
 
@@ -169,7 +171,7 @@ export class ImagesAdminController {
     @Param('id') id: string,
     @AdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminImageResponseDto> {
-    const image = await this.imageService.findAdminImageById(id, adminUser.adminUserId);
+    const image = await this.imageService.findAdminImageById(id, adminUser.actorId);
     if (!image) throw new BadRequestException('Image not found');
     assertClientAccess(adminUser, image.clientId);
 
@@ -217,6 +219,7 @@ export class ImagesAdminController {
   }
 
   @Delete(':id')
+  @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an image (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
   async deleteImage(

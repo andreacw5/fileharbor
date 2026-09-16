@@ -25,8 +25,8 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 | `storage` | All disk I/O and Sharp image processing |
 | `webhook` | Fire-and-forget Discord webhook notifications |
 | `job` | Scheduled cleanup (cron jobs — currently commented out) |
-| `admin` | Admin portal API: multi-role user management, cross-client ops |
-| `admin-auth` | Admin auth delegated to Bastion IdP: login proxy, JWKS guard |
+| `admin` | Admin console API: cross-client ops, scoped by tenant |
+| `admin-auth` | Bastion token verification: JWKS guards, console permissions (no accounts, no controller) |
 | `prisma` | Database service wrapper |
 
 ## Auth & Request Context
@@ -83,87 +83,131 @@ Cron decorators are **currently commented out** in `image.cleanup.job.ts`, `avat
 
 ## Admin Module
 
-Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Admin identity is
-**delegated to Bastion IdP**; FileHarbor issues no tokens of its own and stores no admin passwords.
+Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Admin identity lives
+**entirely in Bastion**: FileHarbor issues no tokens, stores no admin passwords and, since the
+`admin_users` removal, keeps no admin accounts at all.
 
-Two modules cooperate:
+Three parts:
 
-- `src/modules/admin-auth/` — auth: controller, service, guard, decorator
-- `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`, `admin/albums`, `admin/users`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
-- `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`: scoped totals, a 7-day trend and a per-day chart. `totalStorage` sums image bytes only.
-
-### Auth flow
-
-`AdminAuthService` (`admin-auth/admin-auth.service.ts`) proxies every credential operation to Bastion
-— login, OAuth code exchange, refresh, logout, profile, email change, password change/reset. The
-refresh token is returned to the browser as the httpOnly cookie `admin_rt` (30 days, `sameSite: strict`),
-never in the response body.
-
-```
-POST /admin/auth/login      → Bastion POST /auth/login
-POST /admin/auth/exchange   → Bastion POST /auth/exchange   (social login landing)
-POST /admin/auth/refresh    → Bastion POST /auth/refresh    (reads admin_rt cookie, rotates it)
-POST /admin/auth/logout     → Bastion POST /auth/logout
-GET  /admin/auth/me         → local AdminUser + Bastion claims
-```
+- `src/modules/admin-auth/` — token verification only: `BastionTokenVerifier`, the two guards,
+  decorators, and `console-permissions.ts`. No controller — sign-in, refresh, password and profile
+  all belong to Bastion, and the console (Meridian) talks to Bastion directly.
+- `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
+  `admin/albums`, `admin/users`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
+- `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
+  scoped totals, a 7-day trend and a per-day chart. `totalStorage` sums image bytes only.
 
 ### Guard
 
-**`AdminJwtGuard`** (`admin-auth/guards/admin-jwt.guard.ts`) validates `Authorization: Bearer <token>`:
+**`AdminJwtGuard`** (`admin-auth/guards/admin-jwt.guard.ts`) does three things with
+`Authorization: Bearer <token>`:
 
-1. Verifies RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`), cached 1h with one
-   forced re-fetch on failure to survive key rotation
-2. Checks `payload.appSlug` is in the accepted list (see below)
-3. Loads the local `AdminUser` by `bastionUserId`; rejects when missing or `active: false`
-4. Attaches `request.adminUser` (`AdminJwtPayload` — Bastion claims plus `adminUserId`,
-   `allClientsAccess`, `allowedClientIds`)
-5. Fire-and-forget `UserCache` upsert to keep cached Bastion profile data fresh
+1. **Verifies** RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`, cached 1h with one
+   forced re-fetch on failure to survive key rotation) and checks `payload.appSlug` against
+   `ADMIN_ACCEPTED_APP_SLUGS`.
+2. **Enforces the route's console permission**, fail-closed.
+3. **Resolves which clients the caller may see**, and attaches `request.adminUser`
+   (`AdminJwtPayload`: Bastion claims plus `principalId`, `fullAccess`, `actorId`, `allowedClientIds`).
 
-**`@AdminUser()`** decorator (`admin-auth/decorators/admin-user.decorator.ts`) extracts the payload.
+**`@AdminUser()`** (`admin-auth/decorators/admin-user.decorator.ts`) extracts the payload.
 
-### Accepted app slugs
+### Permissions — checked here, not only in Meridian
 
-FileHarbor has no admin UI of its own — the console lives in **Meridian**, which signs users in
-against Bastion with `appSlug: meridian`. `ADMIN_ACCEPTED_APP_SLUGS` is the comma-separated list of
-slugs whose user tokens the guard accepts. When unset it falls back to `BASTION_APP_SLUG` alone, so
-an empty value never widens what is accepted.
-
-### Access control
-
-Roles come from the Bastion token (`SUPER_ADMIN` / `ADMIN`). Scope is local: `SUPER_ADMIN` or
-`allClientsAccess: true` → unrestricted; otherwise limited to `allowedClientIds`. Never filter by
-hand — use the helpers in `admin/helpers/admin-access.helper.ts`:
+Meridian's BFF maps routes to `fileharbor-*` permissions, but a BFF is not a security boundary:
+anything that can reach this service with a valid Bastion user token would otherwise get the whole
+admin surface. So the guard re-checks the `permissions` claim.
 
 ```typescript
-resolveAllowedClients(admin)            // string[] | null (null = unrestricted)
+@RequirePermission('fileharbor-library.manage')   // class-level, overridable per handler
+```
+
+- **Fail-closed**: a route behind `AdminJwtGuard` with no `@RequirePermission` is refused (403) to
+  everyone but `SUPER_ADMIN`. A missing decorator is a bug to fix, not a hole to leave open.
+- `SUPER_ADMIN` bypasses the permission check (only the check — see scope below).
+- The four keys live in `admin-auth/console-permissions.ts`. Keep them in step with Bastion's
+  `prisma/seed.ts` and Meridian's `server/utils/permission-policy.ts`:
+  `fileharbor-media.manage`, `fileharbor-media.moderate`, `fileharbor-library.manage`,
+  `fileharbor-config.manage`.
+- Permissions travel in the access token and are not resolved per request, so a role change in
+  Bastion lands here only on the next refresh (max 15 min).
+
+### Client scope — the tenant, plus exceptions
+
+Scope is **never** granted by a role. `SUPER_ADMIN` included: a role says what you may do, not whose
+data you may see. Otherwise personal clients would leak to whoever holds the highest role.
+
+| Caller | Sees |
+|---|---|
+| anyone (default) | clients whose `bastionTenantSlug` matches the token's `tenantSlug` |
+| principal with `fullAccess` | every client **except** other principals' personal ones |
+| owner of a personal client | that client too, from any tenant they sign in through |
+
+Having no principal row is not an error — it means "your tenant only", so nothing has to be
+provisioned before a Meridian user works. A caller whose tenant maps to no client simply gets empty
+lists.
+
+Never filter by hand — use `admin/helpers/admin-access.helper.ts`:
+
+```typescript
+resolveAllowedClients(admin)            // string[] — always explicit, never "unrestricted"
 assertClientAccess(admin, clientId)     // throws ForbiddenException
 buildClientWhere(admin, extraClientId?) // Prisma where clause, validates extraClientId
 ```
 
-### How an `AdminUser` row appears
+### `AdminPrincipal` / `AdminIdentity` — the exceptions table
 
-The guard rejects any token whose `bastionUserId` has no `admin_users` row with
-`401 Admin access not granted`. Rows are created two ways:
+A Bastion `sub` is **per tenant**: the same person signing into two tenants is two Bastion users with
+two different subs. `AdminIdentity` maps those subs onto one `AdminPrincipal`, which is what lets one
+person carry the same reach — and the same personal clients — whichever tenant they enter through.
 
-- **`POST /admin/auth/login` or `/admin/auth/exchange`** — `buildLoginResponse()` upserts the row for
-  whoever authenticated, with `active: true` and `allClientsAccess: decoded.role === 'SUPER_ADMIN'`.
-  First login through FileHarbor's own endpoint therefore self-provisions admin access.
-- **`AdminAuthService.createAdminUser()`** — explicit provisioning with chosen client scope.
+The table holds **only exceptions** (someone with `fullAccess`, or who owns a personal client). It is
+not a mirror of Bastion's users, and it has **no API**: rows are written by hand, which keeps the
+privilege surface off the network entirely.
 
-**Meridian does not hit either.** It authenticates against Bastion directly and forwards the user's
-access token to FileHarbor, so `buildLoginResponse()` never runs. A Meridian user needs their
-`admin_users` row provisioned first (one login through FileHarbor's own endpoint, or an explicit
-`createAdminUser()` call) or every admin request 401s.
+```sql
+-- one person, one row
+INSERT INTO admin_principals (id, label, "fullAccess", "createdAt", "updatedAt")
+VALUES (gen_random_uuid(), 'andrea', true, NOW(), NOW());
 
-`AdminInitService` is now only a startup log; it creates nothing.
+-- one row per tenant they sign in through (sub = the JWT's `sub` claim in that tenant)
+INSERT INTO admin_identities (id, "principalId", "bastionUserId", "tenantSlug", "createdAt")
+VALUES (gen_random_uuid(), '<principal-id>', '<sub>', 'dbd', NOW());
+
+-- a personal client: owned by a person, not mapped to a tenant
+UPDATE clients SET "ownerPrincipalId" = '<principal-id>', "bastionTenantSlug" = NULL
+WHERE id = '<client-id>';
+```
+
+⚠️ **Recovery is SQL-only.** Lose every identity of a `fullAccess` principal and the only way back in
+is the database. There is no endpoint that grants access.
+
+### Personal clients
+
+`Client.ownerPrincipalId` and `Client.bastionTenantSlug` are mutually exclusive (CHECK constraint
+`clients_owner_xor_tenant`): a client belongs to a tenant **or** to a person.
+
+A personal client is invisible in the console to everyone but its owner — lists, stats, tags,
+bookmarks and direct id lookups alike. This is the console only: the `X-API-Key` surface is
+unaffected (whoever holds the key reads the data), public image delivery follows its own rules, and
+anyone with database or disk access sees everything.
+
+`POST /admin/clients` is `SUPER_ADMIN`-only and defaults `bastionTenantSlug` to the creator's tenant —
+an unmapped client would be invisible to its own author. Creating one with no mapping at all is
+allowed only for a `fullAccess` principal; anyone else gets `400`.
+
+### Bookmarks and `actorId`
+
+Admin bookmarks are keyed on `actorId`: the principal id when the caller is linked, otherwise
+`sub:<sub>`. A linked person therefore keeps one set of bookmarks across tenants, and an unlinked one
+keeps their own without needing a row anywhere.
 
 Required env vars:
 ```
 BASTION_URL=http://localhost:3001
 BASTION_APP_SLUG=fileharbor
-BASTION_TENANT_SLUG=                        # optional default tenant
 ADMIN_ACCEPTED_APP_SLUGS=fileharbor,meridian  # empty → BASTION_APP_SLUG only
 ```
+
 
 ## Self-Service Module (`/me`)
 
@@ -173,13 +217,14 @@ avatar. `src/modules/me/` (`me.module.ts`, `me.controller.ts`, `me.service.ts`, 
 ### Guard: `BastionUserJwtGuard`
 
 `admin-auth/guards/bastion-user-jwt.guard.ts` verifies the Bastion user JWT the same way `AdminJwtGuard`
-does — signature against JWKS, `appSlug` in `ADMIN_ACCEPTED_APP_SLUGS` — but **does not** require a local
-`AdminUser` row. The shared verification (JWKS fetch/cache, RS256 verify, `appSlug` check) lives in
+does — signature against JWKS, `appSlug` in `ADMIN_ACCEPTED_APP_SLUGS` — but requires **no console
+permission** and resolves no client scope. The shared verification (JWKS fetch/cache, RS256 verify, `appSlug` check) lives in
 `admin-auth/bastion-token-verifier.service.ts` (`BastionTokenVerifier`), injected by both guards so they
 can't drift apart. `BastionUserJwtGuard` attaches `request.bastionUser` (`sub`, `tenantId`, `tenantSlug`,
 `appSlug`, `email`, `username`) — read it with the `@BastionUser()` decorator
 (`admin-auth/decorators/bastion-user.decorator.ts`). Never reuse `BastionUserJwtGuard` for admin/console
-routes — it grants no role/permission check, only "this is *some* verified Bastion user of an accepted app".
+routes — it grants no permission check and no client scoping, only "this is *some* verified Bastion user
+of an accepted app".
 
 ### `Client.bastionTenantSlug` — the tenant → client mapping
 
@@ -189,7 +234,8 @@ immutable, so this is a safe join key. A tenant with **no** mapped client (e.g. 
 dedicated FileHarbor client) never gets self-service avatars — there's no silent fallback to a default
 client. Set the mapping via `PATCH /admin/clients/:id` (`bastionTenantSlug`, admin-only, lowercase slug,
 `null`/`""` clears it), or at creation time via `POST /admin/clients` (`SUPER_ADMIN` only — every other
-role gets `403`); either way a slug already mapped to another client responds `409 Conflict`. Creation
+role gets `403`, and the creator's own tenant is the default); either way a slug already mapped to
+another client responds `409 Conflict`. A client owned by a principal cannot carry a tenant slug at all. Creation
 also enforces a unique `domain` the same way. `POST /admin/clients` is the only client response that
 ever returns the plaintext `apiKey` — every other read/update masks or omits it.
 
@@ -237,6 +283,10 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 
 `Client` → `User` (by `externalUserId`) → `Image`, `Avatar`
 `Album` → `AlbumImage` (many-to-many with `Image`) → `AlbumToken` (temp access for private albums)
+`AdminPrincipal` → `AdminIdentity` (Bastion subs) and → `Client` (personal clients)
+
+⚠️ `User` is **not** a login: it is a content creator referenced by `externalUserId`, the anchor for
+images, videos, avatars and albums. Nobody authenticates as a `User`.
 
 Always add indexes on frequently queried fields.
 

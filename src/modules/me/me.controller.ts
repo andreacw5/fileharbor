@@ -28,9 +28,9 @@ const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_AVATAR_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 /**
- * Self-service endpoints for the currently signed-in Bastion user — no local
- * AdminUser row required (see BastionUserJwtGuard). externalUserId is always
- * the verified token `sub`, never taken from body/headers.
+ * Self-service endpoints for the currently signed-in Bastion user — no console
+ * permission required (see BastionUserJwtGuard). externalUserId is always the
+ * verified token `sub`, never taken from body/headers.
  */
 @ApiTags('Me')
 @ApiBearerAuth()

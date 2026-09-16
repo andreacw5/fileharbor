@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   UseGuards,
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
   Logger,
@@ -18,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminCreateClientDto } from '../dto/admin-create-client.dto';
 import { AdminUpdateClientDto } from '../dto/admin-update-client.dto';
@@ -30,6 +32,7 @@ import { assertClientAccess, resolveAllowedClients } from '../helpers/admin-acce
 @Controller('admin/clients')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class ClientsAdminController {
   private readonly logger = new Logger(ClientsAdminController.name);
 
@@ -60,6 +63,7 @@ export class ClientsAdminController {
   }
 
   @Post()
+  @RequirePermission('fileharbor-config.manage')
   @ApiOperation({ summary: 'Create a new client (SUPER_ADMIN only)' })
   @ApiResponse({ status: 201, type: AdminClientCreatedResponseDto })
   async createClient(
@@ -70,11 +74,23 @@ export class ClientsAdminController {
       throw new ForbiddenException('Only SUPER_ADMIN can create clients');
     }
 
+    // Client scope follows the tenant mapping, so an unmapped client would be
+    // invisible to its own creator. Default it to the caller's tenant, and let
+    // only a fullAccess principal deliberately create one with no mapping.
+    const tenantSlug =
+      'bastionTenantSlug' in dto ? dto.bastionTenantSlug || null : adminUser.tenantSlug;
+
+    if (!tenantSlug && !adminUser.fullAccess) {
+      throw new BadRequestException(
+        'A client with no bastionTenantSlug would not be visible to you — set one',
+      );
+    }
+
     const created = await this.clientService.createClient({
       name: dto.name,
       domain: dto.domain,
       active: dto.active,
-      bastionTenantSlug: dto.bastionTenantSlug,
+      bastionTenantSlug: tenantSlug,
     });
 
     const withStats = await this.clientService.getClientWithStats(created.id);
@@ -85,6 +101,7 @@ export class ClientsAdminController {
   }
 
   @Patch(':id')
+  @RequirePermission('fileharbor-config.manage')
   @ApiOperation({ summary: 'Update client name, status, webhook and Tinify settings' })
   @ApiResponse({ status: 200, type: AdminClientResponseDto })
   async updateClient(

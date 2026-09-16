@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.0.0] – 2026-09-16
+
+### Removed
+- **`admin_users`, `admin_client_access` and `user_cache` tables, and the whole `/admin/auth/*`
+  surface** (login, exchange, refresh, logout, me, profile, email and password endpoints, plus
+  `GET /admin/auth/tenant/:slug`). Admin identity now lives entirely in Bastion; the console
+  (Meridian) authenticates against Bastion and forwards the user token. `user_cache` was written on
+  every admin request and read by nothing. `AdminInitService` is gone with them.
+- `BASTION_TENANT_SLUG` and `FRONTEND_URL` env vars — only the deleted auth proxy used them.
+
+### Added
+- **Console permission checks in the service itself.** `AdminJwtGuard` now enforces the
+  `fileharbor-*` permission claim that previously only Meridian's BFF checked, via
+  `@RequirePermission(...)`. Fail-closed: a route behind the guard with no decorator is refused to
+  everyone but `SUPER_ADMIN`.
+- **`admin_principals` / `admin_identities`** — a table of exceptions, not a mirror of Bastion's
+  users. A principal links the several Bastion `sub`s one person has (subs are per tenant) and may
+  carry `fullAccess`. Rows are provisioned by SQL only; the service exposes no endpoint for them.
+- **Personal clients** — `Client.ownerPrincipalId`, mutually exclusive with `bastionTenantSlug`
+  (CHECK `clients_owner_xor_tenant`). A personal client is visible in the console only to its owner,
+  `fullAccess` principals and `SUPER_ADMIN` included.
+
+### Changed
+- **Client scope no longer follows a role.** Every caller sees the clients mapped to the tenant in
+  their token; `SUPER_ADMIN` alone no longer widens that. Cross-tenant reach comes from a principal
+  with `fullAccess`. A caller with no principal row is no longer rejected (`401 Admin access not
+  granted` is gone) — they are simply scoped to their tenant.
+- **Admin bookmarks are keyed on `actorId`** (principal id, else `sub:<sub>`) instead of
+  `adminUserId`, so a linked person keeps one set across tenants. The bookmark response field is
+  renamed `adminUserId` → `actorId`.
+- `POST /admin/clients` defaults `bastionTenantSlug` to the creator's tenant; creating a client with
+  no mapping is allowed only for a `fullAccess` principal and otherwise responds `400`.
+
+### Migration
+Two migrations, in order: `20260916100000_admin_principals` adds and backfills (every active admin
+with `allClientsAccess` becomes a `fullAccess` principal, bookmarks are re-keyed), then
+`20260916100100_drop_admin_users` drops the old tables. Admins scoped through `admin_client_access`
+get no principal: check that list before deploying. Personal clients must be assigned an owner by
+hand — see `CLAUDE.md`.
+
+---
+
 ## [2.8.0] – 2026-09-15
 
 ### Added

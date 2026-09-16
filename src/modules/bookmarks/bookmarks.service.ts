@@ -41,7 +41,7 @@ export class BookmarksService {
     const now = new Date();
 
     const where: any = {
-      adminUserId: adminUser.adminUserId,
+      actorId: adminUser.actorId,
       image: buildClientWhere(adminUser, params.clientId),
     };
 
@@ -100,19 +100,19 @@ export class BookmarksService {
 
     await prisma.adminImageBookmark.upsert({
       where: {
-        adminUserId_imageId: {
-          adminUserId: adminUser.adminUserId,
+        actorId_imageId: {
+          actorId: adminUser.actorId,
           imageId,
         },
       },
       create: {
-        adminUserId: adminUser.adminUserId,
+        actorId: adminUser.actorId,
         imageId,
       },
       update: {},
     });
 
-    return this.getBookmarkByAdminAndImage(adminUser.adminUserId, imageId);
+    return this.getBookmarkByAdminAndImage(adminUser.actorId, imageId);
   }
 
   async bookmarkUser(adminUser: AdminJwtPayload, userId: string) {
@@ -131,19 +131,19 @@ export class BookmarksService {
 
     await prisma.adminUserBookmark.upsert({
       where: {
-        adminUserId_userId: {
-          adminUserId: adminUser.adminUserId,
+        actorId_userId: {
+          actorId: adminUser.actorId,
           userId,
         },
       },
       create: {
-        adminUserId: adminUser.adminUserId,
+        actorId: adminUser.actorId,
         userId,
       },
       update: {},
     });
 
-    return this.getBookmarkByAdminAndUser(adminUser.adminUserId, userId);
+    return this.getBookmarkByAdminAndUser(adminUser.actorId, userId);
   }
 
   async removeBookmark(adminUser: AdminJwtPayload, imageId: string): Promise<{ removed: number }> {
@@ -162,7 +162,7 @@ export class BookmarksService {
 
     const result = await prisma.adminImageBookmark.deleteMany({
       where: {
-        adminUserId: adminUser.adminUserId,
+        actorId: adminUser.actorId,
         imageId,
       },
     });
@@ -186,7 +186,7 @@ export class BookmarksService {
 
     const result = await prisma.adminUserBookmark.deleteMany({
       where: {
-        adminUserId: adminUser.adminUserId,
+        actorId: adminUser.actorId,
         userId,
       },
     });
@@ -194,13 +194,13 @@ export class BookmarksService {
     return { removed: result.count };
   }
 
-  private async getBookmarkByAdminAndImage(adminUserId: string, imageId: string) {
+  private async getBookmarkByAdminAndImage(actorId: string, imageId: string) {
     const prisma = this.prisma as any;
 
     const bookmark = await prisma.adminImageBookmark.findUnique({
       where: {
-        adminUserId_imageId: {
-          adminUserId,
+        actorId_imageId: {
+          actorId,
           imageId,
         },
       },
@@ -214,13 +214,13 @@ export class BookmarksService {
     return this.mapBookmark(bookmark);
   }
 
-  private async getBookmarkByAdminAndUser(adminUserId: string, userId: string) {
+  private async getBookmarkByAdminAndUser(actorId: string, userId: string) {
     const prisma = this.prisma as any;
 
     const bookmark = await prisma.adminUserBookmark.findUnique({
       where: {
-        adminUserId_userId: {
-          adminUserId,
+        actorId_userId: {
+          actorId,
           userId,
         },
       },
@@ -285,7 +285,7 @@ export class BookmarksService {
 
     return {
       id: bookmark.id,
-      adminUserId: bookmark.adminUserId,
+      actorId: bookmark.actorId,
       imageId: bookmark.imageId,
       bookmarkedAt: bookmark.createdAt,
       image: {
@@ -304,7 +304,7 @@ export class BookmarksService {
     const skip = (page - 1) * perPage;
 
     const where: any = {
-      adminUserId: adminUser.adminUserId,
+      actorId: adminUser.actorId,
       video: buildClientWhere(adminUser, params.clientId),
     };
 
@@ -343,12 +343,12 @@ export class BookmarksService {
     const prisma = this.prisma as any;
 
     await prisma.adminVideoBookmark.upsert({
-      where: { adminUserId_videoId: { adminUserId: adminUser.adminUserId, videoId } },
-      create: { adminUserId: adminUser.adminUserId, videoId },
+      where: { actorId_videoId: { actorId: adminUser.actorId, videoId } },
+      create: { actorId: adminUser.actorId, videoId },
       update: {},
     });
 
-    return this.getBookmarkByAdminAndVideo(adminUser.adminUserId, videoId);
+    return this.getBookmarkByAdminAndVideo(adminUser.actorId, videoId);
   }
 
   async removeVideoBookmark(adminUser: AdminJwtPayload, videoId: string): Promise<{ removed: number }> {
@@ -362,17 +362,17 @@ export class BookmarksService {
 
     const prisma = this.prisma as any;
     const result = await prisma.adminVideoBookmark.deleteMany({
-      where: { adminUserId: adminUser.adminUserId, videoId },
+      where: { actorId: adminUser.actorId, videoId },
     });
 
     return { removed: result.count };
   }
 
-  private async getBookmarkByAdminAndVideo(adminUserId: string, videoId: string) {
+  private async getBookmarkByAdminAndVideo(actorId: string, videoId: string) {
     const prisma = this.prisma as any;
 
     const bookmark = await prisma.adminVideoBookmark.findUnique({
-      where: { adminUserId_videoId: { adminUserId, videoId } },
+      where: { actorId_videoId: { actorId, videoId } },
       include: this.buildVideoBookmarkInclude(),
     });
 
@@ -396,7 +396,7 @@ export class BookmarksService {
     const video = bookmark.video;
     return {
       id: bookmark.id,
-      adminUserId: bookmark.adminUserId,
+      actorId: bookmark.actorId,
       videoId: bookmark.videoId,
       bookmarkedAt: bookmark.createdAt,
       video: {
@@ -413,7 +413,7 @@ export class BookmarksService {
 
     return {
       id: bookmark.id,
-      adminUserId: bookmark.adminUserId,
+      actorId: bookmark.actorId,
       userId: bookmark.userId,
       bookmarkedAt: bookmark.createdAt,
       user: {

@@ -58,7 +58,7 @@ describe('BastionUserJwtGuard', () => {
     mockJwtService.verify.mockReturnValue(bastionPayload);
   });
 
-  it('accepts a verified token without requiring any local AdminUser row', async () => {
+  it('accepts a verified token without requiring any console permission', async () => {
     const guard = await buildGuard({
       bastionAppSlug: 'fileharbor',
       adminAcceptedAppSlugs: 'fileharbor,meridian',

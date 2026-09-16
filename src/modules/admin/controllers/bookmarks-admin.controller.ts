@@ -19,6 +19,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { AdminJwtGuard, AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import {
   AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
@@ -34,6 +35,7 @@ import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
 @Controller('admin/bookmarks')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class BookmarksAdminController {
   constructor(private readonly bookmarksService: BookmarksService) {}
 
@@ -106,6 +108,7 @@ export class BookmarksAdminController {
   }
 
   @Post('users/:userId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark a user for the current admin' })
   @ApiResponse({ status: 201, type: AdminUserBookmarkResponseDto })
@@ -121,6 +124,7 @@ export class BookmarksAdminController {
   }
 
   @Delete('users/:userId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a user from admin bookmarks' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
@@ -143,6 +147,7 @@ export class BookmarksAdminController {
   }
 
   @Get('videos')
+  @RequirePermission('fileharbor-library.manage')
   @ApiOperation({ summary: 'List bookmarked videos for admin GUI' })
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'search', required: false })
@@ -167,6 +172,7 @@ export class BookmarksAdminController {
   }
 
   @Post('videos/:videoId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark a video for the current admin' })
   @ApiResponse({ status: 201, type: AdminVideoBookmarkResponseDto })
@@ -179,6 +185,7 @@ export class BookmarksAdminController {
   }
 
   @Delete('videos/:videoId')
+  @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a video from admin bookmarks' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })

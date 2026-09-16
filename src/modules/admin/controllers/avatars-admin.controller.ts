@@ -15,6 +15,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import {
   AdminDeleteResponseDto,
@@ -29,6 +30,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 @Controller('admin/avatars')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-media.manage')
 export class AvatarsAdminController {
   constructor(
     private readonly avatarService: AvatarService,
@@ -87,6 +89,7 @@ export class AvatarsAdminController {
   }
 
   @Delete(':id')
+  @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an avatar (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
   async deleteAvatar(

@@ -36,14 +36,22 @@ model Client {
   // null = no mapping — that tenant has no self-service FileHarbor client (e.g. "personal").
   bastionTenantSlug String? @unique
 
-  // Relations
-  users   User[]
-  images  Image[]
-  avatars Avatar[]
-  albums  Album[]
-  tags    Tag[]
-  videos  Video[]
+  // Personal client: owned by one person rather than by a Bastion tenant.
+  // Mutually exclusive with bastionTenantSlug (enforced by a CHECK constraint).
+  // A personal client is visible in the console only to its owner's identities —
+  // fullAccess principals included. The X-API-Key surface is unaffected.
+  ownerPrincipalId String?
 
+  // Relations
+  users          User[]
+  images         Image[]
+  avatars        Avatar[]
+  albums         Album[]
+  tags           Tag[]
+  videos         Video[]
+  ownerPrincipal AdminPrincipal? @relation(fields: [ownerPrincipalId], references: [id], onDelete: Restrict)
+
+  @@index([ownerPrincipalId])
   @@map("clients")
 }
 
@@ -191,18 +199,17 @@ model VideoTag {
   @@map("video_tags")
 }
 
-// Admin personal bookmark for a video
+// Admin personal bookmark for a video (see AdminImageBookmark for `actorId`)
 model AdminVideoBookmark {
-  id          String   @id @default(uuid())
-  adminUserId String
-  videoId     String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  actorId   String
+  videoId   String
+  createdAt DateTime @default(now())
 
-  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  video     Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
-  @@unique([adminUserId, videoId])
-  @@index([adminUserId])
+  @@unique([actorId, videoId])
+  @@index([actorId])
   @@index([videoId])
   @@map("admin_video_bookmarks")
 }
@@ -303,84 +310,76 @@ model AlbumToken {
   @@map("album_tokens")
 }
 
-// Admin user for the management GUI
-model AdminUser {
-  id               String    @id @default(uuid())
-  bastionUserId    String    @unique // ID from Bastion's authentication system
-  email            String    @unique
-  username         String?
-  image            String?
-  active           Boolean   @default(true)
-  allClientsAccess Boolean   @default(false) // if true, can access all clients
-  lastLoginAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+// A person who needs more than their own tenant, or who owns personal clients.
+//
+// This is NOT a mirror of Bastion's users: a row exists only for the exceptions.
+// Whoever has no row is not rejected — they are simply scoped to the tenant in
+// their token. Roles and credentials stay entirely in Bastion.
+//
+// Rows are provisioned by hand (SQL/seed): the service exposes no endpoint for
+// them, which keeps the privilege surface off the network.
+model AdminPrincipal {
+  id         String   @id @default(uuid())
+  label      String // human-readable only, e.g. "andrea" — never used for matching
+  fullAccess Boolean  @default(false) // sees every client except other principals' personal ones
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  clientAccess   AdminClientAccess[]
-  bookmarks      AdminImageBookmark[]
-  userBookmarks  AdminUserBookmark[]
-  videoBookmarks AdminVideoBookmark[]
+  identities    AdminIdentity[]
+  ownedClients  Client[]
 
-  @@index([email])
-  @@map("admin_users")
+  @@map("admin_principals")
 }
 
-// Allowed clients for an admin user (used when allClientsAccess = false)
-model AdminClientAccess {
-  id          String   @id @default(uuid())
-  adminUserId String
-  clientId    String
-  createdAt   DateTime @default(now())
+// One Bastion user (a `sub`) belonging to a principal.
+//
+// Bastion users are tenant-scoped: the same person has a different `sub` in each
+// tenant. Linking them here is what lets one person carry the same access — and
+// the same personal clients — whichever tenant they sign in through.
+model AdminIdentity {
+  id            String   @id @default(uuid())
+  principalId   String
+  bastionUserId String   @unique // the `sub` claim, unique per tenant
+  tenantSlug    String // documentation only; matching is always on bastionUserId
+  createdAt     DateTime @default(now())
 
-  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  principal AdminPrincipal @relation(fields: [principalId], references: [id], onDelete: Cascade)
 
-  @@unique([adminUserId, clientId])
-  @@index([adminUserId])
-  @@index([clientId])
-  @@map("admin_client_access")
+  @@unique([principalId, tenantSlug])
+  @@index([principalId])
+  @@map("admin_identities")
 }
 
-// Admin personal bookmark for an image
+// Admin personal bookmark for an image.
+// `actorId` is the principal id when the caller has one, otherwise `sub:<sub>` —
+// so a linked person keeps one set of bookmarks across tenants.
 model AdminImageBookmark {
-  id          String   @id @default(uuid())
-  adminUserId String
-  imageId     String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  actorId   String
+  imageId   String
+  createdAt DateTime @default(now())
 
-  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  image     Image     @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
 
-  @@unique([adminUserId, imageId])
-  @@index([adminUserId])
+  @@unique([actorId, imageId])
+  @@index([actorId])
   @@index([imageId])
   @@map("admin_image_bookmarks")
 }
 
-// Admin personal bookmark for a user
+// Admin personal bookmark for a user (a content creator, not a login)
 model AdminUserBookmark {
-  id          String   @id @default(uuid())
-  adminUserId String
-  userId      String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  actorId   String
+  userId    String
+  createdAt DateTime @default(now())
 
-  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([adminUserId, userId])
-  @@index([adminUserId])
+  @@unique([actorId, userId])
+  @@index([actorId])
   @@index([userId])
   @@map("admin_user_bookmarks")
-}
-
-// Cache of Bastion user profile data, keyed by JWT sub
-model UserCache {
-  id        String   @id // = sub from Bastion JWT, set explicitly
-  username  String?
-  email     String?
-  image     String?
-  updatedAt DateTime @updatedAt
-
-  @@map("user_cache")
 }
 
 // Token for private image sharing

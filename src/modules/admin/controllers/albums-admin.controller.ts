@@ -26,6 +26,7 @@ import { AlbumResourceType } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
+import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
 import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
 import { AdminUpdateAlbumDto } from '../dto/admin-update-album.dto';
 import { AdminCreateAlbumDto } from '../dto/admin-create-album.dto';
@@ -39,6 +40,7 @@ import { assertClientAccess, buildClientWhere } from '../helpers/admin-access.he
 @Controller('admin/albums')
 @UseGuards(AdminJwtGuard)
 @ApiBearerAuth()
+@RequirePermission('fileharbor-library.manage')
 export class AlbumsAdminController {
   private readonly logger = new Logger(AlbumsAdminController.name);
 

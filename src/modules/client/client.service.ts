@@ -201,10 +201,12 @@ export class ClientService {
 
   /**
    * List all clients enriched with entity counts and total storage (admin use).
-   * `allowed` is null for unrestricted admins, or an array of clientIds.
+   * `allowed` is the clientIds the caller may see, resolved by `AdminJwtGuard`.
    */
-  async listClientsWithStats(allowed: string[] | null) {
-    const where = allowed !== null ? { id: { in: allowed } } : {};
+  async listClientsWithStats(allowed: string[]) {
+    // Always an explicit list: no role grants blanket client access any more,
+    // so an empty list legitimately means "nothing to show".
+    const where = { id: { in: allowed } };
 
     const clients = await this.prisma.client.findMany({
       where,

@@ -7,8 +7,8 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
 
 /**
  * Self-service endpoints for the signed-in Bastion user (e.g. /me/avatar).
- * Guarded by BastionUserJwtGuard — verifies the Bastion user JWT but does NOT
- * require a local AdminUser row, unlike the admin/ module.
+ * Guarded by BastionUserJwtGuard — verifies the Bastion user JWT but requires
+ * none of the console permissions the admin/ module enforces.
  */
 @Module({
   imports: [AdminAuthModule, AvatarModule, PrismaModule],

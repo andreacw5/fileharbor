@@ -1,7 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { BastionTokenVerifier, BastionJwtPayload } from '../bastion-token-verifier.service';
+import { BastionTokenVerifier } from '../bastion-token-verifier.service';
+import { CONSOLE_SUPER_ROLE, ConsolePermission } from '../console-permissions';
+import { REQUIRE_PERMISSION_KEY } from '../decorators/require-permission.decorator';
 
 export interface AdminJwtPayload {
   // From Bastion JWT
@@ -14,67 +17,119 @@ export interface AdminJwtPayload {
   role: string;
   appSlug: string;
   permissions: string[];
-  // Enriched from local AdminUser
-  adminUserId: string;
-  allClientsAccess: boolean;
+  // Resolved locally
+  /** AdminPrincipal id when this Bastion user is linked to one, else null. */
+  principalId: string | null;
+  /** Principal with fullAccess: sees every client bar other principals' personal ones. */
+  fullAccess: boolean;
+  /** Owner key for personal data (bookmarks): principal id, or `sub:<sub>`. */
+  actorId: string;
+  /** Clients this caller may see, resolved per request. */
   allowedClientIds: string[];
 }
 
+/**
+ * Admin guard for the console surface.
+ *
+ * Identity, roles and credentials live entirely in Bastion — this service keeps
+ * no admin accounts. The guard:
+ *
+ * 1. verifies the RS256 token against Bastion's JWKS and the accepted app slugs
+ *    (`BastionTokenVerifier`);
+ * 2. enforces the route's console permission, fail-closed (SUPER_ADMIN bypasses);
+ * 3. resolves which clients the caller may see.
+ *
+ * Client scope comes from the token's tenant, not from a role: a plain admin
+ * sees the clients mapped to their tenant. The exceptions live in
+ * `admin_principals` — a person granted `fullAccess`, and the owner of a personal
+ * client. A personal client is visible only to its owner, fullAccess included.
+ *
+ * Having no principal row is not an error: it just means "your tenant only".
+ */
 @Injectable()
 export class AdminJwtGuard implements CanActivate {
   constructor(
     private readonly tokenVerifier: BastionTokenVerifier,
     private readonly prisma: PrismaService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const bastionPayload = await this.tokenVerifier.verifyAuthHeader(request.headers['authorization']);
+    const payload = await this.tokenVerifier.verifyAuthHeader(request.headers['authorization']);
 
-    const adminUser = await this.prisma.adminUser.findUnique({
-      where: { bastionUserId: bastionPayload.sub },
-      include: { clientAccess: { select: { clientId: true } } },
+    const isSuperAdmin = payload.role === CONSOLE_SUPER_ROLE;
+    this.assertPermission(context, payload.permissions ?? [], isSuperAdmin);
+
+    const identity = await this.prisma.adminIdentity.findUnique({
+      where: { bastionUserId: payload.sub },
+      select: { principal: { select: { id: true, fullAccess: true } } },
     });
-
-    if (!adminUser || !adminUser.active) {
-      throw new UnauthorizedException('Admin access not granted');
-    }
+    const principal = identity?.principal ?? null;
 
     (request as any).adminUser = {
-      sub: bastionPayload.sub,
-      tenantId: bastionPayload.tenantId,
-      tenantSlug: bastionPayload.tenantSlug,
-      email: bastionPayload.email,
-      username: bastionPayload.username,
-      image: bastionPayload.image,
-      role: bastionPayload.role,
-      appSlug: bastionPayload.appSlug,
-      permissions: bastionPayload.permissions ?? [],
-      adminUserId: adminUser.id,
-      allClientsAccess: adminUser.allClientsAccess,
-      allowedClientIds: adminUser.clientAccess.map((a) => a.clientId),
+      sub: payload.sub,
+      tenantId: payload.tenantId,
+      tenantSlug: payload.tenantSlug,
+      email: payload.email,
+      username: payload.username,
+      image: payload.image,
+      role: payload.role,
+      appSlug: payload.appSlug,
+      permissions: payload.permissions ?? [],
+      principalId: principal?.id ?? null,
+      fullAccess: principal?.fullAccess ?? false,
+      actorId: principal?.id ?? `sub:${payload.sub}`,
+      allowedClientIds: await this.resolveVisibleClients(payload.tenantSlug, principal),
     } satisfies AdminJwtPayload;
-
-    // fire-and-forget UserCache upsert — keeps cached Bastion profile data fresh
-    this.upsertUserCache(bastionPayload).catch(() => undefined);
 
     return true;
   }
 
-  private async upsertUserCache(payload: BastionJwtPayload): Promise<void> {
-    await this.prisma.userCache.upsert({
-      where: { id: payload.sub },
-      create: {
-        id: payload.sub,
-        username: payload.username ?? null,
-        email: payload.email,
-        image: payload.image ?? null,
-      },
-      update: {
-        username: payload.username ?? null,
-        email: payload.email,
-        image: payload.image ?? null,
-      },
-    });
+  /**
+   * Fail-closed permission check: a route with no `@RequirePermission` is refused
+   * to everyone but SUPER_ADMIN, so forgetting the decorator cannot open an
+   * endpoint by accident.
+   */
+  private assertPermission(
+    context: ExecutionContext,
+    granted: string[],
+    isSuperAdmin: boolean,
+  ): void {
+    if (isSuperAdmin) return;
+
+    const required = this.reflector.getAllAndOverride<ConsolePermission | undefined>(
+      REQUIRE_PERMISSION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (!required || !granted.includes(required)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+  }
+
+  /**
+   * A personal client (`ownerPrincipalId`) is never visible to anyone but its
+   * owner — `fullAccess` widens reach across tenants, not into someone else's
+   * private data.
+   */
+  private async resolveVisibleClients(
+    tenantSlug: string | undefined,
+    principal: { id: string; fullAccess: boolean } | null,
+  ): Promise<string[]> {
+    const where = principal?.fullAccess
+      ? { OR: [{ ownerPrincipalId: null }, { ownerPrincipalId: principal.id }] }
+      : {
+          OR: [
+            ...(tenantSlug ? [{ bastionTenantSlug: tenantSlug }] : []),
+            ...(principal ? [{ ownerPrincipalId: principal.id }] : []),
+          ],
+        };
+
+    // No tenant match and no principal: nothing to look at, and no query to run.
+    if (!where.OR.length) return [];
+
+    const clients = await this.prisma.client.findMany({ where, select: { id: true } });
+    return clients.map((client) => client.id);
   }
 }
