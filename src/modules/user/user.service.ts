@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
 import { Prisma, User } from '@prisma/client';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   assertClientAccess,
   buildClientWhere,

@@ -26,7 +26,7 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 | `webhook` | Fire-and-forget Discord webhook notifications |
 | `job` | Scheduled cleanup (cron jobs — currently commented out) |
 | `admin` | Admin console API: cross-client ops, scoped by tenant |
-| `admin-auth` | Bastion token verification: JWKS guards, console permissions (no accounts, no controller) |
+| `bastion` | Everything Bastion: JWKS verification, guards, console permissions, audit writes (no controller) |
 | `prisma` | Database service wrapper |
 
 ## Auth & Request Context
@@ -89,8 +89,10 @@ Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Ad
 
 Three parts:
 
-- `src/modules/admin-auth/` — token verification only: `BastionTokenVerifier`, the two guards,
-  decorators, and `console-permissions.ts`. No controller — sign-in, refresh, password and profile
+- `src/modules/bastion/` — everything Bastion, laid out like the `bastion/` module in Herald, Beacon
+  and Gatherly: `BastionJwksService` (incoming token signature), `BastionTokenVerifier`, the two
+  guards, decorators, `console-permissions.ts`, plus the outgoing side (`BastionService`,
+  `BastionAuditService`, `AuditInterceptor`). No controller — sign-in, refresh, password and profile
   all belong to Bastion, and the console (Meridian) talks to Bastion directly.
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/users`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
@@ -99,17 +101,27 @@ Three parts:
 
 ### Guard
 
-**`AdminJwtGuard`** (`admin-auth/guards/admin-jwt.guard.ts`) does three things with
+**`BastionUserGuard`** (`bastion/guards/bastion-user.guard.ts`) does three things with
 `Authorization: Bearer <token>`:
 
-1. **Verifies** RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`, cached 1h with one
-   forced re-fetch on failure to survive key rotation) and checks `payload.appSlug` against
-   `ADMIN_ACCEPTED_APP_SLUGS`.
-2. **Enforces the route's console permission**, fail-closed.
+1. **Verifies** RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`) via
+   `BastionJwksService`, rejects service-client tokens, and checks `payload.appSlug` against
+   `ADMIN_ACCEPTED_APP_SLUGS` (`BastionTokenVerifier`).
+2. **Enforces the route's console permission**, fail-closed. A refusal writes one
+   `admin.access_denied` audit event per (appSlug, reason) every 5 minutes — the cooldown keeps a
+   retrying misconfigured caller from exhausting the `/events` budget.
 3. **Resolves which clients the caller may see**, and attaches `request.adminUser`
    (`AdminJwtPayload`: Bastion claims plus `principalId`, `fullAccess`, `actorId`, `allowedClientIds`).
 
-**`@AdminUser()`** (`admin-auth/decorators/admin-user.decorator.ts`) extracts the payload.
+**`@CurrentAdminUser()`** (`bastion/decorators/current-admin-user.decorator.ts`) extracts the payload.
+
+This is the same name and role as `BastionUserGuard` in Herald, Beacon and Gatherly, with two
+FileHarbor-only additions: permissions instead of a role allowlist, and per-client scope.
+
+**JWKS caching** is per `kid`, not a single PEM: during a rotation Bastion publishes more than one
+key, and pinning any one of them would reject tokens signed with the others. An unknown `kid`
+triggers at most one immediate re-fetch per 30s, so a rotation is transparent rather than a
+wait-out-the-TTL outage; a failed re-fetch leaves the working cache intact.
 
 ### Permissions — checked here, not only in Meridian
 
@@ -121,10 +133,10 @@ admin surface. So the guard re-checks the `permissions` claim.
 @RequirePermission('fileharbor-library.manage')   // class-level, overridable per handler
 ```
 
-- **Fail-closed**: a route behind `AdminJwtGuard` with no `@RequirePermission` is refused (403) to
+- **Fail-closed**: a route behind `BastionUserGuard` with no `@RequirePermission` is refused (403) to
   everyone but `SUPER_ADMIN`. A missing decorator is a bug to fix, not a hole to leave open.
 - `SUPER_ADMIN` bypasses the permission check (only the check — see scope below).
-- The four keys live in `admin-auth/console-permissions.ts`. Keep them in step with Bastion's
+- The four keys live in `bastion/console-permissions.ts`. Keep them in step with Bastion's
   `prisma/seed.ts` and Meridian's `server/utils/permission-policy.ts`:
   `fileharbor-media.manage`, `fileharbor-media.moderate`, `fileharbor-library.manage`,
   `fileharbor-config.manage`.
@@ -206,7 +218,38 @@ Required env vars:
 BASTION_URL=http://localhost:3001
 BASTION_APP_SLUG=fileharbor
 ADMIN_ACCEPTED_APP_SLUGS=fileharbor,meridian  # empty → BASTION_APP_SLUG only
+BASTION_CLIENT_API_KEY=<key-from-bastion>     # outgoing only (audit); empty → audit disabled
+BASTION_TENANT_SLUG=                          # only if the service client is tenant-bound
+BASTION_JWKS_TTL_MS=3600000
 ```
+
+### Audit — `@Audit()` on console writes
+
+Admin writes report to Bastion's audit log. Same mechanism as Herald and Beacon:
+
+```typescript
+@Audit('fh_image.deleted', {
+  metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+})
+```
+
+- `AuditInterceptor` is registered globally (`APP_INTERCEPTOR` in `app.module.ts`) and is a no-op on a
+  handler with no `@Audit()`, so a new admin route can't silently skip it by forgetting a decorator on
+  the controller.
+- Writes are **fire-and-forget**: `tap()`, no `await`, every failure swallowed and logged. An audit must
+  never fail the operation it tracks.
+- The actor is `request.adminUser`. `BastionAuditService.writeAsAdmin()` sets Bastion's `userId` when the
+  admin's tenant matches the service client's, and falls back to `actorId`/`actorRole`/`actorAppSlug` in
+  the metadata when it doesn't — Bastion rejects the whole write for a cross-tenant `userId`.
+- Event names use FileHarbor's `fh_` prefix (`fh_image.uploaded`, `fh_client.updated`, …): Bastion's regex
+  allows exactly two segments and the nouns here (`image`, `client`, `user`) would otherwise collide with
+  other services'.
+- Metadata carries ids and **field names**, never field values — a client update body can hold a Tinify
+  API key and a webhook URL.
+- Without `BASTION_CLIENT_API_KEY` the service starts normally, logs one warning and skips every write.
+
+Bookmarks are deliberately **not** audited: they are per-actor console UI state, not a change to anyone's
+data, and one event per toggle would spend the `/events` budget on noise.
 
 
 ## Self-Service Module (`/me`)
@@ -214,17 +257,17 @@ ADMIN_ACCEPTED_APP_SLUGS=fileharbor,meridian  # empty → BASTION_APP_SLUG only
 Separate from `admin/` — lets a Bastion-authenticated **end user** (not a console admin) manage their own
 avatar. `src/modules/me/` (`me.module.ts`, `me.controller.ts`, `me.service.ts`, `dto/`).
 
-### Guard: `BastionUserJwtGuard`
+### Guard: `BastionSelfServiceGuard`
 
-`admin-auth/guards/bastion-user-jwt.guard.ts` verifies the Bastion user JWT the same way `AdminJwtGuard`
-does — signature against JWKS, `appSlug` in `ADMIN_ACCEPTED_APP_SLUGS` — but requires **no console
-permission** and resolves no client scope. The shared verification (JWKS fetch/cache, RS256 verify, `appSlug` check) lives in
-`admin-auth/bastion-token-verifier.service.ts` (`BastionTokenVerifier`), injected by both guards so they
-can't drift apart. `BastionUserJwtGuard` attaches `request.bastionUser` (`sub`, `tenantId`, `tenantSlug`,
-`appSlug`, `email`, `username`) — read it with the `@BastionUser()` decorator
-(`admin-auth/decorators/bastion-user.decorator.ts`). Never reuse `BastionUserJwtGuard` for admin/console
-routes — it grants no permission check and no client scoping, only "this is *some* verified Bastion user
-of an accepted app".
+`bastion/guards/bastion-self-service.guard.ts` verifies the Bastion user JWT the same way
+`BastionUserGuard` does — signature against JWKS, no service-client tokens, `appSlug` in
+`ADMIN_ACCEPTED_APP_SLUGS` — but requires **no console permission** and resolves no client scope. The
+shared verification lives in `bastion/bastion-token-verifier.service.ts` (`BastionTokenVerifier`),
+injected by both guards so they can't drift apart. `BastionSelfServiceGuard` attaches `request.bastionUser`
+(`sub`, `tenantId`, `tenantSlug`, `appSlug`, `email`, `username`) — read it with the `@CurrentUser()`
+decorator (`bastion/decorators/current-user.decorator.ts`). Never reuse it for admin/console routes —
+it grants no permission check and no client scoping, only "this is *some* verified Bastion user of an
+accepted app".
 
 ### `Client.bastionTenantSlug` — the tenant → client mapping
 

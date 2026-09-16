@@ -1,22 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import {
   ExecutionContext,
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { AdminJwtGuard, AdminJwtPayload } from './admin-jwt.guard';
-import {
-  BastionTokenVerifier,
-  BastionJwtPayload,
-} from '../bastion-token-verifier.service';
+import { BastionUserGuard } from './bastion-user.guard';
+import { BastionAuditService } from '../bastion-audit.service';
+import { BastionJwksService } from '../bastion-jwks.service';
+import { BastionTokenVerifier } from '../bastion-token-verifier.service';
+import { AdminJwtPayload, UserJwtPayload } from '../bastion.types';
 import { REQUIRE_PERMISSION_KEY } from '../decorators/require-permission.decorator';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
-describe('AdminJwtGuard', () => {
-  const bastionPayload: BastionJwtPayload = {
+describe('BastionUserGuard', () => {
+  const bastionPayload: UserJwtPayload = {
     sub: 'bastion-user-1',
     tenantId: 'tenant-1',
     tenantSlug: 'heyatom',
@@ -34,18 +33,22 @@ describe('AdminJwtGuard', () => {
     client: { findMany: jest.fn() },
   };
 
-  const mockJwtService = { verify: jest.fn() };
+  // The signature check is exercised in bastion-jwks.service.spec.ts; here the
+  // JWKS service is stubbed so the tests are about slug, permission and scope.
+  const mockJwks = { verify: jest.fn() };
+  const mockAudit = { write: jest.fn(), writeAsAdmin: jest.fn() };
 
   /** Builds a guard whose ConfigService returns the supplied env values. */
   const buildGuard = async (
     config: Record<string, string>,
-  ): Promise<AdminJwtGuard> => {
+  ): Promise<BastionUserGuard> => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        AdminJwtGuard,
+        BastionUserGuard,
         BastionTokenVerifier,
         Reflector,
-        { provide: JwtService, useValue: mockJwtService },
+        { provide: BastionJwksService, useValue: mockJwks },
+        { provide: BastionAuditService, useValue: mockAudit },
         { provide: PrismaService, useValue: mockPrismaService },
         {
           provide: ConfigService,
@@ -54,7 +57,7 @@ describe('AdminJwtGuard', () => {
       ],
     }).compile();
 
-    return module.get<AdminJwtGuard>(AdminJwtGuard);
+    return module.get<BastionUserGuard>(BastionUserGuard);
   };
 
   const acceptingGuard = () =>
@@ -75,9 +78,11 @@ describe('AdminJwtGuard', () => {
   } => {
     const request: {
       headers: Record<string, string>;
+      url?: string;
       adminUser?: AdminJwtPayload;
     } = {
       headers: { authorization: 'Bearer token' },
+      url: '/admin/images',
     };
     const handler = () => undefined;
     if (requiredPermission)
@@ -98,12 +103,7 @@ describe('AdminJwtGuard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Bypass JWKS by stubbing the network-bound key fetch; slug logic is what matters here.
-    // getPublicKeyPem lives on BastionTokenVerifier, shared with BastionUserJwtGuard.
-    jest
-      .spyOn(BastionTokenVerifier.prototype as any, 'getPublicKeyPem')
-      .mockResolvedValue('pem');
-    mockJwtService.verify.mockReturnValue(bastionPayload);
+    mockJwks.verify.mockResolvedValue(bastionPayload);
     mockPrismaService.adminIdentity.findUnique.mockResolvedValue(null);
     mockPrismaService.client.findMany.mockResolvedValue([{ id: 'client-a' }]);
   });
@@ -125,6 +125,26 @@ describe('AdminJwtGuard', () => {
       await expect(
         guard.canActivate(contextWithToken().context),
       ).rejects.toThrow(new UnauthorizedException('Invalid app context'));
+    });
+
+    it('rejects a service-client token outright', async () => {
+      mockJwks.verify.mockResolvedValue({
+        sub: 'svc',
+        type: 'service_client',
+        serviceSlug: 'fileharbor',
+        tenantId: 'tenant-1',
+        tenantSlug: 'heyatom',
+        scopes: [],
+        iat: 0,
+        exp: 0,
+      });
+      const guard = await acceptingGuard();
+
+      await expect(
+        guard.canActivate(contextWithToken().context),
+      ).rejects.toThrow(
+        new UnauthorizedException('Service client token not allowed'),
+      );
     });
 
     it('falls back to BASTION_APP_SLUG alone when the list is unset', async () => {
@@ -157,7 +177,7 @@ describe('AdminJwtGuard', () => {
     });
 
     it('refuses a non-super caller on a route with no permission metadata', async () => {
-      mockJwtService.verify.mockReturnValue({
+      mockJwks.verify.mockResolvedValue({
         ...bastionPayload,
         role: 'ADMIN',
       });
@@ -169,7 +189,7 @@ describe('AdminJwtGuard', () => {
     });
 
     it('refuses a non-super caller lacking the declared permission', async () => {
-      mockJwtService.verify.mockReturnValue({
+      mockJwks.verify.mockResolvedValue({
         ...bastionPayload,
         role: 'ADMIN',
         permissions: ['fileharbor-media.manage'],
@@ -184,7 +204,7 @@ describe('AdminJwtGuard', () => {
     });
 
     it('accepts a non-super caller holding the declared permission', async () => {
-      mockJwtService.verify.mockReturnValue({
+      mockJwks.verify.mockResolvedValue({
         ...bastionPayload,
         role: 'ADMIN',
         permissions: ['fileharbor-media.manage'],
@@ -194,6 +214,32 @@ describe('AdminJwtGuard', () => {
       await expect(
         guard.canActivate(contextWithToken('fileharbor-media.manage').context),
       ).resolves.toBe(true);
+    });
+
+    it('audits a refusal once, then stays quiet for the cooldown', async () => {
+      mockJwks.verify.mockResolvedValue({
+        ...bastionPayload,
+        role: 'ADMIN',
+      });
+      const guard = await acceptingGuard();
+
+      await expect(
+        guard.canActivate(contextWithToken().context),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        guard.canActivate(contextWithToken().context),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockAudit.write).toHaveBeenCalledTimes(1);
+      expect(mockAudit.write).toHaveBeenCalledWith(
+        'admin.access_denied',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            reason: 'route_undeclared',
+            appSlug: 'meridian',
+          }),
+        }),
+      );
     });
   });
 

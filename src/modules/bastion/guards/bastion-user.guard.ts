@@ -7,34 +7,20 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { BastionAuditService } from '../bastion-audit.service';
 import { BastionTokenVerifier } from '../bastion-token-verifier.service';
+import { AdminJwtPayload } from '../bastion.types';
 import { CONSOLE_SUPER_ROLE, ConsolePermission } from '../console-permissions';
 import { REQUIRE_PERMISSION_KEY } from '../decorators/require-permission.decorator';
 
-export interface AdminJwtPayload {
-  // From Bastion JWT
-  sub: string;
-  tenantId: string;
-  tenantSlug: string;
-  email: string;
-  username?: string;
-  image?: string;
-  role: string;
-  appSlug: string;
-  permissions: string[];
-  // Resolved locally
-  /** AdminPrincipal id when this Bastion user is linked to one, else null. */
-  principalId: string | null;
-  /** Principal with fullAccess: sees every client bar other principals' personal ones. */
-  fullAccess: boolean;
-  /** Owner key for personal data (bookmarks): principal id, or `sub:<sub>`. */
-  actorId: string;
-  /** Clients this caller may see, resolved per request. */
-  allowedClientIds: string[];
-}
+/** One `admin.access_denied` per (appSlug, reason) pair every 5 minutes. */
+const ACCESS_DENIED_COOLDOWN_MS = 5 * 60 * 1000;
+/** Keys come from a signed JWT, so they are bounded by the tenant's real apps;
+ *  the cap is only a safety net against growth. */
+const ACCESS_DENIED_MAX_KEYS = 50;
 
 /**
- * Admin guard for the console surface.
+ * Guard for the console surface (`/admin/*`, `/admin/stats`, `/admin/tags`).
  *
  * Identity, roles and credentials live entirely in Bastion — this service keeps
  * no admin accounts. The guard:
@@ -50,13 +36,20 @@ export interface AdminJwtPayload {
  * client. A personal client is visible only to its owner, fullAccess included.
  *
  * Having no principal row is not an error: it just means "your tenant only".
+ *
+ * This is FileHarbor's equivalent of the `BastionUserGuard` in Herald, Beacon and
+ * Gatherly. It checks permissions rather than a role allowlist, and it resolves a
+ * per-client scope those services have no equivalent of.
  */
 @Injectable()
-export class AdminJwtGuard implements CanActivate {
+export class BastionUserGuard implements CanActivate {
+  private readonly accessDeniedReportedAt = new Map<string, number>();
+
   constructor(
     private readonly tokenVerifier: BastionTokenVerifier,
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
+    private readonly audit: BastionAuditService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -66,7 +59,13 @@ export class AdminJwtGuard implements CanActivate {
     );
 
     const isSuperAdmin = payload.role === CONSOLE_SUPER_ROLE;
-    this.assertPermission(context, payload.permissions ?? [], isSuperAdmin);
+    this.assertPermission(
+      context,
+      payload.permissions ?? [],
+      isSuperAdmin,
+      payload,
+      request,
+    );
 
     const identity = await this.prisma.adminIdentity.findUnique({
       where: { bastionUserId: payload.sub },
@@ -105,6 +104,8 @@ export class AdminJwtGuard implements CanActivate {
     context: ExecutionContext,
     granted: string[],
     isSuperAdmin: boolean,
+    actor: { sub: string; appSlug: string; role: string },
+    request: Request,
   ): void {
     if (isSuperAdmin) return;
 
@@ -113,8 +114,48 @@ export class AdminJwtGuard implements CanActivate {
     >(REQUIRE_PERMISSION_KEY, [context.getHandler(), context.getClass()]);
 
     if (!required || !granted.includes(required)) {
+      this.reportAccessDenied(
+        required ? 'permission_missing' : 'route_undeclared',
+        actor,
+        request,
+      );
       throw new ForbiddenException('Insufficient permissions');
     }
+  }
+
+  /**
+   * Writes `admin.access_denied` with a cooldown per (appSlug, reason) pair.
+   *
+   * Without the cooldown every rejected request produces a write to Bastion: one
+   * misconfigured caller in retry (a bad Meridian deploy, or anyone holding a
+   * valid JWT of another app) would saturate FileHarbor's budget on Bastion's
+   * `/events` endpoint on its own, and from then on legitimate events get
+   * dropped silently. The attempt is worth tracking, but once per episode — the
+   * repetition stays visible in the application logs.
+   */
+  private reportAccessDenied(
+    reason: 'permission_missing' | 'route_undeclared',
+    actor: { sub: string; appSlug: string; role: string },
+    request: Request,
+  ): void {
+    const key = `${actor.appSlug}:${reason}`;
+    const now = Date.now();
+    const last = this.accessDeniedReportedAt.get(key);
+    if (last !== undefined && now - last < ACCESS_DENIED_COOLDOWN_MS) return;
+
+    if (this.accessDeniedReportedAt.size >= ACCESS_DENIED_MAX_KEYS) {
+      this.accessDeniedReportedAt.clear();
+    }
+    this.accessDeniedReportedAt.set(key, now);
+
+    void this.audit.write('admin.access_denied', {
+      metadata: {
+        reason,
+        appSlug: actor.appSlug,
+        role: actor.role ?? 'none',
+        path: request.originalUrl ?? request.url ?? 'unknown',
+      },
+    });
   }
 
   /**

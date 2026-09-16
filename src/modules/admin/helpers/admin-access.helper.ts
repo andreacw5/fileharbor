@@ -1,8 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 
 /**
- * The clients this admin may see, resolved by `AdminJwtGuard` from the token's
+ * The clients this admin may see, resolved by `BastionUserGuard` from the token's
  * tenant plus any personal clients they own.
  *
  * There is deliberately no "unrestricted" answer any more: a role — SUPER_ADMIN

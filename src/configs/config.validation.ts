@@ -49,6 +49,13 @@ export const configValidationSchema = Joi.object({
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),
   BASTION_APP_SLUG: Joi.string().default('fileharbor'),
-  // Comma-separated app slugs accepted by AdminJwtGuard. Empty falls back to BASTION_APP_SLUG.
+  // Comma-separated app slugs accepted by BastionUserGuard. Empty falls back to BASTION_APP_SLUG.
   ADMIN_ACCEPTED_APP_SLUGS: Joi.string().allow('').default(''),
+  // Service-client key used to write audit events to Bastion. Optional: without
+  // it the service starts normally and audit writes are skipped with a warning,
+  // rather than every admin action failing on a missing credential.
+  BASTION_CLIENT_API_KEY: Joi.string().allow('').default(''),
+  // Only set when the service client is bound to a single Bastion tenant.
+  BASTION_TENANT_SLUG: Joi.string().allow('').default(''),
+  BASTION_JWKS_TTL_MS: Joi.number().default(3600000),
 });

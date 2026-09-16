@@ -18,11 +18,9 @@ import {
   ApiBearerAuth,
   ApiResponse,
 } from '@nestjs/swagger';
-import {
-  BastionUserJwtGuard,
-  BastionUserPayload,
-} from '@/modules/admin-auth/guards/bastion-user-jwt.guard';
-import { BastionUser } from '@/modules/admin-auth/decorators/bastion-user.decorator';
+import { BastionSelfServiceGuard } from '@/modules/bastion/guards/bastion-self-service.guard';
+import { BastionUserPayload } from '@/modules/bastion/bastion.types';
+import { CurrentUser } from '@/modules/bastion/decorators/current-user.decorator';
 import { MeService } from './me.service';
 import {
   AvatarResponseDto,
@@ -40,13 +38,13 @@ const ALLOWED_AVATAR_MIME_TYPES = [
 
 /**
  * Self-service endpoints for the currently signed-in Bastion user — no console
- * permission required (see BastionUserJwtGuard). externalUserId is always the
+ * permission required (see BastionSelfServiceGuard). externalUserId is always the
  * verified token `sub`, never taken from body/headers.
  */
 @ApiTags('Me')
 @ApiBearerAuth()
 @Controller('me')
-@UseGuards(BastionUserJwtGuard)
+@UseGuards(BastionSelfServiceGuard)
 export class MeController {
   private readonly logger = new Logger(MeController.name);
 
@@ -56,7 +54,7 @@ export class MeController {
   @ApiOperation({ summary: "Get the current user's avatar status" })
   @ApiResponse({ status: 200, type: MeAvatarStatusDto })
   async getAvatar(
-    @BastionUser() user: BastionUserPayload,
+    @CurrentUser() user: BastionUserPayload,
   ): Promise<MeAvatarStatusDto> {
     return this.meService.getAvatar(user.tenantSlug, user.sub);
   }
@@ -85,7 +83,7 @@ export class MeController {
     FileInterceptor('file', { limits: { fileSize: MAX_AVATAR_SIZE } }),
   )
   async uploadAvatar(
-    @BastionUser() user: BastionUserPayload,
+    @CurrentUser() user: BastionUserPayload,
     @UploadedFile() file: Express.Multer.File,
   ): Promise<AvatarResponseDto> {
     if (!file) {
@@ -118,7 +116,7 @@ export class MeController {
     description: 'No FileHarbor client mapped to this tenant',
   })
   async deleteAvatar(
-    @BastionUser() user: BastionUserPayload,
+    @CurrentUser() user: BastionUserPayload,
   ): Promise<DeleteAvatarResponseDto> {
     this.logger.log(
       `[deleteAvatar] tenant: ${user.tenantSlug}, sub: ${user.sub}`,

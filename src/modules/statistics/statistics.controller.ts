@@ -6,12 +6,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { StatisticsService } from './statistics.service';
-import {
-  AdminJwtGuard,
-  AdminJwtPayload,
-} from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import { AdminStatsResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
 @ApiTags('Admin - Statistics')
@@ -20,13 +18,13 @@ export class StatisticsController {
   constructor(private readonly statisticsService: StatisticsService) {}
 
   @Get()
-  @UseGuards(AdminJwtGuard)
+  @UseGuards(BastionUserGuard)
   @RequirePermission('fileharbor-media.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics (scoped to accessible clients)' })
   @ApiResponse({ status: 200, type: AdminStatsResponseDto })
   getGlobalStats(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminStatsResponseDto> {
     return this.statisticsService.getGlobalStats(adminUser);
   }

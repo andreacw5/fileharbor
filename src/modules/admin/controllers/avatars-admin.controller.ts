@@ -14,10 +14,14 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
+import {
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   AdminDeleteResponseDto,
   AdminAvatarResponseDto,
@@ -32,7 +36,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 
 @ApiTags('Admin - Avatars')
 @Controller('admin/avatars')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-media.manage')
 export class AvatarsAdminController {
@@ -48,7 +52,7 @@ export class AvatarsAdminController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   async listAvatars(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('userId') userId?: string,
     @Query('page') page?: string,
@@ -90,7 +94,7 @@ export class AvatarsAdminController {
   @ApiResponse({ status: 200, type: AdminAvatarResponseDto })
   async getAvatar(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminAvatarResponseDto> {
     const avatar = await this.avatarService.getAvatarById(id);
     if (!avatar) throw new NotFoundException('Avatar not found');
@@ -112,9 +116,12 @@ export class AvatarsAdminController {
   @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an avatar (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @Audit('fh_avatar.deleted', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ avatarId: req.params.id }),
+  })
   async deleteAvatar(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const avatar = await this.avatarService.getAvatarById(id);
     if (!avatar) throw new NotFoundException('Avatar not found');

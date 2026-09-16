@@ -34,10 +34,14 @@ import * as fsp from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import type { Request, Response } from 'express';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
+import {
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   assertClientAccess,
   buildClientWhere,
@@ -72,7 +76,7 @@ const videoMulterOptions = {
 
 @ApiTags('Admin - Videos')
 @Controller('admin/videos')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-library.manage')
 export class VideosAdminController {
@@ -102,13 +106,19 @@ export class VideosAdminController {
   })
   @ApiResponse({ status: 201, type: AdminVideoResponseDto })
   @UseInterceptors(FileInterceptor('file', videoMulterOptions))
+  @Audit('fh_video.uploaded', {
+    metadata: (r: { id?: string }, req: AuditRequest) => ({
+      videoId: r?.id,
+      clientId: (req.body as { clientId?: string })?.clientId,
+    }),
+  })
   async uploadVideo(
     @UploadedFile() file: Express.Multer.File,
     @Body('clientId') clientId: string,
     @Body('externalUserId') externalUserId: string | undefined,
     @Body('description') description: string | undefined,
     @Body('isPrivate') isPrivateRaw: string | undefined,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ) {
     if (!file) throw new BadRequestException('No file provided');
     if (!clientId) throw new BadRequestException('clientId is required');
@@ -156,7 +166,7 @@ export class VideosAdminController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   async listVideos(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('userId') userId?: string,
     @Query('albumId') albumId?: string,
@@ -236,7 +246,7 @@ export class VideosAdminController {
   @ApiResponse({ status: 200, type: AdminVideoResponseDto })
   async getVideo(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoResponseDto> {
     const video = await this.videoService.findAdminVideoById(
       id,
@@ -265,6 +275,12 @@ export class VideosAdminController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update video metadata (admin)' })
   @ApiResponse({ status: 200, type: AdminVideoResponseDto })
+  @Audit('fh_video.updated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({
+      videoId: req.params.id,
+      fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
+    }),
+  })
   async updateVideo(
     @Param('id') id: string,
     @Body()
@@ -274,7 +290,7 @@ export class VideosAdminController {
       description?: string;
       tags?: string[];
     },
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoResponseDto> {
     const existing = await this.videoService.getVideoById(id);
     assertClientAccess(adminUser, existing.clientId);
@@ -316,7 +332,7 @@ export class VideosAdminController {
   @ApiOperation({ summary: 'Get video thumbnail (admin, JWT auth)' })
   async getThumb(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Res() res: Response,
   ) {
     const video = await this.videoService.findAdminVideoById(id);
@@ -345,7 +361,7 @@ export class VideosAdminController {
   @ApiQuery({ name: 'download', required: false, type: Boolean })
   async streamVideo(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('download') download: string,
     @Req() req: Request,
     @Res() res: Response,
@@ -424,9 +440,12 @@ export class VideosAdminController {
   @Delete(':id')
   @ApiOperation({ summary: 'Force delete a video (admin)' })
   @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @Audit('fh_video.deleted', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ videoId: req.params.id }),
+  })
   async deleteVideo(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminDeleteResponseDto> {
     const video = await this.videoService.getVideoById(id);
     assertClientAccess(adminUser, video.clientId);

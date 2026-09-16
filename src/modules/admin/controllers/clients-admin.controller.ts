@@ -17,10 +17,14 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
+import {
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminCreateClientDto } from '../dto/admin-create-client.dto';
 import { AdminUpdateClientDto } from '../dto/admin-update-client.dto';
 import {
@@ -36,7 +40,7 @@ import {
 
 @ApiTags('Admin - Clients')
 @Controller('admin/clients')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-media.manage')
 export class ClientsAdminController {
@@ -48,7 +52,7 @@ export class ClientsAdminController {
   @ApiOperation({ summary: 'List accessible clients with their stats' })
   @ApiResponse({ status: 200, type: [AdminClientResponseDto] })
   async listClients(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminClientResponseDto[]> {
     const allowed = resolveAllowedClients(adminUser);
     const clients = await this.clientService.listClientsWithStats(allowed);
@@ -64,7 +68,7 @@ export class ClientsAdminController {
   @ApiResponse({ status: 200, type: AdminClientResponseDto })
   async getClient(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminClientResponseDto> {
     assertClientAccess(adminUser, id);
     const client = await this.clientService.getClientWithStats(id);
@@ -78,9 +82,16 @@ export class ClientsAdminController {
   @RequirePermission('fileharbor-config.manage')
   @ApiOperation({ summary: 'Create a new client (SUPER_ADMIN only)' })
   @ApiResponse({ status: 201, type: AdminClientCreatedResponseDto })
+  @Audit('fh_client.created', {
+    metadata: (r: AdminClientCreatedResponseDto) => ({
+      clientId: r.id,
+      name: r.name,
+      domain: r.domain,
+    }),
+  })
   async createClient(
     @Body() dto: AdminCreateClientDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminClientCreatedResponseDto> {
     if (adminUser.role !== 'SUPER_ADMIN') {
       throw new ForbiddenException('Only SUPER_ADMIN can create clients');
@@ -120,10 +131,18 @@ export class ClientsAdminController {
     summary: 'Update client name, status, webhook and Tinify settings',
   })
   @ApiResponse({ status: 200, type: AdminClientResponseDto })
+  @Audit('fh_client.updated', {
+    // Only the field names, never their values: the body can carry a Tinify API
+    // key and a webhook URL.
+    metadata: (_r: unknown, req: AuditRequest) => ({
+      clientId: req.params.id,
+      fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
+    }),
+  })
   async updateClient(
     @Param('id') id: string,
     @Body() dto: AdminUpdateClientDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminClientResponseDto> {
     assertClientAccess(adminUser, id);
 

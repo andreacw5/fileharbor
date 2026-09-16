@@ -63,4 +63,8 @@ export default () => ({
   bastionUrl: process.env.BASTION_URL || 'http://localhost:3001',
   bastionAppSlug: process.env.BASTION_APP_SLUG || 'fileharbor',
   adminAcceptedAppSlugs: process.env.ADMIN_ACCEPTED_APP_SLUGS || '',
+  // Service-client credentials, used only for outgoing calls (audit events).
+  bastionClientApiKey: process.env.BASTION_CLIENT_API_KEY || '',
+  bastionTenantSlug: process.env.BASTION_TENANT_SLUG || '',
+  bastionJwksTtlMs: parseInt(process.env.BASTION_JWKS_TTL_MS || '3600000', 10),
 });

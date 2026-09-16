@@ -8,7 +8,7 @@ import { AlbumModule } from '@/modules/album/album.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { UserModule } from '@/modules/user/user.module';
 import { BookmarksModule } from '@/modules/bookmarks/bookmarks.module';
-import { AdminAuthModule } from '@/modules/admin-auth/admin-auth.module';
+import { BastionModule } from '@/modules/bastion/bastion.module';
 import { VideoModule } from '@/modules/video/video.module';
 
 // Controllers
@@ -32,7 +32,7 @@ import { VideosAdminController } from './controllers/videos-admin.controller';
     UserModule,
     BookmarksModule,
     ConfigModule,
-    AdminAuthModule,
+    BastionModule,
     VideoModule,
   ],
   controllers: [

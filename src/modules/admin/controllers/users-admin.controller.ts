@@ -17,10 +17,14 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { AdminJwtGuard } from '@/modules/admin-auth/guards/admin-jwt.guard';
-import { AdminUser } from '@/modules/admin-auth/decorators/admin-user.decorator';
-import { RequirePermission } from '@/modules/admin-auth/decorators/require-permission.decorator';
-import { AdminJwtPayload } from '@/modules/admin-auth/guards/admin-jwt.guard';
+import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
+import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
+import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
+import {
+  Audit,
+  AuditRequest,
+} from '@/modules/bastion/decorators/audit.decorator';
+import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { UserService } from '@/modules/user/user.service';
 import { UserResponseDto } from '@/modules/user/dto/user-response.dto';
 import { UpdateUserAdminDto } from '@/modules/user/dto/update-user-admin.dto';
@@ -28,7 +32,7 @@ import { CreateUserAdminDto } from '@/modules/admin/dto/create-user-admin.dto';
 
 @ApiTags('Admin - Users')
 @Controller('admin/users')
-@UseGuards(AdminJwtGuard)
+@UseGuards(BastionUserGuard)
 @ApiBearerAuth()
 @RequirePermission('fileharbor-library.manage')
 export class UsersAdminController {
@@ -47,8 +51,15 @@ export class UsersAdminController {
     status: 409,
     description: 'User already exists for this client',
   })
+  @Audit('fh_user.created', {
+    metadata: (r: UserResponseDto) => ({
+      userId: r.id,
+      clientId: r.clientId,
+      externalUserId: r.externalUserId,
+    }),
+  })
   createUser(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Body() dto: CreateUserAdminDto,
   ): Promise<UserResponseDto> {
     return this.userService.createUserAdmin(adminUser, dto.clientId, dto);
@@ -81,7 +92,7 @@ export class UsersAdminController {
     description: 'Paginated user list (email is never returned)',
   })
   listUsers(
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('search') search?: string,
     @Query('isBookmarked') isBookmarked?: string,
@@ -111,7 +122,7 @@ export class UsersAdminController {
   @ApiResponse({ status: 403, description: 'Access denied' })
   getUser(
     @Param('id') id: string,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<UserResponseDto> {
     return this.userService.getUser(id, adminUser);
   }
@@ -129,10 +140,16 @@ export class UsersAdminController {
   })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
+  @Audit('fh_user.updated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({
+      userId: req.params.id,
+      fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
+    }),
+  })
   updateUser(
     @Param('id') id: string,
     @Body() dto: UpdateUserAdminDto,
-    @AdminUser() adminUser: AdminJwtPayload,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<UserResponseDto> {
     return this.userService.updateUserAdmin(id, dto, adminUser);
   }
