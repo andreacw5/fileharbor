@@ -66,5 +66,5 @@ export default () => ({
   // Service-client credentials, used only for outgoing calls (audit events).
   bastionClientApiKey: process.env.BASTION_CLIENT_API_KEY || '',
   bastionTenantSlug: process.env.BASTION_TENANT_SLUG || '',
-  bastionJwksTtlMs: parseInt(process.env.BASTION_JWKS_TTL_MS || '3600000', 10),
+  bastionJwksTtlMs: parseInt(process.env.BASTION_JWKS_TTL_MS || '300000', 10),
 });

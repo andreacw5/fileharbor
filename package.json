@@ -27,6 +27,7 @@
     "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {
+    "@heyatom/bastion-client": "file:/tmp/bc/heyatom-bastion-client-0.3.1.tgz",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.2.5",
     "@nestjs/config": "^4.0.4",

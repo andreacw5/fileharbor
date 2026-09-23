@@ -26,7 +26,7 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 | `webhook` | Fire-and-forget Discord webhook notifications |
 | `job` | Scheduled cleanup (cron jobs — currently commented out) |
 | `admin` | Admin console API: cross-client ops, scoped by tenant |
-| `bastion` | Everything Bastion: JWKS verification, guards, console permissions, audit writes (no controller) |
+| `bastion` | Everything Bastion, on `@heyatom/bastion-client`: the package verifies tokens and writes audit events; guards, console permissions and multi-app acceptance stay local (no controller) |
 | `prisma` | Database service wrapper |
 
 ## Auth & Request Context
@@ -89,11 +89,16 @@ Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Ad
 
 Three parts:
 
-- `src/modules/bastion/` — everything Bastion, laid out like the `bastion/` module in Herald, Beacon
-  and Gatherly: `BastionJwksService` (incoming token signature), `BastionTokenVerifier`, the two
-  guards, decorators, `console-permissions.ts`, plus the outgoing side (`BastionService`,
-  `BastionAuditService`, `AuditInterceptor`). No controller — sign-in, refresh, password and profile
-  all belong to Bastion, and the console (Meridian) talks to Bastion directly.
+- `src/modules/bastion/` — everything Bastion, built on `@heyatom/bastion-client` like Herald, Beacon,
+  Gatherly and Articuno. `bastion.module.ts` imports the package's `BastionModule.forRootAsync(...)`
+  (global) from the camelCase config keys. **From the package**: `BastionJwksService` (RS256 against
+  the JWKS, `kid`-indexed cache), `BastionAuditService` (service-client token + `POST /events`),
+  `AuditInterceptor`, `@Audit()`, and the Bastion payload types (`UserJwtPayload`,
+  `ServiceClientJwtPayload`, re-exported from `bastion.types.ts`). **Local**: `BastionTokenVerifier`
+  (multi-app acceptance), the two guards, `console-permissions.ts`, `@RequirePermission`,
+  `@CurrentAdminUser`, `@CurrentUser`, and `AdminJwtPayload`/`BastionUserPayload`. No controller —
+  sign-in, refresh, password and profile all belong to Bastion, and the console (Meridian) talks to
+  Bastion directly.
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
@@ -104,9 +109,10 @@ Three parts:
 **`BastionUserGuard`** (`bastion/guards/bastion-user.guard.ts`) does three things with
 `Authorization: Bearer <token>`:
 
-1. **Verifies** RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`) via
+1. **Verifies** RS256 against Bastion's JWKS (`BASTION_URL/.well-known/jwks.json`) via the package's
    `BastionJwksService`, rejects service-client tokens, and checks `payload.appSlug` against
-   `ADMIN_ACCEPTED_APP_SLUGS` (`BastionTokenVerifier`).
+   `ADMIN_ACCEPTED_APP_SLUGS` (`BastionTokenVerifier`, local). Not the package's `verifyUserToken`:
+   that pins `aud` to FileHarbor's own slug, while the console signs in as `meridian`.
 2. **Enforces the route's console permission**, fail-closed. A refusal writes one
    `admin.access_denied` audit event per (appSlug, reason) every 5 minutes — the cooldown keeps a
    retrying misconfigured caller from exhausting the `/events` budget.
@@ -115,13 +121,15 @@ Three parts:
 
 **`@CurrentAdminUser()`** (`bastion/decorators/current-admin-user.decorator.ts`) extracts the payload.
 
-This is the same name and role as `BastionUserGuard` in Herald, Beacon and Gatherly, with two
-FileHarbor-only additions: permissions instead of a role allowlist, and per-client scope.
+Steps 2 and 3 are FileHarbor's own, so this guard is local rather than a subclass of the package's
+`BastionUserGuard` (as Gatherly and Articuno do): it checks permissions instead of a role allowlist,
+and resolves a per-client scope. Only the audit writer (`BastionAuditService`) comes from the package.
 
-**JWKS caching** is per `kid`, not a single PEM: during a rotation Bastion publishes more than one
-key, and pinning any one of them would reject tokens signed with the others. An unknown `kid`
-triggers at most one immediate re-fetch per 30s, so a rotation is transparent rather than a
-wait-out-the-TTL outage; a failed re-fetch leaves the working cache intact.
+**JWKS caching** (the package's) is per `kid`, not a single PEM: during a rotation Bastion publishes
+more than one key, and pinning any one of them would reject tokens signed with the others. The TTL
+is 5 minutes (`BASTION_JWKS_TTL_MS=300000`, Bastion's `Cache-Control`); an unknown `kid` triggers at
+most one immediate re-fetch per 30s, so a rotation is transparent rather than a wait-out-the-TTL
+outage; a failed re-fetch leaves the working cache intact.
 
 ### Permissions — checked here, not only in Meridian
 
@@ -220,7 +228,7 @@ BASTION_APP_SLUG=fileharbor
 ADMIN_ACCEPTED_APP_SLUGS=fileharbor,meridian  # empty → BASTION_APP_SLUG only
 BASTION_CLIENT_API_KEY=<key-from-bastion>     # outgoing only (audit); empty → audit disabled
 BASTION_TENANT_SLUG=                          # only if the service client is tenant-bound
-BASTION_JWKS_TTL_MS=3600000
+BASTION_JWKS_TTL_MS=300000                    # matches Bastion's JWKS Cache-Control
 ```
 
 ### Audit — `@Audit()` on console writes
@@ -238,7 +246,9 @@ Admin writes report to Bastion's audit log. Same mechanism as Herald and Beacon:
   the controller.
 - Writes are **fire-and-forget**: `tap()`, no `await`, every failure swallowed and logged. An audit must
   never fail the operation it tracks.
-- The actor is `request.adminUser`. `BastionAuditService.writeAsAdmin()` sets Bastion's `userId` when the
+- `AuditInterceptor`, `@Audit()` and `BastionAuditService` all come from `@heyatom/bastion-client/nest`.
+- The actor is `request.adminUser` (typed by the package as `AuditActor`, which `AdminJwtPayload`
+  satisfies). `BastionAuditService.writeAsAdmin()` sets Bastion's `userId` when the
   admin's tenant matches the service client's, and falls back to `actorId`/`actorRole`/`actorAppSlug` in
   the metadata when it doesn't — Bastion rejects the whole write for a cross-tenant `userId`.
 - Event names use FileHarbor's `fh_` prefix (`fh_image.uploaded`, `fh_client.updated`, …): Bastion's regex
@@ -246,7 +256,8 @@ Admin writes report to Bastion's audit log. Same mechanism as Herald and Beacon:
   other services'.
 - Metadata carries ids and **field names**, never field values — a client update body can hold a Tinify
   API key and a webhook URL.
-- Without `BASTION_CLIENT_API_KEY` the service starts normally, logs one warning and skips every write.
+- Without `BASTION_CLIENT_API_KEY` the service starts normally and skips every write, with a warning per
+  skipped event.
 
 Bookmarks are deliberately **not** audited: they are per-actor console UI state, not a change to anyone's
 data, and one event per toggle would spend the `/events` budget on noise.
