@@ -6,7 +6,7 @@ ENV NODE_ENV=build
 WORKDIR /usr/src/app
 
 # Install pnpm and build dependencies
-RUN npm install -g pnpm@8.15.0
+RUN npm install -g pnpm@10.14.0
 
 # Install build deps needed for native modules and prisma generation
 RUN apt-get update && \
@@ -14,8 +14,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install app dependencies (including dev dependencies) for the build
-COPY package.json pnpm-lock.yaml .npmrc ./
-RUN pnpm install --no-frozen-lockfile
+COPY package.json pnpm-lock.yaml .npmrc pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # Bundle app source
 COPY . .

@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { BastionSelfServiceGuard } from './bastion-self-service.guard';
-import { BastionJwksService } from '../bastion-jwks.service';
+import {
+  BASTION_OPTIONS,
+  BastionJwksService,
+  BastionModuleOptions,
+} from '@heyatom/bastion-client/nest';
 import { BastionTokenVerifier } from '../bastion-token-verifier.service';
 import { UserJwtPayload } from '../bastion.types';
 
@@ -13,6 +16,8 @@ describe('BastionSelfServiceGuard', () => {
     tenantSlug: 'heyatom',
     email: 'user@example.com',
     username: 'user',
+    image: null,
+    preferredLocale: null,
     appSlug: 'meridian',
     role: 'MEMBER',
     permissions: [],
@@ -22,9 +27,9 @@ describe('BastionSelfServiceGuard', () => {
 
   const mockJwks = { verify: jest.fn() };
 
-  /** Builds a guard whose ConfigService returns the supplied env values. */
+  /** Builds a guard over the supplied `BastionModule` options. */
   const buildGuard = async (
-    config: Record<string, string>,
+    options: Pick<BastionModuleOptions, 'serviceSlug' | 'acceptedAppSlugs'>,
   ): Promise<BastionSelfServiceGuard> => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -32,8 +37,8 @@ describe('BastionSelfServiceGuard', () => {
         BastionTokenVerifier,
         { provide: BastionJwksService, useValue: mockJwks },
         {
-          provide: ConfigService,
-          useValue: { get: (key: string) => config[key] },
+          provide: BASTION_OPTIONS,
+          useValue: { baseUrl: 'http://bastion', ...options },
         },
       ],
     }).compile();
@@ -61,8 +66,8 @@ describe('BastionSelfServiceGuard', () => {
 
   it('accepts a verified token without requiring any console permission', async () => {
     const guard = await buildGuard({
-      bastionAppSlug: 'fileharbor',
-      adminAcceptedAppSlugs: 'fileharbor,meridian',
+      serviceSlug: 'fileharbor',
+      acceptedAppSlugs: ['fileharbor', 'meridian'],
     });
 
     const { context, request } = contextWithHeaders({
@@ -82,8 +87,8 @@ describe('BastionSelfServiceGuard', () => {
 
   it('rejects a token whose appSlug is not accepted', async () => {
     const guard = await buildGuard({
-      bastionAppSlug: 'fileharbor',
-      adminAcceptedAppSlugs: 'fileharbor',
+      serviceSlug: 'fileharbor',
+      acceptedAppSlugs: ['fileharbor'],
     });
 
     const { context } = contextWithHeaders({ authorization: 'Bearer token' });
@@ -94,8 +99,8 @@ describe('BastionSelfServiceGuard', () => {
 
   it('rejects a request with no Authorization header', async () => {
     const guard = await buildGuard({
-      bastionAppSlug: 'fileharbor',
-      adminAcceptedAppSlugs: 'fileharbor,meridian',
+      serviceSlug: 'fileharbor',
+      acceptedAppSlugs: ['fileharbor', 'meridian'],
     });
 
     const { context } = contextWithHeaders({});

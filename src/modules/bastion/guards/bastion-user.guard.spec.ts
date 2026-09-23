@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
 import {
   ExecutionContext,
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { BastionUserGuard } from './bastion-user.guard';
-import { BastionAuditService } from '../bastion-audit.service';
-import { BastionJwksService } from '../bastion-jwks.service';
+import {
+  BASTION_OPTIONS,
+  BastionAuditService,
+  BastionJwksService,
+  BastionModuleOptions,
+} from '@heyatom/bastion-client/nest';
 import { BastionTokenVerifier } from '../bastion-token-verifier.service';
 import { AdminJwtPayload, UserJwtPayload } from '../bastion.types';
 import { REQUIRE_PERMISSION_KEY } from '../decorators/require-permission.decorator';
@@ -21,6 +24,8 @@ describe('BastionUserGuard', () => {
     tenantSlug: 'heyatom',
     email: 'admin@example.com',
     username: 'admin',
+    image: null,
+    preferredLocale: null,
     appSlug: 'meridian',
     role: 'SUPER_ADMIN',
     permissions: [],
@@ -33,14 +38,14 @@ describe('BastionUserGuard', () => {
     client: { findMany: jest.fn() },
   };
 
-  // The signature check is exercised in bastion-jwks.service.spec.ts; here the
+  // The signature check is the package's (@heyatom/bastion-client); here the
   // JWKS service is stubbed so the tests are about slug, permission and scope.
   const mockJwks = { verify: jest.fn() };
   const mockAudit = { write: jest.fn(), writeAsAdmin: jest.fn() };
 
-  /** Builds a guard whose ConfigService returns the supplied env values. */
+  /** Builds a guard over the supplied `BastionModule` options. */
   const buildGuard = async (
-    config: Record<string, string>,
+    options: Pick<BastionModuleOptions, 'serviceSlug' | 'acceptedAppSlugs'>,
   ): Promise<BastionUserGuard> => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -51,8 +56,8 @@ describe('BastionUserGuard', () => {
         { provide: BastionAuditService, useValue: mockAudit },
         { provide: PrismaService, useValue: mockPrismaService },
         {
-          provide: ConfigService,
-          useValue: { get: (key: string) => config[key] },
+          provide: BASTION_OPTIONS,
+          useValue: { baseUrl: 'http://bastion', ...options },
         },
       ],
     }).compile();
@@ -62,8 +67,8 @@ describe('BastionUserGuard', () => {
 
   const acceptingGuard = () =>
     buildGuard({
-      bastionAppSlug: 'fileharbor',
-      adminAcceptedAppSlugs: 'fileharbor,meridian',
+      serviceSlug: 'fileharbor',
+      acceptedAppSlugs: ['fileharbor', 'meridian'],
     });
 
   /**
@@ -118,8 +123,8 @@ describe('BastionUserGuard', () => {
 
     it('rejects a token whose appSlug is not listed', async () => {
       const guard = await buildGuard({
-        bastionAppSlug: 'fileharbor',
-        adminAcceptedAppSlugs: 'fileharbor,gatherly',
+        serviceSlug: 'fileharbor',
+        acceptedAppSlugs: ['fileharbor', 'gatherly'],
       });
 
       await expect(
@@ -148,19 +153,13 @@ describe('BastionUserGuard', () => {
     });
 
     it('falls back to BASTION_APP_SLUG alone when the list is unset', async () => {
-      const guard = await buildGuard({
-        bastionAppSlug: 'fileharbor',
-        adminAcceptedAppSlugs: '',
-      });
+      const guard = await buildGuard({ serviceSlug: 'fileharbor' });
 
       await expect(
         guard.canActivate(contextWithToken().context),
       ).rejects.toThrow(new UnauthorizedException('Invalid app context'));
 
-      const ownSlugGuard = await buildGuard({
-        bastionAppSlug: 'meridian',
-        adminAcceptedAppSlugs: '',
-      });
+      const ownSlugGuard = await buildGuard({ serviceSlug: 'meridian' });
 
       await expect(
         ownSlugGuard.canActivate(contextWithToken().context),

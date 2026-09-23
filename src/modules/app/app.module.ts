@@ -11,7 +11,7 @@ import { AvatarModule } from '@/modules/avatar/avatar.module';
 import { AlbumModule } from '@/modules/album/album.module';
 import { AdminModule } from '@/modules/admin/admin.module';
 import { BastionModule } from '@/modules/bastion/bastion.module';
-import { AuditInterceptor } from '@/modules/bastion/interceptors/audit.interceptor';
+import { AuditInterceptor } from '@heyatom/bastion-client/nest';
 import { MeModule } from '@/modules/me/me.module';
 import { VideoModule } from '@/modules/video/video.module';
 import { StatisticsModule } from '@/modules/statistics/statistics.module';

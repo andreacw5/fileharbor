@@ -57,5 +57,5 @@ export const configValidationSchema = Joi.object({
   BASTION_CLIENT_API_KEY: Joi.string().allow('').default(''),
   // Only set when the service client is bound to a single Bastion tenant.
   BASTION_TENANT_SLUG: Joi.string().allow('').default(''),
-  BASTION_JWKS_TTL_MS: Joi.number().default(3600000),
+  BASTION_JWKS_TTL_MS: Joi.number().default(300000),
 });

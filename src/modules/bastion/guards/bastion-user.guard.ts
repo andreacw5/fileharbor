@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { BastionAuditService } from '../bastion-audit.service';
+import { BastionAuditService } from '@heyatom/bastion-client/nest';
 import { BastionTokenVerifier } from '../bastion-token-verifier.service';
 import { AdminJwtPayload } from '../bastion.types';
 import { CONSOLE_SUPER_ROLE, ConsolePermission } from '../console-permissions';

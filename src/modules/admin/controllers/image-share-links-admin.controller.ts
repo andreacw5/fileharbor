@@ -19,10 +19,7 @@ import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
-import {
-  Audit,
-  AuditRequest,
-} from '@/modules/bastion/decorators/audit.decorator';
+import { Audit, AuditRequest } from '@heyatom/bastion-client/nest';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ImageService } from '@/modules/image/image.service';
 import {

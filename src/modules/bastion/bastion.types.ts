@@ -1,53 +1,16 @@
 /**
- * Bastion JWT payloads.
+ * Bastion JWT payloads. The Bastion claims come from `@heyatom/bastion-client`;
+ * what stays here is what FileHarbor puts on the request after verifying one.
  *
- * Bastion signs two families of token with the same key:
- *
- * - **service client** — machine-to-machine, `type: 'service_client'`. FileHarbor
- *   only ever *issues* requests with one (audit writes); it accepts none, because
- *   its machine surface is the `X-API-Key` one.
- * - **user** — a real person signed into an app (the console lives in Meridian).
- *   No `type: 'service_client'`, carries `appSlug`, `role` and `permissions`.
+ * FileHarbor accepts no service-client token (its machine surface is the
+ * `X-API-Key` one) and only *issues* requests with one, for audit writes.
  */
-
-export interface ServiceClientJwtPayload {
-  sub: string;
-  type: 'service_client';
-  tenantId: string;
-  tenantSlug: string;
-  serviceSlug: string;
-  scopes: string[];
-  iat: number;
-  exp: number;
-}
-
-/**
- * User JWT issued by Bastion. `type` is deliberately `string` and not narrowed:
- * Bastion emits more than one kind of user token and enumerating them here would
- * mean editing this file every time a new one appears. What matters is that it is
- * *not* `service_client` — the guards check exactly that.
- */
-export interface UserJwtPayload {
-  sub: string;
-  type?: string;
-  appSlug: string;
-  role: string;
-  permissions?: string[];
-  tenantId: string;
-  tenantSlug: string;
-  email: string;
-  username?: string;
-  image?: string;
-  preferredLocale?: string;
-  iat: number;
-  exp: number;
-}
-
-export type BastionJwtPayload = ServiceClientJwtPayload | UserJwtPayload;
-
-export interface TokenResponse {
-  accessToken: string;
-}
+export type {
+  BastionJwtPayload,
+  ServiceClientJwtPayload,
+  TokenResponse,
+  UserJwtPayload,
+} from '@heyatom/bastion-client';
 
 /**
  * What `BastionUserGuard` attaches to `request.adminUser`: the Bastion claims
@@ -61,9 +24,9 @@ export interface AdminJwtPayload {
   sub: string;
   tenantId: string;
   tenantSlug: string;
-  email: string;
-  username?: string;
-  image?: string;
+  email: string | null;
+  username?: string | null;
+  image?: string | null;
   role: string;
   appSlug: string;
   permissions: string[];
@@ -89,6 +52,6 @@ export interface BastionUserPayload {
   tenantId: string;
   tenantSlug: string;
   appSlug: string;
-  email: string;
-  username?: string;
+  email: string | null;
+  username?: string | null;
 }
