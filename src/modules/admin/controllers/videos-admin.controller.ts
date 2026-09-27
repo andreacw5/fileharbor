@@ -273,6 +273,17 @@ export class VideosAdminController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update video metadata (admin)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        originalName: { type: 'string' },
+        isPrivate: { type: 'boolean' },
+        description: { type: 'string', nullable: true },
+        tags: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  })
   @ApiResponse({ status: 200, type: AdminVideoResponseDto })
   @Audit('fh_video.updated', {
     metadata: (_r: unknown, req: AuditRequest) => ({
