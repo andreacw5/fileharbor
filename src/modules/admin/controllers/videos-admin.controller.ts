@@ -54,6 +54,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 import {
   AdminDeleteResponseDto,
   AdminVideoResponseDto,
+  AdminVideoListResponseDto,
 } from '../dto/admin-response.dto';
 
 const videoMulterOptions = {
@@ -162,6 +163,7 @@ export class VideosAdminController {
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, type: AdminVideoListResponseDto })
   async listVideos(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,

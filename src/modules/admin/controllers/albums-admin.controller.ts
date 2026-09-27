@@ -34,6 +34,8 @@ import { AdminCreateAlbumDto } from '../dto/admin-create-album.dto';
 import {
   AdminDeleteResponseDto,
   AdminAlbumResponseDto,
+  AdminAlbumListResponseDto,
+  AdminRemoveImagesFromAlbumResponseDto,
 } from '../dto/admin-response.dto';
 import {
   AddAlbumItemsDto,
@@ -123,6 +125,7 @@ export class AlbumsAdminController {
   @ApiQuery({ name: 'public', required: false, type: Boolean })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, type: AdminAlbumListResponseDto })
   async listAlbums(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
@@ -278,6 +281,7 @@ export class AlbumsAdminController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove images and/or videos from album (admin)' })
   @ApiBody({ type: RemoveAlbumItemsDto })
+  @ApiResponse({ status: 200, type: AdminRemoveImagesFromAlbumResponseDto })
   @Audit('fh_album.items_removed', {
     metadata: (r: { removed?: number }, req: AuditRequest) => ({
       albumId: req.params.id,
