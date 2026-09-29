@@ -228,6 +228,7 @@ export class AvatarService {
   async getAvatarFile(
     externalId: string,
     thumbnail: boolean = false,
+    format: 'webp' | 'jpeg' | 'png' = 'webp',
   ): Promise<{ buffer: Buffer; mimeType: string }> {
     // Find creator by externalId across all clients
     // (public endpoint doesn't have clientId context)
@@ -262,7 +263,18 @@ export class AvatarService {
     );
 
     const buffer = await this.storage.readFile(filePath);
-    return { buffer, mimeType: avatar.mimeType };
+    if (format === 'webp') {
+      return { buffer, mimeType: avatar.mimeType };
+    }
+
+    // Stored as WebP: convert on demand (e.g. Satori OG images cannot decode WebP)
+    const converted = await this.storage.resizeImage(
+      buffer,
+      undefined,
+      undefined,
+      format,
+    );
+    return { buffer: converted, mimeType: `image/${format}` };
   }
 
   /**
