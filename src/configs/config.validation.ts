@@ -10,6 +10,8 @@ export const configValidationSchema = Joi.object({
   PORT: Joi.number().positive().default(3000),
   API_PREFIX: Joi.string().allow('').default('v2'),
   BASE_URL: Joi.string().uri().default('http://localhost:3000'),
+  // Prometheus scrape port — internal network only, never published or proxied.
+  METRICS_PORT: Joi.number().port().default(9091),
 
   // Database
   DATABASE_URL: Joi.string().required(),

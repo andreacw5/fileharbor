@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -20,7 +25,8 @@ import { TagModule } from '@/modules/tag/tag.module';
 import { HealthModule } from '@/modules/health/health.module';
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '@/configs/config.validation';
-import { PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { MetricsModule } from '@/modules/metrics/metrics.module';
+import { MetricsMiddleware } from '@/modules/metrics/metrics.middleware';
 import { RouteHelperModule } from '@/utils/route.utils';
 
 @Module({
@@ -33,12 +39,8 @@ import { RouteHelperModule } from '@/utils/route.utils';
       validationSchema: configValidationSchema,
     }),
 
-    // Prometheus configuration
-    PrometheusModule.register({
-      defaultLabels: {
-        app: 'fileharbor',
-      },
-    }),
+    // Prometheus metrics, served on METRICS_PORT — not on the API port
+    MetricsModule,
 
     // Rate limiting
     ThrottlerModule.forRootAsync({
@@ -85,4 +87,12 @@ import { RouteHelperModule } from '@/utils/route.utils';
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // MetricsMiddleware is a middleware and not an APP_INTERCEPTOR on purpose:
+    // interceptors run after the guards, so 401s and 429s would never be counted.
+    consumer
+      .apply(MetricsMiddleware)
+      .forRoutes({ path: '{*splat}', method: RequestMethod.ALL });
+  }
+}

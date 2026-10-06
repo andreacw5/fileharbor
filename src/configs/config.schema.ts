@@ -8,6 +8,7 @@ export default () => ({
   port: parseInt(process.env.PORT, 10) || 3000,
   apiPrefix: process.env.API_PREFIX ?? 'v2',
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+  metricsPort: parseInt(process.env.METRICS_PORT, 10) || 9091,
 
   // Database
   database: process.env.DATABASE_URL,

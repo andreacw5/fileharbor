@@ -45,7 +45,7 @@ pnpm run start:dev
 ```
 
 - **Swagger UI**: http://localhost:3000/docs  
-- **Prometheus metrics**: http://localhost:3000/metrics  
+- **Prometheus metrics**: http://localhost:9091/metrics (`METRICS_PORT`, internal network only)  
 - **Health check**: `GET /v2/status`
 
 ---
@@ -61,5 +61,5 @@ pnpm run start:dev
 | Package manager  | pnpm                                       |
 | Testing          | Jest                                       |
 | API docs         | Swagger / OpenAPI                          |
-| Metrics          | Prometheus (`@willsoto/nestjs-prometheus`) |
+| Metrics          | Prometheus (`prom-client`)                 |
 

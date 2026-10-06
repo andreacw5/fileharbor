@@ -389,7 +389,15 @@ pnpm run prisma:seed      # seed DB (optional)
 cp .env.example .env      # first-time setup
 ```
 
-Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localhost:3000/metrics`
+Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localhost:9091/metrics` (see Metrics)
+
+## Metrics
+
+`src/modules/metrics/` — `prom-client` directly, own `Registry` with default label `app="fileharbor"`.
+
+- `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404.
+- Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
+- `MetricsMiddleware` (all routes, `AppModule.configure`) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`. `/health/*` is not instrumented.
 
 ## graphify
 
