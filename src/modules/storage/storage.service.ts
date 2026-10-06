@@ -37,6 +37,21 @@ try {
  */
 export const MAX_OPTIMIZE_ATTEMPTS = 3;
 
+/**
+ * Image/avatar rows the optimize jobs still pick up. Shared with the
+ * `fileharbor_unoptimized_*` gauges so the alert and the job never disagree.
+ */
+export const OPTIMIZE_RETRYABLE_WHERE = {
+  isOptimized: false,
+  optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
+};
+
+/** Rows the optimize jobs gave up on: only a manual reset retries them. */
+export const OPTIMIZE_GIVEN_UP_WHERE = {
+  isOptimized: false,
+  optimizeAttempts: { gte: MAX_OPTIMIZE_ATTEMPTS },
+};
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);

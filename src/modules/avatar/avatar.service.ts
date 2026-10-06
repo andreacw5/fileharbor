@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
   MAX_OPTIMIZE_ATTEMPTS,
+  OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
@@ -182,6 +183,7 @@ export class AvatarService {
           size: webpBuffer.length,
           mimeType: 'image/webp',
           isOptimized: false,
+          optimizeAttempts: 0, // new file: failures of the replaced one don't count
         },
         create: {
           id: avatarId,
@@ -444,10 +446,7 @@ export class AvatarService {
    */
   async getUnoptimizedAvatars() {
     return this.prisma.avatar.findMany({
-      where: {
-        isOptimized: false,
-        optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
-      },
+      where: OPTIMIZE_RETRYABLE_WHERE,
       orderBy: { createdAt: 'asc' },
       take: 50,
     });

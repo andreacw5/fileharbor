@@ -9,6 +9,7 @@ import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
   MAX_OPTIMIZE_ATTEMPTS,
+  OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
@@ -561,10 +562,7 @@ export class ImageService {
    */
   async getUnoptimizedImages() {
     return this.prisma.image.findMany({
-      where: {
-        isOptimized: false,
-        optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
-      },
+      where: OPTIMIZE_RETRYABLE_WHERE,
       orderBy: { createdAt: 'asc' },
       take: 50, // Process in batches
     });
