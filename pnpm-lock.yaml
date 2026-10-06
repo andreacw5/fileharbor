@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@heyatom/bastion-client':
-        specifier: ^0.6.0
-        version: 0.6.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(jose@6.2.12)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+        specifier: ^0.7.0
+        version: 0.7.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(jose@6.2.12)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/axios':
         specifier: ^4.0.1
         version: 4.0.1(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.13.2)(rxjs@7.8.2)
@@ -468,8 +468,8 @@ packages:
   '@hapi/topo@6.0.2':
     resolution: {integrity: sha512-KR3rD5inZbGMrHmgPxsJ9dbi6zEK+C3ZwUwTa+eMwWLz7oijWUTWD2pMSNNYJAU6Qq+65NkxXjqHr/7LM2Xkqg==}
 
-  '@heyatom/bastion-client@0.6.0':
-    resolution: {integrity: sha512-sQ7VmgBgwvwu8/a9SZaC4VgJ1uvCRuFexLq3jS2TRnobs4BthEF8ijvbpBhTq9pbCuhiry+gvbgNb5efmgWoKA==}
+  '@heyatom/bastion-client@0.7.0':
+    resolution: {integrity: sha512-o8D1RY6zjXs0HpOit4qU3aptx4EYNyphd/XCJO/2mO37agkn8dxBgNmQZpDO7DKRXAd/3V+bvxBykieLkPbMEw==}
     engines: {node: '>=20.19'}
     peerDependencies:
       '@nestjs/common': ^11.0.0
@@ -4397,7 +4397,7 @@ snapshots:
     dependencies:
       '@hapi/hoek': 11.0.7
 
-  '@heyatom/bastion-client@0.6.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(jose@6.2.12)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+  '@heyatom/bastion-client@0.7.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(jose@6.2.12)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
     dependencies:
       jose: 6.2.12
     optionalDependencies:
