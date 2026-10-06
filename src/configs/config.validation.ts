@@ -34,9 +34,15 @@ export const configValidationSchema = Joi.object({
   THROTTLE_LIMIT: Joi.number().positive().default(10),
 
   // Logging
-  LOG_LEVEL: Joi.string()
-    .valid('error', 'warn', 'info', 'debug', 'verbose')
-    .default('info'),
+  // pino levels; unset → debug in development, info in production
+  LOG_LEVEL: Joi.string().valid(
+    'fatal',
+    'error',
+    'warn',
+    'info',
+    'debug',
+    'trace',
+  ),
 
   // Video Processing
   MAX_VIDEO_SIZE: Joi.number().positive().default(524288000),

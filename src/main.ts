@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
@@ -9,10 +10,8 @@ import { APP_VERSION } from '@/common/version';
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create(AppModule, {
-      bufferLogs: true,
-      logger: ['log', 'error', 'warn', 'debug', 'verbose'],
-    });
+    const app = await NestFactory.create(AppModule, { bufferLogs: true });
+    app.useLogger(app.get(PinoLogger));
 
     // Global validation pipe
     app.useGlobalPipes(
@@ -68,7 +67,6 @@ async function bootstrap() {
     const logger = new Logger('Bootstrap');
     logger.log(`🚀 FileHarbor started successfully!`);
     logger.log(`📚 API Documentation: http://localhost:${port}/docs`);
-    logger.log(`📝 Logging enabled for: log, error, warn, debug, verbose`);
     logger.log(
       `Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`,
     );
