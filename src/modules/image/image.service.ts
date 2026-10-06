@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  MAX_OPTIMIZE_ATTEMPTS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import {
   WebhookService,
@@ -552,15 +555,33 @@ export class ImageService {
   }
 
   /**
-   * Get images not optimized
+   * Get images not optimized, oldest first. Rows that already failed
+   * MAX_OPTIMIZE_ATTEMPTS times are skipped, so a batch of broken files can't
+   * starve the rest of the queue.
    */
   async getUnoptimizedImages() {
     return this.prisma.image.findMany({
       where: {
         isOptimized: false,
+        optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
       },
+      orderBy: { createdAt: 'asc' },
       take: 50, // Process in batches
     });
+  }
+
+  /**
+   * Count a failed optimization attempt. Returns true once the image has used
+   * up its attempts and will no longer be picked up.
+   */
+  async recordOptimizeFailure(imageId: string): Promise<boolean> {
+    // updateMany: the row may have been deleted mid-batch
+    const [image] = await this.prisma.image.updateManyAndReturn({
+      where: { id: imageId },
+      data: { optimizeAttempts: { increment: 1 } },
+      select: { optimizeAttempts: true },
+    });
+    return !!image && image.optimizeAttempts >= MAX_OPTIMIZE_ATTEMPTS;
   }
 
   /**

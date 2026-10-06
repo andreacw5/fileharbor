@@ -85,25 +85,26 @@ model Creator {
 
 // Image entity
 model Image {
-  id              String    @id @default(uuid())
-  clientId        String
-  creatorId       String
-  originalName    String
-  storagePath     String // e.g., storage/domain/images/{imageId}
-  format          String // webp, jpeg, png
-  width           Int
-  height          Int
-  size            Int // bytes
-  mimeType        String
-  isOptimized     Boolean   @default(false)
-  optimizedAt     DateTime?
-  tinifyOptimized Boolean   @default(false) // Track if image was compressed with Tinify to avoid reprocessing
-  isPrivate       Boolean   @default(false)
-  views           Int       @default(0)
-  downloads       Int       @default(0)
-  description     String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  clientId         String
+  creatorId        String
+  originalName     String
+  storagePath      String // e.g., storage/domain/images/{imageId}
+  format           String // webp, jpeg, png
+  width            Int
+  height           Int
+  size             Int // bytes
+  mimeType         String
+  isOptimized      Boolean   @default(false)
+  optimizedAt      DateTime?
+  optimizeAttempts Int       @default(0) // failed optimization runs; skipped at MAX_OPTIMIZE_ATTEMPTS
+  tinifyOptimized  Boolean   @default(false) // Track if image was compressed with Tinify to avoid reprocessing
+  isPrivate        Boolean   @default(false)
+  views            Int       @default(0)
+  downloads        Int       @default(0)
+  description      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Relations
   client          Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -116,6 +117,8 @@ model Image {
 
   @@index([clientId])
   @@index([creatorId])
+  // Serves the optimize queue (isOptimized = false, ordered by createdAt): the
+  // unoptimized set is small by design, so sorting it after the lookup is cheap.
   @@index([isOptimized])
   @@index([isPrivate])
   @@map("images")
@@ -216,19 +219,20 @@ model AdminVideoBookmark {
 
 // Avatar entity - one active per creator per client
 model Avatar {
-  id          String    @id @default(uuid())
-  clientId    String
-  creatorId   String
-  storagePath String // e.g., storage/domain/avatars/{creatorId}
-  format      String
-  width       Int
-  height      Int
-  size        Int
-  mimeType    String
-  isOptimized Boolean   @default(false)
-  optimizedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  clientId         String
+  creatorId        String
+  storagePath      String // e.g., storage/domain/avatars/{creatorId}
+  format           String
+  width            Int
+  height           Int
+  size             Int
+  mimeType         String
+  isOptimized      Boolean   @default(false)
+  optimizedAt      DateTime?
+  optimizeAttempts Int       @default(0) // failed optimization runs; skipped at MAX_OPTIMIZE_ATTEMPTS
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Relations
   client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)

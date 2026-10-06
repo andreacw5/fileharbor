@@ -5,7 +5,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  MAX_OPTIMIZE_ATTEMPTS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import {
   WebhookService,
@@ -435,13 +438,33 @@ export class AvatarService {
     return this.deleteAvatar(clientId, externalId);
   }
 
+  /**
+   * Get avatars not optimized, oldest first, skipping those that already
+   * failed MAX_OPTIMIZE_ATTEMPTS times.
+   */
   async getUnoptimizedAvatars() {
     return this.prisma.avatar.findMany({
       where: {
         isOptimized: false,
+        optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
       },
+      orderBy: { createdAt: 'asc' },
       take: 50,
     });
+  }
+
+  /**
+   * Count a failed optimization attempt. Returns true once the avatar has used
+   * up its attempts and will no longer be picked up.
+   */
+  async recordOptimizeFailure(avatarId: string): Promise<boolean> {
+    // updateMany: the row may have been deleted mid-batch
+    const [avatar] = await this.prisma.avatar.updateManyAndReturn({
+      where: { id: avatarId },
+      data: { optimizeAttempts: { increment: 1 } },
+      select: { optimizeAttempts: true },
+    });
+    return !!avatar && avatar.optimizeAttempts >= MAX_OPTIMIZE_ATTEMPTS;
   }
 
   /**

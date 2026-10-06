@@ -14,6 +14,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to `fileharbor:9091`. `@willsoto/nestjs-prometheus` replaced by `@prometheus-io/client`; the
   `app="fileharbor"` label is kept. Adds `http_request_duration_seconds`.
 
+### Fixed
+- **Optimize queue could freeze.** The hourly image/avatar optimize jobs took 50 unoptimized rows
+  in no particular order and never recorded failures, so 50 broken files (missing original,
+  corrupt, sharp error) filled every batch forever. Rows are now taken oldest first, and each
+  failure increments the new `optimizeAttempts` column; after 3 the row is skipped (reset to `0`
+  to retry). Migration `20261006120000_optimize_attempts`.
+- **Orphaned files of domainless clients were never cleaned.** The nightly storage cleanup mapped
+  storage dirs to clients by `domain` only, but a client without a domain stores under its id; it
+  now matches either. Known images are loaded once per client instead of one unindexable
+  `endsWith` query per directory.
+
 ---
 
 ## [3.0.0] – 2026-09-16

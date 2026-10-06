@@ -24,7 +24,6 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 | `album` | Collections, token-based private access |
 | `storage` | All disk I/O and Sharp image processing |
 | `webhook` | Fire-and-forget Discord webhook notifications |
-| `job` | Scheduled cleanup (cron jobs — currently commented out) |
 | `admin` | Admin console API: cross-client ops, scoped by tenant |
 | `bastion` | Everything Bastion, on `@heyatom/bastion-client`: the package verifies tokens and writes audit events; guards, console permissions and multi-app acceptance stay local (no controller) |
 | `prisma` | Database service wrapper |
@@ -79,7 +78,23 @@ Webhooks are opt-in per client (`client.webhookEnabled` + `client.webhookUrl`). 
 
 ## Scheduled Jobs
 
-Cron decorators are **currently commented out** in `image.cleanup.job.ts`, `avatar.cleanup.job.ts`, `album.cleanup.job.ts`, and `job.service.ts`. Re-enable with `@Cron(CronExpression.EVERY_HOUR)`. `JobModule` does not re-import `ImageModule`/`AvatarModule` — inject `StorageService` and `PrismaService` directly.
+No `job` module: each cron lives next to the module it serves (`ScheduleModule.forRoot()` in `app.module.ts`). Live:
+
+| Job | Schedule | Does |
+|-----|----------|------|
+| `ImageCleanupJob.optimizeImages` | hourly | re-optimizes 50 unoptimized images, oldest first |
+| `AvatarCleanupJob.optimizeAvatars` | hourly | same for avatars |
+| `ImageCleanupJob.cleanExpiredShareLinks` | 04:00 | deletes expired image share links |
+| `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
+| `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar dirs with no DB row |
+| `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
+
+`VideoCleanupJob.cleanOrphanedVideos` is the only one disabled (`@Cron` commented out).
+
+Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
+`MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
+`optimizeAttempts = 0` to retry. Storage dirs map back to clients by `domain` **or** `id`
+(`client.domain || clientId`); a dir matching neither is left alone.
 
 ## Admin Module
 

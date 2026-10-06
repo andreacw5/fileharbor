@@ -31,6 +31,12 @@ try {
   // ffprobe-static not available; metadata extraction will fail at runtime
 }
 
+/**
+ * Failed optimization runs after which an image/avatar is left unoptimized and
+ * no longer retried by the hourly jobs. Reset `optimizeAttempts` to 0 to retry.
+ */
+export const MAX_OPTIMIZE_ATTEMPTS = 3;
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
