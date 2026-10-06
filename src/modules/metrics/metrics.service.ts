@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Registry, Histogram, collectDefaultMetrics } from 'prom-client';
+import { Registry, Histogram, collectDefaultMetrics } from '@prometheus-io/client';
 
 /**
  * Prometheus metrics for fileharbor. Uses its own `Registry` rather than the
- * prom-client global one, so a `MetricsService` created per test (or per
+ * @prometheus-io/client global one, so a `MetricsService` created per test (or per
  * NestJS TestingModule) never collides with metrics registered by another
  * test in the same process.
  */

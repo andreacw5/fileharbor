@@ -61,5 +61,5 @@ pnpm run start:dev
 | Package manager  | pnpm                                       |
 | Testing          | Jest                                       |
 | API docs         | Swagger / OpenAPI                          |
-| Metrics          | Prometheus (`prom-client`)                 |
+| Metrics          | Prometheus (`@prometheus-io/client`)                 |
 

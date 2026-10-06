@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - **Prometheus metrics moved off the API port.** `GET /metrics` is no longer served on `PORT`;
   it listens on `METRICS_PORT` (default `9091`), internal network only — update the scrape target
-  to `fileharbor:9091`. `@willsoto/nestjs-prometheus` replaced by `prom-client`; the
+  to `fileharbor:9091`. `@willsoto/nestjs-prometheus` replaced by `@prometheus-io/client`; the
   `app="fileharbor"` label is kept. Adds `http_request_duration_seconds`.
 
 ---

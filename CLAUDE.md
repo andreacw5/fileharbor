@@ -393,7 +393,7 @@ Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localho
 
 ## Metrics
 
-`src/modules/metrics/` — `prom-client` directly, own `Registry` with default label `app="fileharbor"`.
+`src/modules/metrics/` — `@prometheus-io/client` directly, own `Registry` with default label `app="fileharbor"`.
 
 - `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404.
 - Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
