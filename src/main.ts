@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
@@ -42,36 +43,50 @@ async function bootstrap() {
     app.use(cookieParser());
 
     const apiPrefix = process.env.API_PREFIX ?? 'v2';
+    const isProduction =
+      app.get(ConfigService).get<string>('NODE_ENV') === 'production';
 
-    // Swagger documentation
-    const config = new DocumentBuilder()
-      .setTitle('FileHarbor 2.0')
-      .setDescription('Multi-tenant image management system API')
-      .setVersion(APP_VERSION)
-      .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
-      .addBearerAuth()
-      .setBasePath(apiPrefix ? `/${apiPrefix}` : '/')
-      .setLicense(
-        'MIT',
-        'https://github.com/heyatomdev/fileharbor/blob/main/README.md',
-      )
-      .setContact('Andrea Tombolato', 'https://heyatom.dev', 'hey@heyatom.dev')
-      .build();
+    // /docs enumerates the whole API surface, admin routes included:
+    // development only, as in Bastion, Herald, Beacon and Gatherly.
+    if (!isProduction) {
+      const config = new DocumentBuilder()
+        .setTitle('FileHarbor 2.0')
+        .setDescription('Multi-tenant image management system API')
+        .setVersion(APP_VERSION)
+        .addApiKey(
+          { type: 'apiKey', name: 'X-API-Key', in: 'header' },
+          'api-key',
+        )
+        .addBearerAuth()
+        .setBasePath(apiPrefix ? `/${apiPrefix}` : '/')
+        .setLicense(
+          'MIT',
+          'https://github.com/heyatomdev/fileharbor/blob/main/README.md',
+        )
+        .setContact(
+          'Andrea Tombolato',
+          'https://heyatom.dev',
+          'hey@heyatom.dev',
+        )
+        .build();
 
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('/docs', app, document);
+      const document = SwaggerModule.createDocument(app, config);
+      SwaggerModule.setup('/docs', app, document);
+    }
 
     const port = process.env.PORT || 8081;
     await app.listen(port);
 
     const logger = new Logger('Bootstrap');
-    logger.log(`🚀 FileHarbor started successfully!`);
-    logger.log(`📚 API Documentation: http://localhost:${port}/docs`);
+    logger.log(`FileHarbor started successfully!`);
+    if (!isProduction) {
+      logger.log(`API Documentation: http://localhost:${port}/docs`);
+    }
     logger.log(
       `Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`,
     );
   } catch (error) {
-    Logger.error('❌ Failed to start the application', 'Bootstrap');
+    Logger.error('Failed to start the application', 'Bootstrap');
 
     if (error.message.includes('Database connection failed')) {
       Logger.error('Database connection issue detected', 'Bootstrap');
@@ -96,11 +111,11 @@ async function bootstrap() {
 
 bootstrap()
   .then(() => {
-    Logger.log('🎉 App running now!', 'Bootstrap');
+    Logger.log('App running now!', 'Bootstrap');
   })
   .catch((error) => {
-    Logger.error('💥 Critical error during application startup:', 'Bootstrap');
+    Logger.error('Critical error during application startup:', 'Bootstrap');
     Logger.error(error.message, 'Bootstrap');
-    Logger.error('🔄 Please fix the issues above and try again', 'Bootstrap');
+    Logger.error('Please fix the issues above and try again', 'Bootstrap');
     process.exit(1);
   });
