@@ -60,7 +60,7 @@ describe('MetricsService optimize backlog gauges', () => {
       _min: { createdAt: new Date(Date.now() - 10_000) },
     });
     mockPrisma.avatar.aggregate.mockResolvedValue({
-      _min: { createdAt: null },
+      _min: { updatedAt: null },
     });
 
     const age = await gaugeValue(
@@ -75,6 +75,11 @@ describe('MetricsService optimize backlog gauges', () => {
     expect(mockPrisma.image.aggregate).toHaveBeenCalledWith({
       where: { isOptimized: false, optimizeAttempts: { lt: 3 } },
       _min: { createdAt: true },
+    });
+    // A re-uploaded avatar keeps its createdAt; updatedAt marks when it was queued.
+    expect(mockPrisma.avatar.aggregate).toHaveBeenCalledWith({
+      where: { isOptimized: false, optimizeAttempts: { lt: 3 } },
+      _min: { updatedAt: true },
     });
   });
 

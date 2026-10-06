@@ -21,8 +21,19 @@ type OptimizeQueueDelegate = {
   count(args: { where: object }): Promise<number>;
   aggregate(args: {
     where: object;
-    _min: { createdAt: true };
-  }): Promise<{ _min: { createdAt: Date | null } }>;
+    _min: Partial<Record<AgeField, true>>;
+  }): Promise<{ _min: Partial<Record<AgeField, Date | null>> }>;
+};
+
+// When a row entered the optimize queue. An avatar re-upload is an upsert that
+// keeps the original createdAt but resets isOptimized, so createdAt would read
+// as hours/days old the moment a long-standing creator replaces their avatar;
+// updatedAt is stamped by that upsert. Images are never replaced in place, and
+// their updatedAt moves on metadata edits, so they keep createdAt.
+type AgeField = 'createdAt' | 'updatedAt';
+const QUEUED_AT: Record<MediaKind, AgeField> = {
+  image: 'createdAt',
+  avatar: 'updatedAt',
 };
 
 /**
@@ -114,13 +125,13 @@ export class MetricsService {
       'fileharbor_unoptimized_oldest_age_seconds',
       'Age of the oldest retryable unoptimized image/avatar, 0 when there is none',
       async (kind) => {
+        const field = QUEUED_AT[kind];
         const { _min } = await this.delegate(kind).aggregate({
           where: OPTIMIZE_RETRYABLE_WHERE,
-          _min: { createdAt: true },
+          _min: { [field]: true },
         });
-        return _min.createdAt
-          ? (Date.now() - _min.createdAt.getTime()) / 1000
-          : 0;
+        const oldest = _min[field];
+        return oldest ? (Date.now() - oldest.getTime()) / 1000 : 0;
       },
     );
 
