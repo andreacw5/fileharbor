@@ -1,4 +1,4 @@
-import { IsOptional, IsBoolean, IsString } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsIn } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -32,6 +32,16 @@ export class GetAvatarDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   download?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Output format. Avatars are stored as WebP; jpeg/png are converted on the fly',
+    enum: ['webp', 'jpeg', 'png'],
+    default: 'webp',
+  })
+  @IsOptional()
+  @IsIn(['webp', 'jpeg', 'png'])
+  format?: 'webp' | 'jpeg' | 'png';
 
   @ApiPropertyOptional({
     description:

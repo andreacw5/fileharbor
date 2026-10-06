@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Prometheus metrics moved off the API port.** `GET /metrics` is no longer served on `PORT`;
+  it listens on `METRICS_PORT` (default `9091`), internal network only — update the scrape target
+  to `fileharbor:9091`. `@willsoto/nestjs-prometheus` replaced by `@prometheus-io/client`; the
+  `app="fileharbor"` label is kept. Adds `http_request_duration_seconds`.
+
+### Added
+- **Optimize backlog gauges.** `fileharbor_unoptimized_media{kind}`,
+  `fileharbor_unoptimized_oldest_age_seconds{kind}` and `fileharbor_optimize_given_up{kind}`
+  (`kind` = `image` | `avatar`), computed on scrape with the optimize jobs' own predicate, so rows
+  the job gave up on move to `given_up` (needs manual attention) instead of keeping the backlog
+  alert firing.
+
+### Fixed
+- **Optimize queue could freeze.** The hourly image/avatar optimize jobs took 50 unoptimized rows
+  in no particular order and never recorded failures, so 50 broken files (missing original,
+  corrupt, sharp error) filled every batch forever. Rows are now taken oldest first, and each
+  failure increments the new `optimizeAttempts` column; after 3 the row is skipped (reset to `0`
+  to retry). Migration `20261006120000_optimize_attempts`.
+- **Re-uploaded avatar inherited the old one's failed attempts.** Replacing an avatar now resets
+  `optimizeAttempts` to `0`, so a new file isn't skipped because the previous one was broken.
+- **Orphaned files of domainless clients were never cleaned.** The nightly storage cleanup mapped
+  storage dirs to clients by `domain` only, but a client without a domain stores under its id; it
+  now matches either. Known images are loaded once per client instead of one unindexable
+  `endsWith` query per directory.
+
+---
+
 ## [3.0.0] – 2026-09-16
 
 ### Removed

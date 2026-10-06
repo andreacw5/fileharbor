@@ -181,13 +181,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    const req = ctx.getRequest<any>();
-    this.logger.error(
-      `${exception.message} exception raised on: ${request.url}`,
-    );
-    this.logger.error(
-      `Method: ${req.method} | Status: ${status} | Body: ${JSON.stringify(req.body)} | Headers: ${JSON.stringify({ 'x-api-key': req.headers['x-api-key'] ? '[REDACTED]' : undefined, 'x-user-id': req.headers['x-user-id'], 'content-type': req.headers['content-type'] })}`,
-    );
+    // Method and sanitized URL come from pino-http's `req` on the same line:
+    // the raw url can carry a share token, the body a key.
+    this.logger.error(`${status} ${exception.message}`);
     if (exception.stack) {
       this.logger.debug(exception.stack);
     }

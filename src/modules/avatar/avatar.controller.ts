@@ -110,7 +110,7 @@ export class AvatarController {
   @ApiOperation({
     summary: 'Get creator avatar (public endpoint)',
     description:
-      'Retrieve creator avatar by external creator ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), download (force download), t (timestamp for cache busting)',
+      'Retrieve creator avatar by external creator ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), format (webp | jpeg | png, default webp; converted on the fly, combinable with thumb), download (force download), t (timestamp for cache busting)',
   })
   @ApiResponse({ status: 200, description: 'Avatar file or metadata' })
   @ApiResponse({ status: 404, description: 'Avatar not found' })
@@ -120,7 +120,7 @@ export class AvatarController {
     @Res() res: Response,
   ) {
     this.logger.debug(
-      `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Download: ${query.download}`,
+      `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Format: ${query.format ?? 'webp'}, Download: ${query.download}`,
     );
 
     try {
@@ -142,16 +142,20 @@ export class AvatarController {
       const { buffer, mimeType } = await this.avatarService.getAvatarFile(
         externalUserId,
         query.thumb,
+        query.format,
       );
 
+      // Variant suffix keeps thumb/format variants apart in caches and filenames
+      const format = query.format ?? 'webp';
+      const variant = `${query.thumb ? '-thumb' : ''}${format === 'webp' ? '' : `-${format}`}`;
       const headers: Record<string, string> = {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=86400',
-        ETag: `"avatar-${externalUserId}${query.thumb ? '-thumb' : ''}"`,
+        ETag: `"avatar-${externalUserId}${variant}"`,
       };
 
       if (query.download) {
-        const filename = `avatar-${externalUserId}${query.thumb ? '-thumb' : ''}.webp`;
+        const filename = `avatar-${externalUserId}${variant}.${format === 'jpeg' ? 'jpg' : format}`;
         headers['Content-Disposition'] = `attachment; filename="${filename}"`;
         this.logger.debug(`[getAvatar] Download - Creator: ${externalUserId}`);
       } else {

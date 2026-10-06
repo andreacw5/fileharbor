@@ -15,11 +15,18 @@ import {
 } from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
+import { MetricsService } from '@/modules/metrics/metrics.service';
 
 jest.mock('fs/promises');
 
 describe('VideoService', () => {
   let service: VideoService;
+  let metrics: MetricsService;
+
+  const failures = async (stage: string) =>
+    (await metrics.videoProcessingFailures.get()).values.find(
+      (v) => v.labels.stage === stage,
+    )?.value;
 
   const mockClientId = 'client-123';
   const mockCreatorExternalId = 'creator-123';
@@ -160,10 +167,12 @@ describe('VideoService', () => {
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: CreatorService, useValue: mockCreatorService },
         { provide: RouteHelperService, useValue: mockRouteHelperService },
+        MetricsService,
       ],
     }).compile();
 
     service = module.get<VideoService>(VideoService);
+    metrics = module.get<MetricsService>(MetricsService);
     jest.clearAllMocks();
   });
 
@@ -214,6 +223,8 @@ describe('VideoService', () => {
       expect(mockStorageService.copyFromTemp).toHaveBeenCalled();
       expect(mockStorageService.extractVideoThumbnail).toHaveBeenCalled();
       expect(mockPrismaService.video.create).toHaveBeenCalled();
+      expect(await failures('thumbnail')).toBe(0);
+      expect(await failures('metadata')).toBe(0);
     });
 
     it('should fire VIDEO_UPLOADED webhook (non-blocking)', async () => {
@@ -297,6 +308,8 @@ describe('VideoService', () => {
 
       expect(result).toBeDefined();
       expect(mockPrismaService.video.create).toHaveBeenCalled();
+      expect(await failures('thumbnail')).toBe(1);
+      expect(await failures('metadata')).toBe(0);
     });
 
     it('should store null duration/dimensions when metadata extraction fails', async () => {
@@ -304,8 +317,15 @@ describe('VideoService', () => {
         new Error('probe error'),
       );
 
-      await service.uploadVideo(mockClientId, mockExternalUserId, mockFile);
+      const result = await service.uploadVideo(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+      );
 
+      expect(result).toBeDefined();
+      expect(await failures('metadata')).toBe(1);
+      expect(await failures('thumbnail')).toBe(0);
       expect(mockPrismaService.video.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

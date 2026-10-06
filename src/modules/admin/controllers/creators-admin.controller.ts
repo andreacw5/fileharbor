@@ -26,6 +26,7 @@ import { CreatorService } from '@/modules/creator/creator.service';
 import { CreatorResponseDto } from '@/modules/creator/dto/creator-response.dto';
 import { UpdateCreatorAdminDto } from '@/modules/creator/dto/update-creator-admin.dto';
 import { CreateCreatorAdminDto } from '@/modules/admin/dto/create-creator-admin.dto';
+import { AdminCreatorListResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
 @ApiTags('Admin - Creators')
 @Controller('admin/creators')
@@ -89,6 +90,7 @@ export class CreatorsAdminController {
   @ApiResponse({
     status: 200,
     description: 'Paginated creator list (email is never returned)',
+    type: AdminCreatorListResponseDto,
   })
   listCreators(
     @CurrentAdminUser() adminUser: AdminJwtPayload,

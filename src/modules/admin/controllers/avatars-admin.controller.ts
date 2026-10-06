@@ -22,6 +22,7 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   AdminDeleteResponseDto,
   AdminAvatarResponseDto,
+  AdminAvatarListResponseDto,
 } from '../dto/admin-response.dto';
 import { AvatarService } from '@/modules/avatar/avatar.service';
 import { plainToInstance } from 'class-transformer';
@@ -48,6 +49,7 @@ export class AvatarsAdminController {
   @ApiQuery({ name: 'creatorId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, type: AdminAvatarListResponseDto })
   async listAvatars(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,

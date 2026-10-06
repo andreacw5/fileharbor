@@ -15,6 +15,7 @@ import {
 } from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
+import { MetricsService } from '@/modules/metrics/metrics.service';
 import { v4 as uuidv4 } from 'uuid';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -40,6 +41,7 @@ export class VideoService {
     private webhook: WebhookService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
+    private metrics: MetricsService,
   ) {
     this.thumbnailQuality = parseInt(
       this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80',
@@ -108,6 +110,7 @@ export class VideoService {
           this.thumbnailQuality,
         );
       } catch (err) {
+        this.metrics.videoProcessingFailures.inc({ stage: 'thumbnail' });
         this.logger.warn(
           `[uploadVideo] Thumbnail extraction failed for ${videoId}: ${err instanceof Error ? err.message : err}`,
         );
@@ -120,6 +123,7 @@ export class VideoService {
       try {
         videoMeta = await this.storage.getVideoMetadata(finalPath);
       } catch (err) {
+        this.metrics.videoProcessingFailures.inc({ stage: 'metadata' });
         this.logger.warn(
           `[uploadVideo] Metadata extraction failed for ${videoId}: ${err instanceof Error ? err.message : err}`,
         );

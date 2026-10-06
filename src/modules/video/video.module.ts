@@ -8,6 +8,7 @@ import { WebhookModule } from '@/modules/webhook/webhook.module';
 import { CreatorModule } from '@/modules/creator/creator.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { RouteHelperModule } from '@/utils/route.utils';
+import { MetricsModule } from '@/modules/metrics/metrics.module';
 import { VideoCleanupJob } from './jobs/video.cleanup.job';
 
 @Module({
@@ -19,6 +20,7 @@ import { VideoCleanupJob } from './jobs/video.cleanup.job';
     CreatorModule,
     ClientModule,
     RouteHelperModule,
+    MetricsModule,
   ],
   controllers: [VideoController],
   providers: [VideoService, VideoCleanupJob],

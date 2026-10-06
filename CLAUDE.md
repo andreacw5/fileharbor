@@ -24,7 +24,6 @@ Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth
 | `album` | Collections, token-based private access |
 | `storage` | All disk I/O and Sharp image processing |
 | `webhook` | Fire-and-forget Discord webhook notifications |
-| `job` | Scheduled cleanup (cron jobs — currently commented out) |
 | `admin` | Admin console API: cross-client ops, scoped by tenant |
 | `bastion` | Everything Bastion, on `@heyatom/bastion-client`: the package verifies tokens and writes audit events; guards, console permissions and multi-app acceptance stay local (no controller) |
 | `prisma` | Database service wrapper |
@@ -79,7 +78,23 @@ Webhooks are opt-in per client (`client.webhookEnabled` + `client.webhookUrl`). 
 
 ## Scheduled Jobs
 
-Cron decorators are **currently commented out** in `image.cleanup.job.ts`, `avatar.cleanup.job.ts`, `album.cleanup.job.ts`, and `job.service.ts`. Re-enable with `@Cron(CronExpression.EVERY_HOUR)`. `JobModule` does not re-import `ImageModule`/`AvatarModule` — inject `StorageService` and `PrismaService` directly.
+No `job` module: each cron lives next to the module it serves (`ScheduleModule.forRoot()` in `app.module.ts`). Live:
+
+| Job | Schedule | Does |
+|-----|----------|------|
+| `ImageCleanupJob.optimizeImages` | hourly | re-optimizes 50 unoptimized images, oldest first |
+| `AvatarCleanupJob.optimizeAvatars` | hourly | same for avatars |
+| `ImageCleanupJob.cleanExpiredShareLinks` | 04:00 | deletes expired image share links |
+| `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
+| `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar dirs with no DB row |
+| `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
+
+`VideoCleanupJob.cleanOrphanedVideos` is the only one disabled (`@Cron` commented out).
+
+Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
+`MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
+`optimizeAttempts = 0` to retry. Storage dirs map back to clients by `domain` **or** `id`
+(`client.domain || clientId`); a dir matching neither is left alone.
 
 ## Admin Module
 
@@ -389,7 +404,20 @@ pnpm run prisma:seed      # seed DB (optional)
 cp .env.example .env      # first-time setup
 ```
 
-Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localhost:3000/metrics`
+Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localhost:9091/metrics` (see Metrics)
+
+## Metrics
+
+`src/modules/metrics/` — `@prometheus-io/client` directly, own `Registry` with default label `app="fileharbor"`.
+
+- `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404.
+- Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
+- `MetricsMiddleware` (all routes, `AppModule.configure`) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`. `/health/*` is not instrumented.
+- `fileharbor_video_processing_failures_total{stage}` (counter, `stage` = `thumbnail` | `metadata`, both pre-initialized to 0): incremented by `VideoService.uploadVideo` when ffmpeg thumbnail or ffprobe metadata extraction fails. The upload still returns 2xx (no thumbnail, duration/width/height stored as null), so HTTP metrics stay green — a missing `ffmpeg-static`/`ffprobe-static` binary or the 30s timeout only shows here. Alert: `increase(fileharbor_video_processing_failures_total[1h]) > 0`.
+- Optimize backlog gauges (label `kind` = `image` | `avatar`, both always present), lazy `collect()` — no query until scraped; a DB error logs `warn` and keeps the previous value. Aggregates only (`count` / `_min`), same predicates as the optimize jobs (`OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE`, `storage.service.ts`):
+  - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
+  - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).
+  - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via manual `optimizeAttempts = 0`, deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
 
 ## graphify
 

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as path from 'path';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
@@ -30,9 +31,10 @@ export class StorageCleanupJob {
 
       for (const domain of domains) {
         try {
-          // Get client from database to get clientId
+          // A client's storage dir is `client.domain || client.id`
           const client = await this.prisma.client.findFirst({
-            where: { domain },
+            where: { OR: [{ domain }, { id: domain }] },
+            select: { id: true },
           });
 
           if (!client) {
@@ -46,15 +48,19 @@ export class StorageCleanupJob {
             `Checking ${imageIds.length} images for client ${domain}`,
           );
 
-          for (const imageId of imageIds) {
-            const image = await this.prisma.image.findFirst({
-              where: {
-                clientId: client.id,
-                storagePath: { endsWith: imageId },
-              },
-            });
+          // One query per client instead of an unindexable `endsWith` per dir.
+          // ponytail: holds every storagePath of the client in memory; page it if
+          // a single client reaches millions of images.
+          const images = await this.prisma.image.findMany({
+            where: { clientId: client.id },
+            select: { storagePath: true },
+          });
+          const knownImageIds = new Set(
+            images.map((image) => path.basename(image.storagePath)),
+          );
 
-            if (!image) {
+          for (const imageId of imageIds) {
+            if (!knownImageIds.has(imageId)) {
               // Image not in database, delete from disk
               const imagePath = this.storage.getImagePath(domain, imageId);
               await this.storage.deleteDirectory(imagePath);

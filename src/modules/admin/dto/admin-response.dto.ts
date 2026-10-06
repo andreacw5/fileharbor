@@ -1,6 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Expose, Type, Transform } from 'class-transformer';
 import { maskApiKey } from '../helpers/mask-api-key.helper';
+import { CreatorListResponseDto } from '@/modules/creator/dto/creator-response.dto';
 
 export class AdminClientResponseDto {
   @ApiProperty() @Expose() id: string;
@@ -463,5 +464,86 @@ export class AdminVideoBookmarkListResponseDto {
   @ApiProperty({ type: AdminPaginationResponseDto })
   @Expose()
   @Type(() => AdminPaginationResponseDto)
+  pagination: AdminPaginationResponseDto;
+}
+
+// ---------------------------------------------------------------------------
+// Admin list responses. Documentation only: the list routes return these
+// shapes as built by their services (Prisma `include` selects), no mapping.
+// ---------------------------------------------------------------------------
+
+/** `creator` as the list queries select it: `{ externalId, username }`. */
+export class AdminListCreatorDto {
+  @ApiProperty() externalId: string;
+  @ApiPropertyOptional({ nullable: true }) username?: string | null;
+}
+
+/** `client` as the list queries select it: `{ name, domain }` (no id). */
+export class AdminListClientDto {
+  @ApiProperty() name: string;
+  @ApiPropertyOptional({ nullable: true }) domain?: string | null;
+}
+
+export class AdminImageListItemDto extends OmitType(AdminImageResponseDto, [
+  'client',
+  'creator',
+  'albums',
+  'activeShareLinks',
+] as const) {
+  @ApiProperty() creatorId: string;
+  @ApiProperty({ type: AdminListCreatorDto }) creator: AdminListCreatorDto;
+  @ApiProperty({ type: AdminListClientDto }) client: AdminListClientDto;
+}
+
+export class AdminImageListResponseDto {
+  @ApiProperty({ type: [AdminImageListItemDto] }) data: AdminImageListItemDto[];
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  pagination: AdminPaginationResponseDto;
+}
+
+export class AdminAvatarListItemDto extends OmitType(AdminAvatarResponseDto, [
+  'client',
+  'creator',
+  'fullPath',
+] as const) {
+  @ApiProperty({
+    nullable: true,
+    description: 'Public avatar URL; null when the creator has no externalId',
+  })
+  fullPath: string | null;
+  @ApiProperty({ type: AdminListCreatorDto }) creator: AdminListCreatorDto;
+  @ApiProperty({ type: AdminListClientDto }) client: AdminListClientDto;
+}
+
+export class AdminAvatarListResponseDto {
+  @ApiProperty({ type: [AdminAvatarListItemDto] })
+  data: AdminAvatarListItemDto[];
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  pagination: AdminPaginationResponseDto;
+}
+
+export class AdminAlbumListItemDto extends OmitType(AdminAlbumResponseDto, [
+  'client',
+] as const) {
+  @ApiProperty() creatorId: string;
+  @ApiProperty({ type: AdminListClientDto }) client: AdminListClientDto;
+}
+
+export class AdminAlbumListResponseDto {
+  @ApiProperty({ type: [AdminAlbumListItemDto] }) data: AdminAlbumListItemDto[];
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  pagination: AdminPaginationResponseDto;
+}
+
+export class AdminVideoListResponseDto {
+  @ApiProperty({ type: [AdminVideoResponseDto] }) data: AdminVideoResponseDto[];
+  @ApiProperty({ type: AdminPaginationResponseDto })
+  pagination: AdminPaginationResponseDto;
+}
+
+export class AdminCreatorListResponseDto {
+  @ApiProperty({ type: [CreatorListResponseDto] })
+  data: CreatorListResponseDto[];
+  @ApiProperty({ type: AdminPaginationResponseDto })
   pagination: AdminPaginationResponseDto;
 }

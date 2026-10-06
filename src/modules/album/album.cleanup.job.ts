@@ -9,7 +9,7 @@ export class AlbumCleanupJob {
   constructor(private albumService: AlbumService) {}
 
   /**
-   * Clean up expired album tokens every 30 minutes
+   * Clean up expired album tokens every day at 4 AM
    */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async cleanExpiredAlbumTokens() {

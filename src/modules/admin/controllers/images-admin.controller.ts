@@ -40,6 +40,7 @@ import {
 import {
   AdminDeleteResponseDto,
   AdminImageResponseDto,
+  AdminImageListResponseDto,
 } from '../dto/admin-response.dto';
 import { ImageService } from '@/modules/image/image.service';
 import { plainToInstance } from 'class-transformer';
@@ -173,6 +174,7 @@ export class ImagesAdminController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, type: AdminImageListResponseDto })
   async listImages(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,

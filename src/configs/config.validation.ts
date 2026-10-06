@@ -10,6 +10,8 @@ export const configValidationSchema = Joi.object({
   PORT: Joi.number().positive().default(3000),
   API_PREFIX: Joi.string().allow('').default('v2'),
   BASE_URL: Joi.string().uri().default('http://localhost:3000'),
+  // Prometheus scrape port — internal network only, never published or proxied.
+  METRICS_PORT: Joi.number().port().default(9091),
 
   // Database
   DATABASE_URL: Joi.string().required(),
@@ -32,9 +34,15 @@ export const configValidationSchema = Joi.object({
   THROTTLE_LIMIT: Joi.number().positive().default(10),
 
   // Logging
-  LOG_LEVEL: Joi.string()
-    .valid('error', 'warn', 'info', 'debug', 'verbose')
-    .default('info'),
+  // pino levels; unset → debug in development, info in production
+  LOG_LEVEL: Joi.string().valid(
+    'fatal',
+    'error',
+    'warn',
+    'info',
+    'debug',
+    'trace',
+  ),
 
   // Video Processing
   MAX_VIDEO_SIZE: Joi.number().positive().default(524288000),

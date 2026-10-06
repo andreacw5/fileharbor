@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { ImageService } from '@/modules/image/image.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  MAX_OPTIMIZE_ATTEMPTS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
 @Injectable()
@@ -51,6 +54,14 @@ export class ImageCleanupJob {
             `Failed to optimize image ${image.id}:`,
             error.message,
           );
+          const gaveUp = await this.imageService.recordOptimizeFailure(
+            image.id,
+          );
+          if (gaveUp) {
+            this.logger.warn(
+              `Giving up on image ${image.id} after ${MAX_OPTIMIZE_ATTEMPTS} failed optimization attempts`,
+            );
+          }
         }
       }
 

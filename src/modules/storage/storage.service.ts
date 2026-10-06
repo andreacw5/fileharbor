@@ -6,10 +6,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
-import * as fluentFfmpeg from 'fluent-ffmpeg';
+import fluentFfmpeg from 'fluent-ffmpeg';
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -30,6 +30,27 @@ try {
 } catch {
   // ffprobe-static not available; metadata extraction will fail at runtime
 }
+
+/**
+ * Failed optimization runs after which an image/avatar is left unoptimized and
+ * no longer retried by the hourly jobs. Reset `optimizeAttempts` to 0 to retry.
+ */
+export const MAX_OPTIMIZE_ATTEMPTS = 3;
+
+/**
+ * Image/avatar rows the optimize jobs still pick up. Shared with the
+ * `fileharbor_unoptimized_*` gauges so the alert and the job never disagree.
+ */
+export const OPTIMIZE_RETRYABLE_WHERE = {
+  isOptimized: false,
+  optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
+};
+
+/** Rows the optimize jobs gave up on: only a manual reset retries them. */
+export const OPTIMIZE_GIVEN_UP_WHERE = {
+  isOptimized: false,
+  optimizeAttempts: { gte: MAX_OPTIMIZE_ATTEMPTS },
+};
 
 @Injectable()
 export class StorageService {

@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { AvatarService } from '@/modules/avatar/avatar.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  MAX_OPTIMIZE_ATTEMPTS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
 @Injectable()
@@ -51,6 +54,14 @@ export class AvatarCleanupJob {
             `Failed to optimize avatar ${avatar.id}:`,
             error.message,
           );
+          const gaveUp = await this.avatarService.recordOptimizeFailure(
+            avatar.id,
+          );
+          if (gaveUp) {
+            this.logger.warn(
+              `Giving up on avatar ${avatar.id} after ${MAX_OPTIMIZE_ATTEMPTS} failed optimization attempts`,
+            );
+          }
         }
       }
 

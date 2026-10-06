@@ -191,11 +191,14 @@ Expected response:
 
 ## Prometheus Metrics
 
-Metrics are exposed at:
+Metrics are served on a dedicated port, not the API port:
 
 ```
-http://localhost:3000/metrics
+http://localhost:9091/metrics
 ```
+
+`METRICS_PORT` (default `9091`) is for the internal Docker network only: do not
+publish it on the container and do not proxy it through nginx.
 
 Configure your Prometheus scrape config:
 
@@ -203,7 +206,7 @@ Configure your Prometheus scrape config:
 scrape_configs:
   - job_name: fileharbor
     static_configs:
-      - targets: ['fileharbor:3000']
+      - targets: ['fileharbor:9091']
     metrics_path: /metrics
 ```
 

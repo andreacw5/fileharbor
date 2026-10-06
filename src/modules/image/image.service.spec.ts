@@ -677,7 +677,8 @@ describe('ImageService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].isOptimized).toBe(false);
       expect(mockPrismaService.image.findMany).toHaveBeenCalledWith({
-        where: { isOptimized: false },
+        where: { isOptimized: false, optimizeAttempts: { lt: 3 } },
+        orderBy: { createdAt: 'asc' },
         take: 50,
       });
     });
