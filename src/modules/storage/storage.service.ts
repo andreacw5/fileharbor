@@ -6,10 +6,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
-import * as fluentFfmpeg from 'fluent-ffmpeg';
+import fluentFfmpeg from 'fluent-ffmpeg';
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

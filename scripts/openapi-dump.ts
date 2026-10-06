@@ -13,8 +13,8 @@ process.env.DATABASE_URL ??= 'postgresql://openapi:dump@localhost:5432/openapi';
 process.env.ADMIN_SECRET ??= 'openapi-dump';
 
 async function dump(out: string) {
-  const { AppModule } = await import('../src/modules/app/app.module');
-  const { APP_VERSION } = await import('../src/common/version');
+  const { AppModule } = require('../src/modules/app/app.module') as typeof import('../src/modules/app/app.module');
+  const { APP_VERSION } = require('../src/common/version') as typeof import('../src/common/version');
   const app = await NestFactory.create(AppModule, { logger: false });
   const config = new DocumentBuilder()
     .setTitle('FileHarbor 2.0')

@@ -4,7 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
-import * as cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 import { APP_VERSION } from '@/common/version';
 
 async function bootstrap() {
