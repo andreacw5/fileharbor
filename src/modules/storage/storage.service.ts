@@ -7,7 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 
 // Decoded-pixel cap for every sharp call: a small compressed file can declare
@@ -29,7 +28,7 @@ function openImage(input: Buffer) {
   return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS });
 }
 import * as os from 'os';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import fluentFfmpeg from 'fluent-ffmpeg';
 
 try {
@@ -375,11 +374,6 @@ export class StorageService {
     return `${this.getVideoPath(domain, videoId)}/${variant}.${ext}`;
   }
 
-  async getClientVideoIds(domain: string): Promise<string[]> {
-    const videosPath = path.join(this.getClientPath(domain), 'videos');
-    return this.listDirectories(videosPath);
-  }
-
   async copyFromTemp(srcPath: string, destPath: string): Promise<void> {
     try {
       this.validatePath(destPath);
@@ -408,7 +402,7 @@ export class StorageService {
     outputPath: string,
     quality: number = 80,
   ): Promise<void> {
-    const tmpJpeg = path.join(os.tmpdir(), `${uuidv4()}.jpg`);
+    const tmpJpeg = path.join(os.tmpdir(), `${randomUUID()}.jpg`);
     const FFMPEG_TIMEOUT_MS = 30_000;
 
     try {

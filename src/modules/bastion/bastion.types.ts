@@ -5,12 +5,7 @@
  * FileHarbor accepts no service-client token (its machine surface is the
  * `X-API-Key` one) and only *issues* requests with one, for audit writes.
  */
-export type {
-  BastionJwtPayload,
-  ServiceClientJwtPayload,
-  TokenResponse,
-  UserJwtPayload,
-} from '@heyatom/bastion-client';
+export type { UserJwtPayload } from '@heyatom/bastion-client';
 
 /**
  * What `BastionUserGuard` attaches to `request.adminUser`: the Bastion claims

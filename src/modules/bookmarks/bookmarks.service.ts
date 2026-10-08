@@ -31,13 +31,6 @@ export type AdminBookmarksListParams = {
   perPage?: number;
 };
 
-export type AdminCreatorBookmarksListParams = {
-  clientId?: string;
-  search?: string;
-  page?: number;
-  perPage?: number;
-};
-
 @Injectable()
 export class BookmarksService {
   constructor(
