@@ -27,6 +27,7 @@ export const configValidationSchema = Joi.object({
   // Image Processing
   THUMBNAIL_SIZE: Joi.number().positive().default(800),
   ORIGINAL_QUALITY: Joi.number().min(1).max(100).default(100),
+  OPTIMIZE_QUALITY: Joi.number().min(1).max(100).default(85),
   THUMBNAIL_QUALITY: Joi.number().min(1).max(100).default(70),
   COMPRESSION_QUALITY: Joi.number().min(1).max(100).default(90),
 

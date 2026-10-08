@@ -319,7 +319,13 @@ export class StorageService {
       this.validatePath(destPath);
       const dir = path.dirname(destPath);
       await this.ensureDirectory(dir);
-      await fs.copyFile(srcPath, destPath);
+      // A rename is free on the same filesystem (a copy of a 500 MB video is not);
+      // the upload temp dir is often a different mount, so fall back to copying.
+      // Either way the caller still unlinks srcPath.
+      await fs.rename(srcPath, destPath).catch((err) => {
+        if (err?.code !== 'EXDEV') throw err;
+        return fs.copyFile(srcPath, destPath);
+      });
     } catch (error) {
       this.logger.error(
         `[copyFromTemp] Failed: ${destPath}`,
@@ -551,7 +557,9 @@ export class StorageService {
       return await pipeline
         .webp({
           quality,
-          effort: 6, // Higher effort = better compression (0-6, default 4)
+          // Only the hourly optimize jobs call this: 4 (sharp's default) encodes
+          // several times faster than 6 for a few percent larger files
+          effort: 4,
           lossless: false,
           nearLossless: false,
           smartSubsample: true, // Better chroma subsampling

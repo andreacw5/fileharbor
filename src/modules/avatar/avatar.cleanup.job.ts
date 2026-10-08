@@ -21,9 +21,9 @@ export class AvatarCleanupJob {
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
-    // Original should be high quality to preserve image fidelity
+    // Re-encode quality for the optimize job; uploads keep ORIGINAL_QUALITY
     this.originalQuality = parseInt(
-      this.config.get('ORIGINAL_QUALITY') || '100',
+      this.config.get('OPTIMIZE_QUALITY') || '85',
     );
     // Thumbnail can use lower quality to reduce file size
     this.thumbnailQuality = parseInt(
