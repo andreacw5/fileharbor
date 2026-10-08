@@ -1,20 +1,9 @@
-/*
-  Warnings:
+-- album_images -> album_items. The INSERT below was missing from the first version
+-- of this migration, which dropped album_images with its rows. A database that ran
+-- that version lost them: restore with scripts/recover-album-items.sql.
 
-  - You are about to drop the `album_images` table. If the table is not empty, all the data it contains will be lost.
-
-*/
 -- CreateEnum
 CREATE TYPE "AlbumResourceType" AS ENUM ('IMAGE', 'VIDEO');
-
--- DropForeignKey
-ALTER TABLE "album_images" DROP CONSTRAINT "album_images_albumId_fkey";
-
--- DropForeignKey
-ALTER TABLE "album_images" DROP CONSTRAINT "album_images_imageId_fkey";
-
--- DropTable
-DROP TABLE "album_images";
 
 -- CreateTable
 CREATE TABLE "album_items" (
@@ -28,6 +17,20 @@ CREATE TABLE "album_items" (
 
     CONSTRAINT "album_items_pkey" PRIMARY KEY ("id")
 );
+
+-- Copy existing album contents before dropping the old table
+INSERT INTO "album_items" ("id", "albumId", "imageId", "resourceType", "order", "addedAt")
+SELECT gen_random_uuid()::text, "albumId", "imageId", 'IMAGE', "order", "createdAt"
+FROM "album_images";
+
+-- DropForeignKey
+ALTER TABLE "album_images" DROP CONSTRAINT "album_images_albumId_fkey";
+
+-- DropForeignKey
+ALTER TABLE "album_images" DROP CONSTRAINT "album_images_imageId_fkey";
+
+-- DropTable
+DROP TABLE "album_images";
 
 -- CreateIndex
 CREATE INDEX "album_items_albumId_order_idx" ON "album_items"("albumId", "order");
