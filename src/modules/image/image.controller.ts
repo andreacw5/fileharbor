@@ -28,6 +28,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { ImageService } from './image.service';
 import {
   IMAGE_UPLOAD_LIMITS,
@@ -64,6 +65,7 @@ export class ImageController {
   constructor(
     private imageService: ImageService,
     private storageService: StorageService,
+    private config: ConfigService,
   ) {}
 
   @Post()
@@ -240,7 +242,11 @@ export class ImageController {
           imageId = image.id;
         } catch {
           // Fallback to normal access with token validation
-          image = await this.imageService.getImageById(imageId);
+          image = await this.imageService.getImageById(
+            imageId,
+            undefined,
+            !!query.info,
+          );
           await this.imageService.validateImageAccess(
             image,
             imageId,
@@ -250,7 +256,11 @@ export class ImageController {
           );
         }
       } else {
-        image = await this.imageService.getImageById(imageId);
+        image = await this.imageService.getImageById(
+          imageId,
+          undefined,
+          !!query.info,
+        );
         await this.imageService.validateImageAccess(
           image,
           imageId,
@@ -266,26 +276,10 @@ export class ImageController {
         return metadata;
       }
 
-      // Update counters (fire and forget for performance) - create promises without await
+      // Counters: views are buffered in memory, downloads are one UPDATE
       const counterPromise = query.download
         ? this.imageService.incrementDownloads(imageId, image.clientId)
         : this.imageService.incrementViews(imageId);
-
-      // Get image file
-      const filePromise = this.imageService.getImageFile(
-        imageId,
-        query.thumb ? undefined : query.width,
-        query.thumb ? undefined : query.height,
-        query.format || 'webp',
-        query.quality || 85,
-        query.thumb,
-      );
-
-      // Wait for both file and counter update
-      const [{ buffer, mimeType }] = await Promise.all([
-        filePromise,
-        counterPromise,
-      ]);
 
       // Set response headers
       // Private bytes and token-gated responses must never land in a shared
@@ -299,19 +293,62 @@ export class ImageController {
             query.format || 'webp',
             query.quality || 85,
           ].join('-');
+      // updatedAt moves when the file is rewritten (optimize job, Tinify), never on
+      // a view or download (those counters skip it), so revalidation stays cheap.
+      const etag = `"${imageId}-${variant}-${image.updatedAt.getTime()}"`;
       const headers: Record<string, string> = {
-        'Content-Type': mimeType,
         'Cache-Control': restricted
           ? 'private, no-store'
           : 'public, max-age=31536000, immutable',
-        ETag: `"${imageId}-${variant}"`,
+        ETag: etag,
       };
 
       if (query.download) {
         headers['Content-Disposition'] = contentDisposition(image.originalName);
       }
 
+      // Access was checked above, so a matching ETag can skip the file entirely
+      const ifNoneMatch = req?.headers['if-none-match'];
+      if (
+        ifNoneMatch &&
+        ifNoneMatch
+          .split(',')
+          .some(
+            (t) => t.trim().replace(/^W\//, '') === etag || t.trim() === '*',
+          )
+      ) {
+        await counterPromise;
+        res.status(304).set(headers);
+        return;
+      }
+
+      // Behind nginx, hand files already on disk to it instead of streaming
+      // them from Node (see IMAGE_X_ACCEL_REDIRECT)
+      const xAccel = this.config.get<boolean>('image.xAccelRedirect');
+      const [{ buffer, mimeType, filePath }] = await Promise.all([
+        this.imageService.getImageFile(image, {
+          width: query.thumb ? undefined : query.width,
+          height: query.thumb ? undefined : query.height,
+          format: query.format || 'webp',
+          quality: query.quality || 85,
+          thumb: query.thumb,
+          skipDiskRead: xAccel,
+        }),
+        counterPromise,
+      ]);
+      headers['Content-Type'] = mimeType;
       res.set(headers);
+
+      if (!buffer) {
+        res.set(
+          'X-Accel-Redirect',
+          `/internal-images/${this.storageService.toStorageRelative(filePath!)}`,
+        );
+        this.logger.log(
+          `[GetImage] ${requestType} | ${imageId} | ${mimeType} | x-accel | client:${clientId || 'public'}`,
+        );
+        return;
+      }
 
       this.logger.log(
         `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,

@@ -18,10 +18,12 @@ describe('ImageCleanupJob.optimizeImages', () => {
       }),
       optimizeImage: jest.fn().mockResolvedValue(Buffer.from('opt')),
       saveFile: jest.fn().mockResolvedValue(undefined),
+      clearImageVariants: jest.fn().mockResolvedValue(undefined),
       createThumbnail: jest.fn().mockResolvedValue(Buffer.from('thumb')),
     };
     const prisma = {
       client: { findUnique: jest.fn().mockResolvedValue(null) },
+      runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
     };
     const job = new ImageCleanupJob(
       imageService as any,

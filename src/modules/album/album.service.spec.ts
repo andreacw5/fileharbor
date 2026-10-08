@@ -36,32 +36,6 @@ describe('AlbumService', () => {
     isPublic: true,
   };
 
-  const mockImage = {
-    id: mockImageId,
-    clientId: mockClientId,
-    creatorId: mockCreatorExternalId,
-    originalName: 'test.jpg',
-    mimeType: 'image/jpeg',
-    format: 'jpeg',
-    width: 1920,
-    height: 1080,
-    size: 1024000,
-    createdAt: new Date('2024-01-01'),
-  };
-
-  const mockVideo = {
-    id: mockVideoId,
-    clientId: mockClientId,
-    creatorId: mockCreatorExternalId,
-    originalName: 'test.mp4',
-    mimeType: 'video/mp4',
-    duration: 120,
-    width: 1920,
-    height: 1080,
-    size: 5000000,
-    createdAt: new Date('2024-01-01'),
-  };
-
   const mockAlbumItem = {
     id: 'album-item-123',
     albumId: mockAlbumId,
@@ -108,6 +82,8 @@ describe('AlbumService', () => {
       findMany: jest.fn(),
       groupBy: jest.fn(),
       upsert: jest.fn(),
+      update: jest.fn(),
+      createManyAndReturn: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
       count: jest.fn(),
@@ -119,9 +95,11 @@ describe('AlbumService', () => {
     },
     image: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     video: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -469,18 +447,29 @@ describe('AlbumService', () => {
   // ---------------------------------------------------------------------------
 
   describe('addItemsToAlbum', () => {
-    const mockUpsertResult = {
+    const created = {
       id: 'album-item-123',
+      imageId: mockImageId,
+      videoId: null,
       resourceType: AlbumResourceType.IMAGE,
       order: 0,
     };
 
-    it('should add an image to album', async () => {
+    beforeEach(() => {
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb(mockPrismaService),
+      );
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
       mockPrismaService.albumItem.findFirst.mockResolvedValue(null);
-      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
-      mockPrismaService.albumItem.upsert.mockResolvedValue(mockUpsertResult);
+      mockPrismaService.albumItem.findMany.mockResolvedValue([]);
+      mockPrismaService.image.findMany.mockResolvedValue([{ id: mockImageId }]);
+      mockPrismaService.video.findMany.mockResolvedValue([{ id: mockVideoId }]);
+      mockPrismaService.albumItem.createManyAndReturn.mockResolvedValue([
+        created,
+      ]);
+    });
 
+    it('should add an image to album in one batch', async () => {
       const result = await service.addItemsToAlbum(
         mockAlbumId,
         mockClientId,
@@ -490,22 +479,30 @@ describe('AlbumService', () => {
 
       expect(result.albumId).toBe(mockAlbumId);
       expect(result.count).toBe(1);
-      expect(result.items).toHaveLength(1);
-      expect(mockPrismaService.albumItem.upsert).toHaveBeenCalledTimes(1);
+      expect(result.items).toEqual([
+        {
+          id: 'album-item-123',
+          resourceType: AlbumResourceType.IMAGE,
+          order: 0,
+        },
+      ]);
+      expect(mockPrismaService.image.findMany).toHaveBeenCalledTimes(1);
+      expect(
+        mockPrismaService.albumItem.createManyAndReturn,
+      ).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.albumItem.update).not.toHaveBeenCalled();
     });
 
     it('should add a video to album', async () => {
-      const mockVideoUpsertResult = {
-        id: 'album-item-456',
-        resourceType: AlbumResourceType.VIDEO,
-        order: 0,
-      };
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.findFirst.mockResolvedValue(null);
-      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.albumItem.upsert.mockResolvedValue(
-        mockVideoUpsertResult,
-      );
+      mockPrismaService.albumItem.createManyAndReturn.mockResolvedValue([
+        {
+          ...created,
+          id: 'album-item-456',
+          imageId: null,
+          videoId: mockVideoId,
+          resourceType: AlbumResourceType.VIDEO,
+        },
+      ]);
 
       const result = await service.addItemsToAlbum(
         mockAlbumId,
@@ -518,9 +515,34 @@ describe('AlbumService', () => {
       expect(result.items[0].resourceType).toBe(AlbumResourceType.VIDEO);
     });
 
-    it('should throw ForbiddenException when creator is not owner', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
+    it('should only move the order of items already in the album', async () => {
+      mockPrismaService.albumItem.findFirst.mockResolvedValue({ order: 4 });
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        { id: 'album-item-123', imageId: mockImageId, videoId: null },
+      ]);
+      mockPrismaService.albumItem.update.mockResolvedValue({
+        ...created,
+        order: 5,
+      });
+      mockPrismaService.albumItem.createManyAndReturn.mockResolvedValue([]);
 
+      const result = await service.addItemsToAlbum(
+        mockAlbumId,
+        mockClientId,
+        [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
+        { creatorId: mockCreatorExternalId },
+      );
+
+      expect(mockPrismaService.albumItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'album-item-123' },
+          data: { order: 5 },
+        }),
+      );
+      expect(result.items[0].order).toBe(5);
+    });
+
+    it('should throw ForbiddenException when creator is not owner', async () => {
       await expect(
         service.addItemsToAlbum(
           mockAlbumId,
@@ -532,9 +554,7 @@ describe('AlbumService', () => {
     });
 
     it('should throw NotFoundException when image not found or unauthorized', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.findFirst.mockResolvedValue(null);
-      mockPrismaService.image.findFirst.mockResolvedValue(null);
+      mockPrismaService.image.findMany.mockResolvedValue([]);
 
       await expect(
         service.addItemsToAlbum(
@@ -544,14 +564,10 @@ describe('AlbumService', () => {
           { creatorId: mockCreatorExternalId },
         ),
       ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
     });
 
     it('should bypass ownership check with force option', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.findFirst.mockResolvedValue(null);
-      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
-      mockPrismaService.albumItem.upsert.mockResolvedValue(mockUpsertResult);
-
       const result = await service.addItemsToAlbum(
         mockAlbumId,
         mockClientId,
@@ -560,15 +576,25 @@ describe('AlbumService', () => {
       );
 
       expect(result.count).toBe(1);
+      expect(mockPrismaService.image.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [mockImageId] }, clientId: mockClientId },
+        select: { id: true },
+      });
     });
   });
 
   // ---------------------------------------------------------------------------
 
   describe('removeItemsFromAlbum', () => {
-    it('should remove an image from album', async () => {
+    beforeEach(() => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.delete.mockResolvedValue(mockAlbumItem);
+    });
+
+    it('should remove an image from album with one deleteMany', async () => {
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        { id: 'album-item-123', imageId: mockImageId },
+      ]);
+      mockPrismaService.albumItem.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.removeItemsFromAlbum(
         mockAlbumId,
@@ -579,20 +605,17 @@ describe('AlbumService', () => {
 
       expect(result.success).toBe(true);
       expect(result.removed).toBe(1);
-      expect(mockPrismaService.albumItem.delete).toHaveBeenCalledWith({
-        where: {
-          albumId_imageId: { albumId: mockAlbumId, imageId: mockImageId },
-        },
+      expect(mockPrismaService.albumItem.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['album-item-123'] } },
       });
+      expect(mockWebhookService.sendWebhook).toHaveBeenCalledTimes(1);
     });
 
-    it('should remove a video from album', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.delete.mockResolvedValue({
-        ...mockAlbumItem,
-        videoId: mockVideoId,
-        imageId: null,
-      });
+    it('should remove a video from album without an image webhook', async () => {
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        { id: 'album-item-456', imageId: null },
+      ]);
+      mockPrismaService.albumItem.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.removeItemsFromAlbum(
         mockAlbumId,
@@ -602,16 +625,10 @@ describe('AlbumService', () => {
       );
 
       expect(result.removed).toBe(1);
-      expect(mockPrismaService.albumItem.delete).toHaveBeenCalledWith({
-        where: {
-          albumId_videoId: { albumId: mockAlbumId, videoId: mockVideoId },
-        },
-      });
+      expect(mockWebhookService.sendWebhook).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-
       await expect(
         service.removeItemsFromAlbum(
           mockAlbumId,
@@ -623,10 +640,8 @@ describe('AlbumService', () => {
     });
 
     it('should silently skip items not found (no throw)', async () => {
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.delete.mockRejectedValue(
-        new Error('Record not found'),
-      );
+      mockPrismaService.albumItem.findMany.mockResolvedValue([]);
+      mockPrismaService.albumItem.deleteMany.mockResolvedValue({ count: 0 });
 
       const result = await service.removeItemsFromAlbum(
         mockAlbumId,
@@ -945,8 +960,14 @@ describe('AlbumService', () => {
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
       mockPrismaService.albumItem.findFirst.mockResolvedValue(null);
-      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
-      mockPrismaService.albumItem.upsert.mockResolvedValue(mockUpsertResult);
+      mockPrismaService.albumItem.findMany.mockResolvedValue([]);
+      mockPrismaService.image.findMany.mockResolvedValue([{ id: mockImageId }]);
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb(mockPrismaService),
+      );
+      mockPrismaService.albumItem.createManyAndReturn.mockResolvedValue([
+        { ...mockUpsertResult, imageId: mockImageId, videoId: null },
+      ]);
 
       const result = await service.addItemsToAlbumByExternalId(
         'ext-album-123',
@@ -966,7 +987,10 @@ describe('AlbumService', () => {
     it('should remove items from album by external ID', async () => {
       mockPrismaService.album.findUnique.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.delete.mockResolvedValue(mockAlbumItem);
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        { id: 'album-item-123', imageId: mockImageId },
+      ]);
+      mockPrismaService.albumItem.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.removeItemsFromAlbumByExternalId(
         'ext-album-123',

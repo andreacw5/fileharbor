@@ -78,7 +78,7 @@ model Creator {
   adminBookmarks AdminCreatorBookmark[]
 
   @@unique([clientId, externalId])
-  @@index([clientId])
+  @@index([clientId, createdAt])
   @@index([externalId])
   @@map("creators")
 }
@@ -115,12 +115,10 @@ model Image {
   albumCoverImage Album[]              @relation("AlbumCoverImage")
   adminBookmarks  AdminImageBookmark[]
 
-  @@index([clientId])
+  @@index([clientId, createdAt])
   @@index([creatorId])
-  // Serves the optimize queue (isOptimized = false, ordered by createdAt): the
-  // unoptimized set is small by design, so sorting it after the lookup is cheap.
-  @@index([isOptimized])
-  @@index([isPrivate])
+  // Serves the optimize queue (isOptimized = false, ordered by createdAt).
+  @@index([isOptimized, createdAt])
   @@map("images")
 }
 
@@ -137,7 +135,6 @@ model Tag {
   videoTags VideoTag[]
 
   @@unique([clientId, name])
-  @@index([clientId])
   @@index([name])
   @@map("tags")
 }
@@ -181,10 +178,9 @@ model Video {
   adminBookmarks AdminVideoBookmark[]
   albumItems     AlbumItem[]
 
-  @@index([clientId])
+  @@index([clientId, createdAt])
   @@index([creatorId])
   @@index([clientId, creatorId])
-  @@index([isPrivate])
   @@map("videos")
 }
 
@@ -212,7 +208,6 @@ model AdminVideoBookmark {
   video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([actorId, videoId])
-  @@index([actorId])
   @@index([videoId])
   @@map("admin_video_bookmarks")
 }
@@ -239,8 +234,10 @@ model Avatar {
   creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   @@unique([clientId, creatorId]) // Only one active avatar per creator
-  @@index([clientId])
+  @@index([clientId, createdAt])
   @@index([creatorId])
+  // Serves the optimize queue (isOptimized = false, ordered by updatedAt).
+  @@index([isOptimized, updatedAt])
   @@map("avatars")
 }
 
@@ -265,9 +262,8 @@ model Album {
   albumTokens AlbumToken[]
 
   @@unique([clientId, externalAlbumId])
-  @@index([clientId])
+  @@index([clientId, createdAt])
   @@index([creatorId])
-  @@index([isPublic])
   @@index([coverImageId])
   @@map("albums")
 }
@@ -310,7 +306,6 @@ model AlbumToken {
   album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
 
   @@index([albumId])
-  @@index([token])
   @@map("album_tokens")
 }
 
@@ -350,7 +345,6 @@ model AdminIdentity {
   principal AdminPrincipal @relation(fields: [principalId], references: [id], onDelete: Cascade)
 
   @@unique([principalId, tenantSlug])
-  @@index([principalId])
   @@map("admin_identities")
 }
 
@@ -366,7 +360,6 @@ model AdminImageBookmark {
   image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
 
   @@unique([actorId, imageId])
-  @@index([actorId])
   @@index([imageId])
   @@map("admin_image_bookmarks")
 }
@@ -381,7 +374,6 @@ model AdminCreatorBookmark {
   creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   @@unique([actorId, creatorId])
-  @@index([actorId])
   @@index([creatorId])
   @@map("admin_creator_bookmarks")
 }
@@ -398,6 +390,5 @@ model ImageShareLink {
   image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
 
   @@index([imageId])
-  @@index([readToken])
   @@map("image_share_links")
 }

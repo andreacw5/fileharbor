@@ -36,7 +36,8 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
         images.filter((i) => i.clientId === where.clientId),
       ),
     },
-    avatar: { findFirst: jest.fn().mockResolvedValue(null) },
+    avatar: { findMany: jest.fn().mockResolvedValue([]) },
+    runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
   };
 
   const exists = (p: string) =>
@@ -49,6 +50,8 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     const imageDir = storage.getImagePath(dir, imageId);
     await fs.mkdir(imageDir, { recursive: true });
     await fs.writeFile(path.join(imageDir, 'original.webp'), 'x');
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await fs.utimes(imageDir, twoHoursAgo, twoHoursAgo);
     return imageDir;
   };
 
@@ -81,6 +84,16 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
 
     expect(await exists(unknown)).toBe(true);
+  });
+
+  it('leaves an orphan younger than an hour alone (upload still in flight)', async () => {
+    const fresh = await makeImageDir('client-nodomain', 'img-fresh');
+    const now = new Date();
+    await fs.utimes(fresh, now, now);
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(fresh)).toBe(true);
   });
 
   it('leaves a storage dir that maps to more than one client untouched', async () => {

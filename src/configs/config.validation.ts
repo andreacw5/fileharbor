@@ -15,6 +15,7 @@ export const configValidationSchema = Joi.object({
 
   // Database
   DATABASE_URL: Joi.string().required(),
+  DATABASE_POOL_MAX: Joi.number().integer().min(1).default(20),
 
   // Storage
   STORAGE_PATH: Joi.string().default('./storage'),
@@ -23,6 +24,7 @@ export const configValidationSchema = Joi.object({
   // Image Processing
   THUMBNAIL_SIZE: Joi.number().positive().default(800),
   ORIGINAL_QUALITY: Joi.number().min(1).max(100).default(100),
+  OPTIMIZE_QUALITY: Joi.number().min(1).max(100).default(85),
   THUMBNAIL_QUALITY: Joi.number().min(1).max(100).default(70),
 
   // Rate Limiting
@@ -46,6 +48,7 @@ export const configValidationSchema = Joi.object({
   // Only enable behind an nginx that serves the `/internal-videos/` internal
   // location; otherwise video responses come back empty.
   VIDEO_X_ACCEL_REDIRECT: Joi.boolean().default(false),
+  IMAGE_X_ACCEL_REDIRECT: Joi.boolean().default(false),
 
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),

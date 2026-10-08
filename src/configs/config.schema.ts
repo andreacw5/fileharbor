@@ -6,6 +6,13 @@ export default () => ({
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
   metricsPort: parseInt(process.env.METRICS_PORT, 10) || 9091,
 
+  image: {
+    // Same contract as video.xAccelRedirect: opt-in, and only behind an nginx
+    // declaring an internal `/internal-images/` location aliased to STORAGE_PATH.
+    // Without one the response is headers with an empty body.
+    xAccelRedirect: process.env.IMAGE_X_ACCEL_REDIRECT === 'true',
+  },
+
   // Video Processing
   video: {
     // Hand video delivery to nginx via X-Accel-Redirect instead of streaming it

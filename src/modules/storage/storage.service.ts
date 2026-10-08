@@ -192,6 +192,36 @@ export class StorageService {
   }
 
   /**
+   * Directory holding on-demand resizes of an image (`{imageDir}/variants/`).
+   * Anything that rewrites the original must clear it.
+   */
+  getImageVariantsPath(domain: string, imageId: string): string {
+    return path.join(this.getImagePath(domain, imageId), 'variants');
+  }
+
+  async clearImageVariants(domain: string, imageId: string): Promise<void> {
+    await this.deleteDirectory(this.getImageVariantsPath(domain, imageId));
+  }
+
+  /** Number of entries in a directory, 0 when it doesn't exist. */
+  async countEntries(dirPath: string): Promise<number> {
+    this.validatePath(dirPath);
+    return fs.readdir(dirPath).then(
+      (entries) => entries.length,
+      () => 0,
+    );
+  }
+
+  /** Path relative to the storage root, for nginx's internal location. */
+  toStorageRelative(filePath: string): string {
+    this.validatePath(filePath);
+    return path
+      .relative(path.resolve(this.storagePath), path.resolve(filePath))
+      .split(path.sep)
+      .join('/');
+  }
+
+  /**
    * Get storage path for avatar
    */
   getAvatarPath(domain: string, creatorId: string): string {
@@ -222,7 +252,16 @@ export class StorageService {
       this.validatePath(filePath);
       const dir = path.dirname(filePath);
       await this.ensureDirectory(dir);
-      await fs.writeFile(filePath, buffer);
+      // Write beside the target, then rename: a reader (or a crash) never sees a
+      // half-written file, which matters when a job overwrites a live original.
+      const tmp = `${filePath}.${randomUUID()}.tmp`;
+      try {
+        await fs.writeFile(tmp, buffer);
+        await fs.rename(tmp, filePath);
+      } catch (error) {
+        await fs.rm(tmp, { force: true });
+        throw error;
+      }
     } catch (error) {
       this.logger.error(
         `[saveFile] Failed to save file: ${filePath}`,
@@ -340,7 +379,13 @@ export class StorageService {
       this.validatePath(destPath);
       const dir = path.dirname(destPath);
       await this.ensureDirectory(dir);
-      await fs.copyFile(srcPath, destPath);
+      // A rename is free on the same filesystem (a copy of a 500 MB video is not);
+      // the upload temp dir is often a different mount, so fall back to copying.
+      // Either way the caller still unlinks srcPath.
+      await fs.rename(srcPath, destPath).catch((err) => {
+        if (err?.code !== 'EXDEV') throw err;
+        return fs.copyFile(srcPath, destPath);
+      });
     } catch (error) {
       this.logger.error(
         `[copyFromTemp] Failed: ${destPath}`,
@@ -432,6 +477,41 @@ export class StorageService {
       );
       throw new InternalServerErrorException(
         `Failed to convert image to WebP: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Upload encode: the WebP original and its thumbnail from one decoder, both
+   * from the source bytes (the thumbnail no longer re-decodes the encoded original).
+   */
+  async encodeWebpWithThumbnail(
+    input: Buffer,
+    quality: number,
+    thumbSize: number,
+    thumbQuality: number,
+  ): Promise<{ original: Buffer; thumb: Buffer }> {
+    try {
+      const image = openImage(input);
+      const [original, thumb] = await Promise.all([
+        image.clone().webp({ quality }).toBuffer(),
+        image
+          .clone()
+          .resize(thumbSize, thumbSize, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .webp({ quality: thumbQuality, effort: 6 })
+          .toBuffer(),
+      ]);
+      return { original, thumb };
+    } catch (error) {
+      this.logger.error(
+        `[encodeWebpWithThumbnail] Failed to encode image`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to encode image: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
@@ -576,7 +656,9 @@ export class StorageService {
       return await pipeline
         .webp({
           quality,
-          effort: 6, // Higher effort = better compression (0-6, default 4)
+          // Only the hourly optimize jobs call this: 4 (sharp's default) encodes
+          // several times faster than 6 for a few percent larger files
+          effort: 4,
           lossless: false,
           nearLossless: false,
           smartSubsample: true, // Better chroma subsampling

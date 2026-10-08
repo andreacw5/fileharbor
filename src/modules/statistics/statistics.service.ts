@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
@@ -10,6 +11,8 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { buildClientWhere } from '@/modules/admin/helpers/admin-access.helper';
 import { APP_VERSION } from '@/common/version';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class StatisticsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,9 +20,10 @@ export class StatisticsService {
   async getGlobalStats(admin: AdminJwtPayload): Promise<AdminStatsResponseDto> {
     const clientWhere = buildClientWhere(admin);
 
+    // UTC midnight six days ago: the window is the last 7 UTC days, today included
     const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+    sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 6 * DAY_MS);
 
     const clientWhere7d = { ...clientWhere, createdAt: { gte: sevenDaysAgo } };
 
@@ -60,7 +64,10 @@ export class StatisticsService {
       }),
     ]);
 
-    const dailyChart = await this.buildDailyChart(clientWhere, sevenDaysAgo);
+    const dailyChart = await this.buildDailyChart(
+      admin.allowedClientIds,
+      sevenDaysAgo,
+    );
 
     const last7Days = plainToInstance(
       StatsTrendDto,
@@ -94,60 +101,48 @@ export class StatisticsService {
   }
 
   /**
-   * Build per-day counts for images, avatars, albums and creators
-   * for the 7-day window starting at `from`.
+   * Per-day counts for images, avatars, albums and videos over the 7 UTC days
+   * starting at `from`, grouped in SQL so no rows leave the database.
    */
   private async buildDailyChart(
-    clientWhere: object,
+    clientIds: string[],
     from: Date,
   ): Promise<DailyDataPointDto[]> {
-    const days: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(from);
-      d.setDate(d.getDate() + i);
-      days.push(d.toISOString().slice(0, 10));
-    }
+    const to = new Date(from.getTime() + 7 * DAY_MS);
+    const range = Prisma.sql`"clientId" = ANY(${clientIds}::text[]) AND "createdAt" >= ${from} AND "createdAt" < ${to}`;
 
-    const to = new Date(from);
-    to.setDate(to.getDate() + 7);
+    // createdAt is timestamp without time zone holding UTC, so date_trunc buckets by UTC day
+    const rows = await this.prisma.$queryRaw<
+      { kind: string; day: string; count: number }[]
+    >`
+      SELECT kind, to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day, count(*)::int AS count
+      FROM (
+        SELECT 'images' AS kind, "createdAt" FROM images WHERE ${range}
+        UNION ALL SELECT 'avatars', "createdAt" FROM avatars WHERE ${range}
+        UNION ALL SELECT 'albums', "createdAt" FROM albums WHERE ${range}
+        UNION ALL SELECT 'videos', "createdAt" FROM videos WHERE ${range}
+      ) t
+      GROUP BY 1, 2`;
 
-    const timeWhere = { ...clientWhere, createdAt: { gte: from, lt: to } };
+    const counts = new Map(rows.map((r) => [`${r.kind}:${r.day}`, r.count]));
+    const at = (kind: string, date: string) =>
+      counts.get(`${kind}:${date}`) ?? 0;
 
-    const [images, avatars, albums, videos] = await Promise.all([
-      this.prisma.image.findMany({
-        where: timeWhere,
-        select: { createdAt: true },
-      }),
-      this.prisma.avatar.findMany({
-        where: timeWhere,
-        select: { createdAt: true },
-      }),
-      this.prisma.album.findMany({
-        where: timeWhere,
-        select: { createdAt: true },
-      }),
-      this.prisma.video.findMany({
-        where: timeWhere,
-        select: { createdAt: true },
-      }),
-    ]);
-
-    const countByDay = (records: { createdAt: Date }[], date: string) =>
-      records.filter((r) => r.createdAt.toISOString().slice(0, 10) === date)
-        .length;
-
-    return days.map((date) =>
-      plainToInstance(
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(from.getTime() + i * DAY_MS)
+        .toISOString()
+        .slice(0, 10);
+      return plainToInstance(
         DailyDataPointDto,
         {
           date,
-          images: countByDay(images, date),
-          avatars: countByDay(avatars, date),
-          albums: countByDay(albums, date),
-          videos: countByDay(videos, date),
+          images: at('images', date),
+          avatars: at('avatars', date),
+          albums: at('albums', date),
+          videos: at('videos', date),
         },
         { excludeExtraneousValues: true },
-      ),
-    );
+      );
+    });
   }
 }
