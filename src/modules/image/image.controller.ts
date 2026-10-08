@@ -287,10 +287,23 @@ export class ImageController {
       ]);
 
       // Set response headers
+      // Private bytes and token-gated responses must never land in a shared
+      // cache (CDN, proxy): the next requester would get them without a check.
+      const restricted = image.isPrivate || !!query.token;
+      const variant = query.thumb
+        ? 'thumb'
+        : [
+            query.width ?? '',
+            query.height ?? '',
+            query.format || 'webp',
+            query.quality || 85,
+          ].join('-');
       const headers: Record<string, string> = {
         'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        ETag: `"${imageId}${query.thumb ? '-thumb' : ''}"`,
+        'Cache-Control': restricted
+          ? 'private, no-store'
+          : 'public, max-age=31536000, immutable',
+        ETag: `"${imageId}-${variant}"`,
       };
 
       if (query.download) {
@@ -330,7 +343,11 @@ export class ImageController {
 
           res.set({
             'Content-Type': mimeType,
-            'Cache-Control': 'public, max-age=3600',
+            // A denial depends on who asks: don't let a cache replay it to the owner.
+            'Cache-Control':
+              defaultType === 'permission_denied'
+                ? 'private, no-store'
+                : 'public, max-age=3600',
             'X-FileHarbor-Fallback': defaultType,
           });
 
