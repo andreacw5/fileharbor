@@ -36,6 +36,7 @@ import {
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
 import { Public } from '@/modules/client/decorators/public.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadImageDto,
   GetImageDto,
@@ -177,6 +178,8 @@ export class ImageController {
   }
 
   @Public()
+  // Media delivery: one page can embed dozens of these.
+  @SkipThrottle()
   @Get(':imageId')
   @ApiOperation({
     summary: 'Get image',

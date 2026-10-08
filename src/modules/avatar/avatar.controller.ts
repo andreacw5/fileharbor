@@ -26,6 +26,7 @@ import { AvatarService } from './avatar.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { ClientId } from '@/modules/client/decorators/client.decorator';
 import { Public } from '@/modules/client/decorators/public.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadAvatarDto,
   AvatarResponseDto,
@@ -106,6 +107,8 @@ export class AvatarController {
   }
 
   @Public()
+  // Media delivery: one page can embed dozens of these.
+  @SkipThrottle()
   @Get(':externalUserId')
   @ApiOperation({
     summary: 'Get creator avatar (public endpoint)',
