@@ -19,7 +19,7 @@ import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
 import { CreatorService } from '@/modules/creator/creator.service';
-import { RouteHelperService } from '@/utils/route.utils';
+import { RouteHelperService, clientRef } from '@/utils/route.utils';
 
 @Injectable()
 export class AvatarService {
@@ -212,7 +212,7 @@ export class AvatarService {
       this.logger.log(
         `[uploadAvatar] Success - Client: ${clientId}, Creator: ${externalId}, Size: ${webpBuffer.length} bytes`,
       );
-      return this.formatAvatarResponse(avatar, externalId);
+      return this.formatAvatarResponse(avatar, externalId, domain);
     } catch (error) {
       this.logger.error(
         `[uploadAvatar] Failed - Client: ${clientId}, Creator: ${externalId}, Error: ${error.message}`,
@@ -231,12 +231,7 @@ export class AvatarService {
     format: 'webp' | 'jpeg' | 'png' = 'webp',
   ): Promise<{ buffer: Buffer; mimeType: string }> {
     const { creator, avatar } = await this.findAvatar(clientId, externalId);
-
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: avatar.clientId },
-    });
-    const domain = client?.domain || avatar.clientId;
+    const domain = clientRef(avatar.client);
 
     // Get the appropriate variant path
     const variant = thumbnail ? 'thumb' : 'original';
@@ -469,19 +464,45 @@ export class AvatarService {
   }
 
   /**
-   * External ids are only unique within a client: always resolve the creator
-   * through clientId_externalId.
+   * Resolves the `:clientRef` of GET /avatars/:clientRef/:externalUserId — a
+   * client's domain or id, as in its storage dir. A ref naming more than one
+   * client (a domain equal to another client's id) resolves to none.
+   */
+  async resolveClientRef(ref: string): Promise<string> {
+    const matches = await this.prisma.client.findMany({
+      where: { OR: [{ domain: ref }, { id: ref }] },
+      select: { id: true },
+      take: 2,
+    });
+    if (matches.length !== 1) {
+      throw new NotFoundException('Client not found');
+    }
+    return matches[0].id;
+  }
+
+  /**
+   * External ids are only unique within a client: resolve the creator through
+   * clientId_externalId whenever the client is known.
    */
   private async findAvatar(clientId: string | undefined, externalId: string) {
-    const creator = clientId
-      ? await this.prisma.creator.findUnique({
-          where: { clientId_externalId: { clientId, externalId } },
-        })
-      : // ponytail: legacy public GET /avatars/:externalUserId without an
-        // API key has no client context, so this picks any client's creator
-        // with that external id. Goes away once the route carries a client
-        // discriminator (breaking API change, pending decision).
-        await this.prisma.creator.findFirst({ where: { externalId } });
+    let creator: { id: string } | null;
+    if (clientId) {
+      creator = await this.prisma.creator.findUnique({
+        where: { clientId_externalId: { clientId, externalId } },
+        select: { id: true },
+      });
+    } else {
+      // Deprecated GET /avatars/:externalUserId with no API key: no client
+      // context. Serve only an unambiguous id — when several clients have a
+      // creator with it, refuse rather than pick one (another tenant could
+      // otherwise plant an avatar for this one's users).
+      const matches = await this.prisma.creator.findMany({
+        where: { externalId },
+        select: { id: true },
+        take: 2,
+      });
+      creator = matches.length === 1 ? matches[0] : null;
+    }
 
     if (!creator) {
       throw new NotFoundException('Creator not found');
@@ -489,6 +510,7 @@ export class AvatarService {
 
     const avatar = await this.prisma.avatar.findFirst({
       where: { creatorId: creator.id },
+      include: { client: { select: { id: true, domain: true } } },
     });
 
     if (!avatar) {
@@ -502,7 +524,11 @@ export class AvatarService {
    * Get avatar metadata for info endpoint
    */
   getAvatarMetadata(avatar: any, externalId: string): AvatarResponseDto {
-    return this.formatAvatarResponse(avatar, externalId);
+    return this.formatAvatarResponse(
+      avatar,
+      externalId,
+      clientRef(avatar.client),
+    );
   }
 
   /**
@@ -511,9 +537,10 @@ export class AvatarService {
   private formatAvatarResponse(
     avatar: any,
     externalId: string,
+    ref: string,
   ): AvatarResponseDto {
-    const url = this.route.path('avatars', externalId);
-    const thumbnailUrl = this.route.path('avatars', externalId) + '?thumb=true';
+    const url = this.route.path('avatars', ref, externalId);
+    const thumbnailUrl = `${url}?thumb=true`;
 
     return plainToInstance(
       AvatarResponseDto,
@@ -521,7 +548,7 @@ export class AvatarService {
         ...avatar,
         url,
         thumbnailUrl,
-        fullPath: this.route.fullUrl('avatars', externalId),
+        fullPath: this.route.fullUrl('avatars', ref, externalId),
       },
       { excludeExtraneousValues: true },
     );

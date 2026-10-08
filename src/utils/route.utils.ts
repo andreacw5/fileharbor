@@ -18,6 +18,17 @@ export function buildRoutePath(
 }
 
 /**
+ * How a client is named in public URLs and on disk: its domain, else its id.
+ * Same rule as the storage dir (`storage/{client.domain || clientId}`).
+ */
+export function clientRef(client: {
+  id: string;
+  domain?: string | null;
+}): string {
+  return client.domain || client.id;
+}
+
+/**
  * Injectable service that centralises `apiPrefix` and `baseUrl` resolution.
  * Provided globally via `RouteHelperModule` — no per-module import needed.
  *
