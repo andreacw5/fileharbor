@@ -122,36 +122,8 @@ Jobs run automatically via NestJS Schedule module.
 
 ## Configuration
 
-Key environment variables in `.env`:
-
-```env
-# Server
-APP_PORT=3000
-APP_URL=http://localhost:3000
-API_PREFIX=v2
-
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/fileharbor?schema=public"
-
-# Storage
-STORAGE_PATH=./storage
-MAX_FILE_SIZE=10485760  # 10MB
-
-# Image Processing
-WEBP_QUALITY=90
-JPEG_QUALITY=85
-THUMBNAIL_SIZE=300
-
-# Rate Limiting
-THROTTLE_TTL=60         # seconds
-THROTTLE_LIMIT=10       # requests per TTL
-
-# Caching
-CACHE_TTL=60           # seconds
-
-# Logging (optional)
-LOGS_TOKEN=your-betterstack-token
-```
+Every variable, with its default and what it does, is in `.env.example` (validated at boot by
+`src/configs/config.validation.ts`).
 
 ## Database Schema
 
@@ -193,9 +165,6 @@ pnpm run start:dev
 pnpm run test
 pnpm run test:watch
 pnpm run test:cov
-
-# E2E tests
-pnpm run test:e2e
 
 # Linting and formatting
 pnpm run lint

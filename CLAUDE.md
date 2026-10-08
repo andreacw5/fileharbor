@@ -3,7 +3,7 @@
 ## Tech Stack
 
 - **Framework:** NestJS 10 (TypeScript, ES2021, CommonJS)
-- **Database:** PostgreSQL + Prisma ORM (client at `generated/prisma/`)
+- **Database:** PostgreSQL + Prisma ORM (client generated into `node_modules/.prisma/client`)
 - **Image Processing:** Sharp
 - **Auth:** Bastion IdP RS256 JWT via JWKS (admin), API Keys (client)
 - **Package Manager:** pnpm (enforced — never use npm or yarn)
@@ -89,7 +89,7 @@ No `job` module: each cron lives next to the module it serves (`ScheduleModule.f
 | `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar dirs with no DB row |
 | `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
 
-`VideoCleanupJob.cleanOrphanedVideos` is the only one disabled (`@Cron` commented out).
+Video dirs have no orphan sweep (`StorageCleanupJob` covers images and avatars only).
 
 Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
 `MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
@@ -108,8 +108,8 @@ Three parts:
   Gatherly and Articuno. `bastion.module.ts` imports the package's `BastionModule.forRootAsync(...)`
   (global) from the camelCase config keys. **From the package**: `BastionJwksService` (RS256 against
   the JWKS, `kid`-indexed cache), `BastionAuditService` (service-client token + `POST /events`),
-  `AuditInterceptor`, `@Audit()`, and the Bastion payload types (`UserJwtPayload`,
-  `ServiceClientJwtPayload`, re-exported from `bastion.types.ts`). **Local**: `BastionTokenVerifier`
+  `AuditInterceptor`, `@Audit()`, `@Public()`, and `UserJwtPayload` (re-exported from
+  `bastion.types.ts`). **Local**: `BastionTokenVerifier`
   (multi-app acceptance), the two guards, `console-permissions.ts`, `@RequirePermission`,
   `@CurrentAdminUser`, `@CurrentUser`, and `AdminJwtPayload`/`BastionUserPayload`. No controller —
   sign-in, refresh, password and profile all belong to Bastion, and the console (Meridian) talks to
@@ -392,15 +392,13 @@ pnpm install              # pnpm only (enforced via preinstall)
 pnpm run start:dev        # hot-reload dev server on :3000
 pnpm run build && pnpm run start:prod
 pnpm run test             # Jest unit tests (rootDir: src/)
-pnpm run test:e2e         # jest --config ./test/jest-e2e.json
 pnpm run prisma:migrate   # generate + apply migration
-pnpm run prisma:generate  # regenerate Prisma client to generated/prisma/
+pnpm run prisma:generate  # regenerate Prisma client
 pnpm run prisma:studio    # DB GUI
 pnpm run lint             # eslint --fix
 pnpm run format           # prettier
 pnpm run test:watch       # jest watch
 pnpm run test:cov         # jest coverage
-pnpm run prisma:seed      # seed DB (optional)
 cp .env.example .env      # first-time setup
 ```
 
