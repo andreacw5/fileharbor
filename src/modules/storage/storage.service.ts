@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -7,6 +8,25 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import sharp from 'sharp';
+
+// Decoded-pixel cap for every sharp call: a small compressed file can declare
+// enormous dimensions (decompression bomb). 100 MP fits a 48 MP phone photo
+// with room to spare, at ~400 MB of RGBA per pipeline.
+const MAX_INPUT_PIXELS = 100_000_000;
+
+/** Formats accepted on upload, as reported by sharp from the bytes themselves. */
+export const SUPPORTED_IMAGE_FORMATS = ['jpeg', 'png', 'webp', 'gif'];
+
+// Multer limits for image/avatar uploads. Read from process.env at load time,
+// like MAX_VIDEO_SIZE: interceptor options are fixed when the decorator runs.
+export const IMAGE_UPLOAD_LIMITS = {
+  fileSize: parseInt(process.env.MAX_FILE_SIZE ?? '', 10) || 10485760,
+  files: 20,
+};
+
+function openImage(input: Buffer) {
+  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS });
+}
 import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import fluentFfmpeg from 'fluent-ffmpeg';
@@ -70,7 +90,13 @@ export class StorageService {
     const normalizedTarget = path.resolve(targetPath);
     const normalizedStorage = path.resolve(this.storagePath);
 
-    if (!normalizedTarget.startsWith(normalizedStorage)) {
+    // A prefix check would let `storage-evil/` pass for `storage/`.
+    const relative = path.relative(normalizedStorage, normalizedTarget);
+    if (
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
       this.logger.error(
         `[validatePath] Path traversal attempt detected: ${targetPath}`,
       );
@@ -361,7 +387,9 @@ export class StorageService {
       ]);
 
       const jpegBuffer = await fs.readFile(tmpJpeg);
-      const webpBuffer = await sharp(jpegBuffer).webp({ quality }).toBuffer();
+      const webpBuffer = await openImage(jpegBuffer)
+        .webp({ quality })
+        .toBuffer();
       await this.saveFile(outputPath, webpBuffer);
     } catch (error) {
       this.logger.error(
@@ -401,7 +429,7 @@ export class StorageService {
     quality: number = 85,
   ): Promise<Buffer> {
     try {
-      return await sharp(inputBuffer).webp({ quality }).toBuffer();
+      return await openImage(inputBuffer).webp({ quality }).toBuffer();
     } catch (error) {
       this.logger.error(
         `[convertToWebP] Failed to convert image to WebP`,
@@ -435,7 +463,7 @@ export class StorageService {
         maintainAspectRatio = true,
       } = options;
 
-      let pipeline = sharp(inputBuffer);
+      let pipeline = openImage(inputBuffer);
 
       // Apply resizing with more flexible options
       pipeline = pipeline.resize(width, height, {
@@ -493,23 +521,27 @@ export class StorageService {
     format: string;
     size: number;
   }> {
-    try {
-      const metadata = await sharp(buffer).metadata();
-      return {
-        width: metadata.width || 0,
-        height: metadata.height || 0,
-        format: metadata.format || 'unknown',
-        size: buffer.length,
-      };
-    } catch (error) {
-      this.logger.error(
-        `[getImageMetadata] Failed to get image metadata`,
-        error instanceof Error ? error.stack : error,
-      );
-      throw new InternalServerErrorException(
-        `Failed to get image metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    const metadata = await openImage(buffer)
+      .metadata()
+      // Also rejects dimensions over MAX_INPUT_PIXELS, from the header alone.
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `[getImageMetadata] Unreadable image: ${error instanceof Error ? error.message : error}`,
+        );
+        throw new BadRequestException('Invalid or corrupted image file');
+      });
+    // The client-supplied MIME type proves nothing: check what the bytes are.
+    if (!SUPPORTED_IMAGE_FORMATS.includes(metadata.format ?? '')) {
+      throw new BadRequestException(
+        `Unsupported image format: ${metadata.format ?? 'unknown'}`,
       );
     }
+    return {
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      format: metadata.format,
+      size: buffer.length,
+    };
   }
 
   /**
@@ -519,12 +551,10 @@ export class StorageService {
    */
   async optimizeImage(buffer: Buffer, quality: number = 90): Promise<Buffer> {
     try {
-      const metadata = await sharp(buffer).metadata();
+      const metadata = await openImage(buffer).metadata();
 
       // Prepare the image pipeline
-      let pipeline = sharp(buffer, {
-        limitInputPixels: 268402689, // ~16384x16384 max resolution for safety
-      });
+      let pipeline = openImage(buffer);
 
       // Auto-rotate based on EXIF orientation
       pipeline = pipeline.rotate();
@@ -580,7 +610,7 @@ export class StorageService {
     quality: number = 85,
   ): Promise<Buffer> {
     try {
-      let pipeline = sharp(buffer);
+      let pipeline = openImage(buffer);
 
       if (width || height) {
         pipeline = pipeline.resize(width, height, {

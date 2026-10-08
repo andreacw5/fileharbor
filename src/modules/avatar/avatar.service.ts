@@ -72,6 +72,15 @@ export class AvatarService {
         throw new BadRequestException('externalId is required');
       }
 
+      // Validates the real format: must run before the old avatar is deleted
+      this.logger.debug(
+        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
+      );
+      const metadata = await this.storage.getImageMetadata(file.buffer);
+      this.logger.debug(
+        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
+      );
+
       // Get client to retrieve domain
       const client = await this.prisma.client.findUnique({
         where: { id: clientId },
@@ -115,15 +124,6 @@ export class AvatarService {
 
       const avatarId = existingAvatar?.id || uuidv4();
       const avatarPath = this.storage.getAvatarPath(domain, creatorId);
-
-      // Get metadata
-      this.logger.debug(
-        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
-      );
-      const metadata = await this.storage.getImageMetadata(file.buffer);
-      this.logger.debug(
-        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
-      );
 
       // Convert to WebP for original (high quality)
       this.logger.debug(
@@ -231,27 +231,12 @@ export class AvatarService {
    * Get avatar file by external creator ID (used by public endpoint)
    */
   async getAvatarFile(
+    clientId: string | undefined,
     externalId: string,
     thumbnail: boolean = false,
     format: 'webp' | 'jpeg' | 'png' = 'webp',
   ): Promise<{ buffer: Buffer; mimeType: string }> {
-    // Find creator by externalId across all clients
-    // (public endpoint doesn't have clientId context)
-    const creator = await this.prisma.creator.findFirst({
-      where: { externalId },
-    });
-
-    if (!creator) {
-      throw new NotFoundException('Creator not found');
-    }
-
-    const avatar = await this.prisma.avatar.findFirst({
-      where: { creatorId: creator.id },
-    });
-
-    if (!avatar) {
-      throw new NotFoundException('Avatar not found');
-    }
+    const { creator, avatar } = await this.findAvatar(clientId, externalId);
 
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
@@ -482,10 +467,27 @@ export class AvatarService {
   /**
    * Get avatar by external creator ID (for info endpoint)
    */
-  async getAvatarByExternalId(externalId: string) {
-    const creator = await this.prisma.creator.findFirst({
-      where: { externalId },
-    });
+  async getAvatarByExternalId(
+    clientId: string | undefined,
+    externalId: string,
+  ) {
+    return (await this.findAvatar(clientId, externalId)).avatar;
+  }
+
+  /**
+   * External ids are only unique within a client: always resolve the creator
+   * through clientId_externalId.
+   */
+  private async findAvatar(clientId: string | undefined, externalId: string) {
+    const creator = clientId
+      ? await this.prisma.creator.findUnique({
+          where: { clientId_externalId: { clientId, externalId } },
+        })
+      : // ponytail: legacy public GET /avatars/:externalUserId without an
+        // API key has no client context, so this picks any client's creator
+        // with that external id. Goes away once the route carries a client
+        // discriminator (breaking API change, pending decision).
+        await this.prisma.creator.findFirst({ where: { externalId } });
 
     if (!creator) {
       throw new NotFoundException('Creator not found');
@@ -499,7 +501,7 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    return avatar;
+    return { creator, avatar };
   }
 
   /**

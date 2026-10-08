@@ -56,6 +56,7 @@ import {
   AdminVideoResponseDto,
   AdminVideoListResponseDto,
 } from '../dto/admin-response.dto';
+import { contentDisposition } from '@/utils/content-disposition';
 
 const videoMulterOptions = {
   storage: diskStorage({
@@ -381,11 +382,10 @@ export class VideosAdminController {
     assertClientAccess(adminUser, video.clientId);
 
     const domain = (video as any).client?.domain || video.clientId;
-    const safeName = video.originalName.replace(/["\n\r]/g, '_');
-    const disposition =
-      download === 'true'
-        ? `attachment; filename="${safeName}"`
-        : `inline; filename="${safeName}"`;
+    const disposition = contentDisposition(
+      video.originalName,
+      download === 'true' ? 'attachment' : 'inline',
+    );
 
     // Opt-in, not NODE_ENV: X-Accel-Redirect delegates delivery to nginx and
     // sends an empty body, which only works behind an nginx that declares the

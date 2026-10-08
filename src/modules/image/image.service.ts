@@ -721,7 +721,7 @@ export class ImageService {
     });
 
     this.logger.log(
-      `[createShareLink] Success - ID: ${imageId}, Token: ${readToken}, Expires: ${expiresAt?.toISOString() || 'never'}`,
+      `[createShareLink] Success - ID: ${imageId}, Link: ${shareLink.id}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
     return this.formatShareLinkResponse(shareLink);
   }
@@ -839,7 +839,7 @@ export class ImageService {
   async checkImageAccess(
     imageId: string,
     clientId: string,
-    creatorId?: string,
+    externalCreatorId?: string,
     shareToken?: string,
   ): Promise<boolean> {
     const image = await this.getImageById(imageId);
@@ -849,13 +849,18 @@ export class ImageService {
       return true;
     }
 
-    // Check if creator owns the image
-    if (
-      creatorId &&
-      image.creatorId === creatorId &&
-      image.clientId === clientId
-    ) {
-      return true;
+    // The owner, identified by X-User-Id within the image's own client.
+    // image.creatorId is the internal Creator id, so resolve the external one.
+    if (externalCreatorId && image.clientId === clientId) {
+      const creator = await this.prisma.creator.findUnique({
+        where: {
+          clientId_externalId: { clientId, externalId: externalCreatorId },
+        },
+        select: { id: true },
+      });
+      if (creator?.id === image.creatorId) {
+        return true;
+      }
     }
 
     // Check if valid share token is provided
@@ -896,7 +901,7 @@ export class ImageService {
     image: any,
     imageId: string,
     clientId: string | undefined,
-    creatorId: string | undefined,
+    externalCreatorId: string | undefined,
     token?: string,
   ): Promise<void> {
     if (!image.isPrivate) {
@@ -912,7 +917,7 @@ export class ImageService {
     const hasAccess = await this.checkImageAccess(
       imageId,
       clientId,
-      creatorId,
+      externalCreatorId,
       token,
     );
 
