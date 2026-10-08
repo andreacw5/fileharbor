@@ -29,7 +29,10 @@ import {
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ImageService } from './image.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  IMAGE_UPLOAD_LIMITS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import {
   ClientId,
@@ -94,7 +97,9 @@ export class ImageController {
   })
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { ...IMAGE_UPLOAD_LIMITS, files: 1 } }),
+  )
   async uploadImage(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,

@@ -33,6 +33,7 @@ import {
   GetAvatarDto,
   DeleteAvatarResponseDto,
 } from './dto';
+import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
 
 @ApiTags('Avatars')
 @ApiSecurity('api-key')
@@ -64,7 +65,9 @@ export class AvatarController {
     status: 401,
     description: 'Missing or invalid X-API-Key header',
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { ...IMAGE_UPLOAD_LIMITS, files: 1 } }),
+  )
   async uploadAvatar(
     @ClientId() clientId: string,
     @UploadedFile() file: Express.Multer.File,

@@ -72,6 +72,15 @@ export class AvatarService {
         throw new BadRequestException('externalId is required');
       }
 
+      // Validates the real format: must run before the old avatar is deleted
+      this.logger.debug(
+        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
+      );
+      const metadata = await this.storage.getImageMetadata(file.buffer);
+      this.logger.debug(
+        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
+      );
+
       // Get client to retrieve domain
       const client = await this.prisma.client.findUnique({
         where: { id: clientId },
@@ -115,15 +124,6 @@ export class AvatarService {
 
       const avatarId = existingAvatar?.id || uuidv4();
       const avatarPath = this.storage.getAvatarPath(domain, creatorId);
-
-      // Get metadata
-      this.logger.debug(
-        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
-      );
-      const metadata = await this.storage.getImageMetadata(file.buffer);
-      this.logger.debug(
-        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
-      );
 
       // Convert to WebP for original (high quality)
       this.logger.debug(
