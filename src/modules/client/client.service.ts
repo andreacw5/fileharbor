@@ -9,22 +9,53 @@ import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
 import { GlobalStatsResponseDto } from './dto/global-stats-response.dto';
 import { randomBytes } from 'crypto';
 
+// Every X-API-Key request validates its key: cache hits for a short while so a
+// burst of requests costs one query. Only valid clients are cached (a bogus key
+// can't grow the map), and any client update clears it on this instance; other
+// replicas catch up within the TTL.
+const CLIENT_CACHE_TTL_MS = 30_000;
+
+const AUTH_CLIENT_SELECT = {
+  id: true,
+  name: true,
+  domain: true,
+  active: true,
+} satisfies Prisma.ClientSelect;
+
+export type AuthClient = Prisma.ClientGetPayload<{
+  select: typeof AUTH_CLIENT_SELECT;
+}>;
+
 @Injectable()
 export class ClientService {
+  private readonly clientCache = new Map<
+    string,
+    { client: AuthClient; expiresAt: number }
+  >();
+
   constructor(private prisma: PrismaService) {}
 
   /**
    * Validate client by API key
    */
-  async validateClient(apiKey: string) {
+  async validateClient(apiKey: string): Promise<AuthClient> {
+    const cached = this.clientCache.get(apiKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.client;
+
     const client = await this.prisma.client.findUnique({
       where: { apiKey },
+      select: AUTH_CLIENT_SELECT,
     });
 
     if (!client || !client.active) {
+      this.clientCache.delete(apiKey);
       throw new UnauthorizedException('Invalid or inactive client');
     }
 
+    this.clientCache.set(apiKey, {
+      client,
+      expiresAt: Date.now() + CLIENT_CACHE_TTL_MS,
+    });
     return client;
   }
 
@@ -312,6 +343,7 @@ export class ClientService {
     } catch (error) {
       this.mapUniqueConstraintViolation(error);
     }
+    this.clientCache.clear();
 
     const storageAgg = await this.prisma.image.aggregate({
       where: { clientId },

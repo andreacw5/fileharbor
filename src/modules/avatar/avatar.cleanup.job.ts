@@ -37,38 +37,40 @@ export class AvatarCleanupJob {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async optimizeAvatars() {
-    this.logger.debug('Starting avatar optimization job...');
+    await this.prisma.runExclusive('avatar.optimize', async () => {
+      this.logger.debug('Starting avatar optimization job...');
 
-    try {
-      // Get unoptimized avatars
-      const avatars = await this.avatarService.getUnoptimizedAvatars();
-      this.logger.log(`Found ${avatars.length} avatars to optimize`);
+      try {
+        // Get unoptimized avatars
+        const avatars = await this.avatarService.getUnoptimizedAvatars();
+        this.logger.log(`Found ${avatars.length} avatars to optimize`);
 
-      for (const avatar of avatars) {
-        try {
-          await this.optimizeAvatar(avatar);
-          await this.avatarService.markAsOptimized(avatar.id);
-          this.logger.log(`Optimized avatar: ${avatar.id}`);
-        } catch (error) {
-          this.logger.error(
-            `Failed to optimize avatar ${avatar.id}:`,
-            error.message,
-          );
-          const gaveUp = await this.avatarService.recordOptimizeFailure(
-            avatar.id,
-          );
-          if (gaveUp) {
-            this.logger.warn(
-              `Giving up on avatar ${avatar.id} after ${MAX_OPTIMIZE_ATTEMPTS} failed optimization attempts`,
+        for (const avatar of avatars) {
+          try {
+            await this.optimizeAvatar(avatar);
+            await this.avatarService.markAsOptimized(avatar.id);
+            this.logger.log(`Optimized avatar: ${avatar.id}`);
+          } catch (error) {
+            this.logger.error(
+              `Failed to optimize avatar ${avatar.id}:`,
+              error.message,
             );
+            const gaveUp = await this.avatarService.recordOptimizeFailure(
+              avatar.id,
+            );
+            if (gaveUp) {
+              this.logger.warn(
+                `Giving up on avatar ${avatar.id} after ${MAX_OPTIMIZE_ATTEMPTS} failed optimization attempts`,
+              );
+            }
           }
         }
-      }
 
-      this.logger.log('Avatar optimization job completed');
-    } catch (error) {
-      this.logger.error('Avatar optimization job failed:', error.message);
-    }
+        this.logger.log('Avatar optimization job completed');
+      } catch (error) {
+        this.logger.error('Avatar optimization job failed:', error.message);
+      }
+    });
   }
 
   /**

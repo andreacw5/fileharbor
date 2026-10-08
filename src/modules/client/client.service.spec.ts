@@ -82,7 +82,27 @@ describe('ClientService', () => {
       expect(result).toEqual(mockClient);
       expect(mockPrismaService.client.findUnique).toHaveBeenCalledWith({
         where: { apiKey: 'fh_test_api_key_123' },
+        select: { id: true, name: true, domain: true, active: true },
       });
+    });
+
+    it('should serve a repeat lookup from cache until the client is updated', async () => {
+      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
+      mockPrismaService.client.update.mockResolvedValue({
+        ...mockClient,
+        _count: { images: 0, avatars: 0, albums: 0, videos: 0 },
+      });
+      mockPrismaService.image.aggregate.mockResolvedValue({
+        _sum: { size: 0 },
+      });
+
+      await service.validateClient('fh_test_api_key_123');
+      await service.validateClient('fh_test_api_key_123');
+      expect(mockPrismaService.client.findUnique).toHaveBeenCalledTimes(1);
+
+      await service.updateClientWithStats('client-123', { active: false });
+      await service.validateClient('fh_test_api_key_123');
+      expect(mockPrismaService.client.findUnique).toHaveBeenCalledTimes(2);
     });
 
     it('should throw UnauthorizedException when client is not found', async () => {

@@ -22,6 +22,7 @@ describe('ImageCleanupJob.optimizeImages', () => {
     };
     const prisma = {
       client: { findUnique: jest.fn().mockResolvedValue(null) },
+      runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
     };
     const job = new ImageCleanupJob(
       imageService as any,

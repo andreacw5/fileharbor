@@ -15,6 +15,7 @@ export const configValidationSchema = Joi.object({
 
   // Database
   DATABASE_URL: Joi.string().required(),
+  DATABASE_POOL_MAX: Joi.number().integer().min(1).default(20),
 
   // Storage
   STORAGE_PATH: Joi.string().default('./storage'),

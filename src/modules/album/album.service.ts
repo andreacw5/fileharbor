@@ -378,86 +378,134 @@ export class AlbumService {
       throw new ForbiddenException('You can only modify your own albums');
     }
 
-    const maxOrder = await this.prisma.albumItem.findFirst({
-      where: { albumId },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
-    const nextOrder = (maxOrder?.order ?? -1) + 1;
+    // Dedupe by resource (last entry wins), keeping request order
+    const byKey = new Map<string, (typeof items)[number]>();
+    for (const item of items)
+      byKey.set(`${item.resourceType}:${item.id}`, item);
+    const unique = [...byKey.values()];
+    const isImage = (i: { resourceType: AlbumResourceType }) =>
+      i.resourceType === AlbumResourceType.IMAGE;
+    const imageIds = unique.filter(isImage).map((i) => i.id);
+    const videoIds = unique.filter((i) => !isImage(i)).map((i) => i.id);
 
-    const results = await Promise.all(
-      items.map(async (item, idx) => {
-        const isImage = item.resourceType === AlbumResourceType.IMAGE;
-        const order = item.order ?? nextOrder + idx;
+    const owned = {
+      clientId,
+      ...(options.force ? {} : { creatorId: options.creatorId }),
+    };
+    const [images, videos] = await Promise.all([
+      imageIds.length
+        ? this.prisma.image.findMany({
+            where: { id: { in: imageIds }, ...owned },
+            select: { id: true },
+          })
+        : [],
+      videoIds.length
+        ? this.prisma.video.findMany({
+            where: { id: { in: videoIds }, ...owned },
+            select: { id: true },
+          })
+        : [],
+    ]);
+    const foundImages = new Set(images.map((i) => i.id));
+    const foundVideos = new Set(videos.map((v) => v.id));
+    for (const item of unique) {
+      if (isImage(item) ? !foundImages.has(item.id) : !foundVideos.has(item.id))
+        throw new NotFoundException(
+          `${isImage(item) ? 'Image' : 'Video'} ${item.id} not found or unauthorized`,
+        );
+    }
 
-        if (isImage) {
-          const img = await this.prisma.image.findFirst({
-            where: {
-              id: item.id,
-              clientId,
-              ...(options.force ? {} : { creatorId: options.creatorId }),
-            },
-          });
-          if (!img)
-            throw new NotFoundException(
-              `Image ${item.id} not found or unauthorized`,
-            );
-        } else {
-          const vid = await this.prisma.video.findFirst({
-            where: {
-              id: item.id,
-              clientId,
-              ...(options.force ? {} : { creatorId: options.creatorId }),
-            },
-          });
-          if (!vid)
-            throw new NotFoundException(
-              `Video ${item.id} not found or unauthorized`,
-            );
-        }
+    const records = await this.prisma.$transaction(async (tx) => {
+      const maxOrder = await tx.albumItem.findFirst({
+        where: { albumId },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      const nextOrder = (maxOrder?.order ?? -1) + 1;
+      const wanted = unique.map((item, idx) => ({
+        ...item,
+        order: item.order ?? nextOrder + idx,
+      }));
 
-        const record = await this.prisma.albumItem.upsert({
-          where: isImage
-            ? { albumId_imageId: { albumId, imageId: item.id } }
-            : { albumId_videoId: { albumId, videoId: item.id } },
-          create: {
+      const existing = await tx.albumItem.findMany({
+        where: {
+          albumId,
+          OR: [{ imageId: { in: imageIds } }, { videoId: { in: videoIds } }],
+        },
+        select: { id: true, imageId: true, videoId: true },
+      });
+      const existingId = new Map(
+        existing.map((e) => [(e.imageId ?? e.videoId) as string, e.id]),
+      );
+
+      // Already in the album: only the order moves
+      const updated = await Promise.all(
+        wanted
+          .filter((w) => existingId.has(w.id))
+          .map((w) =>
+            tx.albumItem.update({
+              where: { id: existingId.get(w.id) },
+              data: { order: w.order },
+              select: {
+                id: true,
+                imageId: true,
+                videoId: true,
+                resourceType: true,
+                order: true,
+              },
+            }),
+          ),
+      );
+      const created = await tx.albumItem.createManyAndReturn({
+        data: wanted
+          .filter((w) => !existingId.has(w.id))
+          .map((w) => ({
             albumId,
-            ...(isImage ? { imageId: item.id } : { videoId: item.id }),
-            resourceType: item.resourceType,
-            order,
-          },
-          update: { order },
-        });
+            ...(isImage(w) ? { imageId: w.id } : { videoId: w.id }),
+            resourceType: w.resourceType,
+            order: w.order,
+          })),
+        select: {
+          id: true,
+          imageId: true,
+          videoId: true,
+          resourceType: true,
+          order: true,
+        },
+      });
 
-        if (isImage) {
-          this.webhook
-            .sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
-              albumId,
-              imageId: item.id,
-              albumName: album.name,
-            })
-            .catch((e) =>
-              this.logger.warn(
-                `[addItemsToAlbum] Webhook failed: ${e.message}`,
-              ),
-            );
-        }
+      const byResource = new Map(
+        [...updated, ...created].map((r) => [
+          (r.imageId ?? r.videoId) as string,
+          r,
+        ]),
+      );
+      return wanted.map((w) => byResource.get(w.id)!);
+    });
 
-        return record;
-      }),
-    );
+    for (const imageId of imageIds) {
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
+          albumId,
+          imageId,
+          albumName: album.name,
+        })
+        .catch((e) =>
+          this.logger.warn(`[addItemsToAlbum] Webhook failed: ${e.message}`),
+        );
+    }
 
     this.logger.log(
-      `[addItemsToAlbum] Album: ${albumId}, Added: ${results.length}`,
+      `[addItemsToAlbum] Album: ${albumId}, Added: ${records.length}`,
     );
     return {
       albumId,
-      items: results.map((r) => ({
+      items: records.map((r) => ({
         id: r.id,
         resourceType: r.resourceType,
         order: r.order,
       })),
-      count: results.length,
+      count: records.length,
     };
   }
 
@@ -480,33 +528,35 @@ export class AlbumService {
       throw new ForbiddenException('You can only modify your own albums');
     }
 
-    let removed = 0;
-    for (const item of items) {
-      const isImage = item.resourceType === AlbumResourceType.IMAGE;
-      try {
-        await this.prisma.albumItem.delete({
-          where: isImage
-            ? { albumId_imageId: { albumId, imageId: item.id } }
-            : { albumId_videoId: { albumId, videoId: item.id } },
-        });
-        removed++;
+    const ids = (type: AlbumResourceType) =>
+      items.filter((i) => i.resourceType === type).map((i) => i.id);
+    const present = await this.prisma.albumItem.findMany({
+      where: {
+        albumId,
+        OR: [
+          { imageId: { in: ids(AlbumResourceType.IMAGE) } },
+          { videoId: { in: ids(AlbumResourceType.VIDEO) } },
+        ],
+      },
+      select: { id: true, imageId: true },
+    });
+    const { count: removed } = await this.prisma.albumItem.deleteMany({
+      where: { id: { in: present.map((p) => p.id) } },
+    });
 
-        if (isImage) {
-          this.webhook
-            .sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
-              albumId,
-              imageId: item.id,
-              timestamp: new Date().toISOString(),
-            })
-            .catch((e) =>
-              this.logger.warn(
-                `[removeItemsFromAlbum] Webhook failed: ${e.message}`,
-              ),
-            );
-        }
-      } catch {
-        // already removed or not found — skip
-      }
+    for (const { imageId } of present) {
+      if (!imageId) continue;
+      this.webhook
+        .sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
+          albumId,
+          imageId,
+          timestamp: new Date().toISOString(),
+        })
+        .catch((e) =>
+          this.logger.warn(
+            `[removeItemsFromAlbum] Webhook failed: ${e.message}`,
+          ),
+        );
     }
 
     this.logger.log(
