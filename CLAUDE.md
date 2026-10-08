@@ -41,7 +41,7 @@ import { ClientId, CreatorExternalId } from '@/modules/client/decorators/client.
 // CreatorExternalId reads request.externalCreatorId (the X-User-Id header, or its query/body fallback)
 ```
 
-Mark public endpoints with `@Public()` from `src/modules/client/decorators/public.decorator.ts`. On public endpoints the interceptor still populates `clientId` if a valid key is supplied.
+Mark public endpoints with `@Public()` from `@heyatom/bastion-client/nest`. On public endpoints the interceptor still populates `clientId` if a valid key is supplied.
 
 ## Creator Identity Pattern
 

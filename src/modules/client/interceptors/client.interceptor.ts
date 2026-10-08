@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { ClientService } from '../client.service';
-import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { IS_PUBLIC_KEY } from '@heyatom/bastion-client/nest';
 
 @Injectable()
 export class ClientInterceptor implements NestInterceptor {
