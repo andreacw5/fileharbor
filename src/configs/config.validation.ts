@@ -52,7 +52,6 @@ export const configValidationSchema = Joi.object({
   VIDEO_X_ACCEL_REDIRECT: Joi.boolean().default(false),
 
   // Admin
-  ADMIN_SECRET: Joi.string().required(),
 
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),

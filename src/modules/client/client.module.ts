@@ -4,7 +4,6 @@ import { ClientService } from './client.service';
 import { ClientInitService } from './client-init.service';
 import { ClientController } from './client.controller';
 import { ClientInterceptor } from './interceptors/client.interceptor';
-import { AdminGuard } from './guards/admin.guard';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 
 @Module({
@@ -14,7 +13,6 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
     ClientService,
     ClientInitService,
     ClientInterceptor,
-    AdminGuard,
     Reflector,
   ],
   exports: [ClientService],

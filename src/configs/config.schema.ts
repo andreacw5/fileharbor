@@ -57,9 +57,6 @@ export default () => ({
     level: process.env.LOG_LEVEL || 'info', // debug, info, warn, error
   },
 
-  // Admin
-  adminSecret: process.env.ADMIN_SECRET,
-
   // Bastion IdP
   bastionUrl: process.env.BASTION_URL || 'http://localhost:3001',
   bastionAppSlug: process.env.BASTION_APP_SLUG || 'fileharbor',

@@ -6,7 +6,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
-import { GlobalStatsResponseDto } from './dto/global-stats-response.dto';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -325,21 +324,6 @@ export class ClientService {
       totalAlbums: updated._count.albums,
       totalVideos: updated._count.videos,
       totalStorage: storageAgg._sum.size || 0,
-    };
-  }
-
-  /**
-   * Get aggregated statistics across ALL clients (admin use only)
-   */
-  async getGlobalStats(): Promise<GlobalStatsResponseDto> {
-    const [totalImages, totalStorage] = await Promise.all([
-      this.prisma.image.count(),
-      this.prisma.image.aggregate({ _sum: { size: true } }),
-    ]);
-
-    return {
-      totalImages,
-      totalStorage: totalStorage._sum.size || 0,
     };
   }
 }
