@@ -96,6 +96,11 @@ Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it
 `optimizeAttempts = 0` to retry. Storage dirs map back to clients by `domain` **or** `id`
 (`client.domain || clientId`); a dir matching neither is left alone.
 
+Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
+`ORIGINAL_QUALITY` (default 100, uploads only). Every `@Cron` job runs inside
+`PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
+replicas a job runs on one of them; the others log a skip.
+
 ## Admin Module
 
 Separate auth domain — does **not** use `ClientInterceptor` or `X-API-Key`. Admin identity lives
