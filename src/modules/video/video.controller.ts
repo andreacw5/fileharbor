@@ -7,7 +7,6 @@ import {
   Param,
   Query,
   Body,
-  Req,
   Res,
   BadRequestException,
   ForbiddenException,
@@ -28,13 +27,9 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import { diskStorage } from 'multer';
-import * as os from 'os';
-import * as fs from 'fs';
-import * as fsp from 'fs/promises';
-import { randomUUID } from 'crypto';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { VideoService } from './video.service';
+import { sendVideo, videoMulterOptions } from './video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import {
@@ -49,20 +44,6 @@ import {
   UpdateVideoDto,
   DeleteVideoResponseDto,
 } from './dto';
-
-const videoMulterOptions = {
-  storage: diskStorage({
-    destination: os.tmpdir(),
-    filename: (_req, _file, cb) => cb(null, `${randomUUID()}.mp4.tmp`),
-  }),
-  fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
-    if (file.mimetype !== 'video/mp4') {
-      return cb(new BadRequestException('Only MP4 files are allowed'), false);
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: parseInt(process.env.MAX_VIDEO_SIZE || '524288000') },
-};
 
 @ApiTags('Videos')
 @ApiSecurity('api-key')
@@ -180,77 +161,24 @@ export class VideoController {
     @Param('id') id: string,
     @ClientId() clientId: string,
     @Query('download') download: string,
-    @Req() req: Request,
     @Res() res: Response,
   ) {
     const video = await this.videoService.getVideoStreamPath(id, clientId);
-    const safeName = video.originalName.replace(/["\n\r]/g, '_');
-    const disposition =
-      download === 'true'
-        ? `attachment; filename="${safeName}"`
-        : `inline; filename="${safeName}"`;
-
-    // See the admin stream route: X-Accel-Redirect sends an empty body and only
-    // works behind an nginx declaring the `/internal-videos/` internal location,
-    // so it is opt-in rather than inferred from NODE_ENV.
-    if (this.config.get<boolean>('video.xAccelRedirect')) {
-      if (
-        video.storagePath.includes('..') ||
-        video.storagePath.startsWith('/')
-      ) {
-        throw new ForbiddenException('Invalid storage path');
-      }
-      res.set({
-        'X-Accel-Redirect': `/internal-videos/${video.storagePath}/original.mp4`,
-        'Content-Type': 'video/mp4',
-        'Content-Disposition': disposition,
-      });
-      res.end();
-    } else {
-      const filePath = this.storageService.getVideoFilePath(
-        video.domain,
-        id,
-        'original',
-      );
-      const stat = await fsp.stat(filePath);
-      const range = (req.headers as any)?.range as string | undefined;
-
-      if (range) {
-        const [startStr, endStr] = range.replace(/^bytes=/, '').split('-');
-        const start = parseInt(startStr, 10);
-        const end = endStr
-          ? parseInt(endStr, 10)
-          : Math.min(start + 1_048_576, stat.size - 1);
-
-        if (
-          isNaN(start) ||
-          isNaN(end) ||
-          start < 0 ||
-          end >= stat.size ||
-          start > end
-        ) {
-          res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
-          return;
-        }
-
-        res.status(206).set({
-          'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': String(end - start + 1),
-          'Content-Type': 'video/mp4',
-          'Content-Disposition': disposition,
-        });
-        fs.createReadStream(filePath, { start, end }).pipe(res);
-      } else {
-        res.set({
-          'Content-Type': 'video/mp4',
-          'Content-Length': String(stat.size),
-          'Accept-Ranges': 'bytes',
-          'Content-Disposition': disposition,
-        });
-        fs.createReadStream(filePath).pipe(res);
-      }
-    }
+    sendVideo(
+      res,
+      {
+        ...video,
+        filePath: this.storageService.getVideoFilePath(
+          video.domain,
+          id,
+          'original',
+        ),
+      },
+      {
+        download: download === 'true',
+        xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
+      },
+    );
   }
 
   @Patch(':id')

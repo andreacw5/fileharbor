@@ -10,10 +10,8 @@ import {
   UseGuards,
   BadRequestException,
   NotFoundException,
-  ForbiddenException,
   UseInterceptors,
   UploadedFile,
-  Req,
   Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -27,13 +25,8 @@ import {
   ApiConsumes,
   ApiBody,
 } from '@nestjs/swagger';
-import { diskStorage } from 'multer';
-import * as os from 'os';
-import * as fs from 'fs';
-import * as fsp from 'fs/promises';
-import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
@@ -49,6 +42,7 @@ import {
   normalizeTagNames,
 } from '@/modules/tag/tag.utils';
 import { VideoService } from '@/modules/video/video.service';
+import { sendVideo, videoMulterOptions } from '@/modules/video/video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import {
@@ -56,21 +50,6 @@ import {
   AdminVideoResponseDto,
   AdminVideoListResponseDto,
 } from '../dto/admin-response.dto';
-
-const videoMulterOptions = {
-  storage: diskStorage({
-    destination: os.tmpdir(),
-    filename: (_req: any, _file: any, cb: any) =>
-      cb(null, `${randomUUID()}.mp4.tmp`),
-  }),
-  fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
-    if (file.mimetype !== 'video/mp4') {
-      return cb(new BadRequestException('Only MP4 files are allowed'), false);
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: parseInt(process.env.MAX_VIDEO_SIZE || '524288000') },
-};
 
 @ApiTags('Admin - Videos')
 @Controller('admin/videos')
@@ -373,7 +352,6 @@ export class VideosAdminController {
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('download') download: string,
-    @Req() req: Request,
     @Res() res: Response,
   ) {
     const video = await this.videoService.findAdminVideoById(id);
@@ -381,70 +359,17 @@ export class VideosAdminController {
     assertClientAccess(adminUser, video.clientId);
 
     const domain = (video as any).client?.domain || video.clientId;
-    const safeName = video.originalName.replace(/["\n\r]/g, '_');
-    const disposition =
-      download === 'true'
-        ? `attachment; filename="${safeName}"`
-        : `inline; filename="${safeName}"`;
-
-    // Opt-in, not NODE_ENV: X-Accel-Redirect delegates delivery to nginx and
-    // sends an empty body, which only works behind an nginx that declares the
-    // `/internal-videos/` internal location. Everywhere else the caller gets
-    // `video/mp4` with zero bytes and the player reports an unsupported format.
-    if (this.config.get<boolean>('video.xAccelRedirect')) {
-      if (
-        (video as any).storagePath.includes('..') ||
-        (video as any).storagePath.startsWith('/')
-      ) {
-        throw new ForbiddenException('Invalid storage path');
-      }
-      res.set({
-        'X-Accel-Redirect': `/internal-videos/${(video as any).storagePath}/original.mp4`,
-        'Content-Type': 'video/mp4',
-        'Content-Disposition': disposition,
-      });
-      res.end();
-    } else {
-      const filePath = this.storage.getVideoFilePath(domain, id, 'original');
-      const stat = await fsp.stat(filePath);
-      const range = req.headers?.range as string | undefined;
-
-      if (range) {
-        const [startStr, endStr] = range.replace(/^bytes=/, '').split('-');
-        const start = parseInt(startStr, 10);
-        const end = endStr
-          ? parseInt(endStr, 10)
-          : Math.min(start + 1_048_576, stat.size - 1);
-
-        if (
-          isNaN(start) ||
-          isNaN(end) ||
-          start < 0 ||
-          end >= stat.size ||
-          start > end
-        ) {
-          res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
-          return;
-        }
-
-        res.status(206).set({
-          'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': String(end - start + 1),
-          'Content-Type': 'video/mp4',
-          'Content-Disposition': disposition,
-        });
-        fs.createReadStream(filePath, { start, end }).pipe(res);
-      } else {
-        res.set({
-          'Content-Type': 'video/mp4',
-          'Content-Length': String(stat.size),
-          'Accept-Ranges': 'bytes',
-          'Content-Disposition': disposition,
-        });
-        fs.createReadStream(filePath).pipe(res);
-      }
-    }
+    sendVideo(
+      res,
+      {
+        ...video,
+        filePath: this.storage.getVideoFilePath(domain, id, 'original'),
+      },
+      {
+        download: download === 'true',
+        xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
+      },
+    );
   }
 
   @Delete(':id')
