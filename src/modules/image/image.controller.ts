@@ -215,7 +215,7 @@ export class ImageController {
     @Req() req?: import('express').Request,
   ) {
     const clientId = req['clientId'];
-    const creatorId = req['creatorId'];
+    const creatorId = req['externalCreatorId'];
     const requestType = query.info
       ? 'metadata'
       : query.download

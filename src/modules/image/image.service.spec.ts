@@ -758,6 +758,54 @@ describe('ImageService', () => {
     });
   });
 
+  describe('checkImageAccess', () => {
+    const privateImage = { ...mockImage, isPrivate: true };
+
+    beforeEach(() => {
+      mockPrismaService.image.findFirst.mockResolvedValue(privateImage);
+    });
+
+    it('grants the owner, identified by external id, access', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+
+      await expect(
+        service.checkImageAccess(mockImageId, mockClientId, mockExternalUserId),
+      ).resolves.toBe(true);
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            clientId_externalId: {
+              clientId: mockClientId,
+              externalId: mockExternalUserId,
+            },
+          },
+        }),
+      );
+    });
+
+    it('denies another creator of the same client', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue({
+        ...mockCreator,
+        id: 'someone-else',
+      });
+
+      await expect(
+        service.checkImageAccess(mockImageId, mockClientId, 'other-ext'),
+      ).resolves.toBe(false);
+    });
+
+    it('denies the same external id under another client', async () => {
+      await expect(
+        service.checkImageAccess(
+          mockImageId,
+          'other-client',
+          mockExternalUserId,
+        ),
+      ).resolves.toBe(false);
+      expect(mockPrismaService.creator.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
   describe('deleteExpiredShareLinks', () => {
     it('should delete expired share links', async () => {
       mockPrismaService.imageShareLink.deleteMany.mockResolvedValue({
