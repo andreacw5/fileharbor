@@ -31,7 +31,7 @@ import { diskStorage } from 'multer';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import type { Request, Response } from 'express';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
@@ -61,7 +61,7 @@ const videoMulterOptions = {
   storage: diskStorage({
     destination: os.tmpdir(),
     filename: (_req: any, _file: any, cb: any) =>
-      cb(null, `${uuidv4()}.mp4.tmp`),
+      cb(null, `${randomUUID()}.mp4.tmp`),
   }),
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
     if (file.mimetype !== 'video/mp4') {

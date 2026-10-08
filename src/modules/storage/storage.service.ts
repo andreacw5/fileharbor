@@ -8,7 +8,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import sharp from 'sharp';
 import * as os from 'os';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import fluentFfmpeg from 'fluent-ffmpeg';
 
 try {
@@ -336,7 +336,7 @@ export class StorageService {
     outputPath: string,
     quality: number = 80,
   ): Promise<void> {
-    const tmpJpeg = path.join(os.tmpdir(), `${uuidv4()}.jpg`);
+    const tmpJpeg = path.join(os.tmpdir(), `${randomUUID()}.jpg`);
     const FFMPEG_TIMEOUT_MS = 30_000;
 
     try {

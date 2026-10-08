@@ -11,7 +11,7 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 import { RouteHelperService } from '@/utils/route.utils';
 
@@ -595,7 +595,7 @@ export class AlbumService {
         'You can only generate tokens for your own albums',
       );
 
-    const token = uuidv4();
+    const token = randomUUID();
     const expiresAt = expiresInDays
       ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
       : null;

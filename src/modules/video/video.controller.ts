@@ -32,7 +32,7 @@ import { diskStorage } from 'multer';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { VideoService } from './video.service';
 import { StorageService } from '@/modules/storage/storage.service';
@@ -53,7 +53,7 @@ import {
 const videoMulterOptions = {
   storage: diskStorage({
     destination: os.tmpdir(),
-    filename: (_req, _file, cb) => cb(null, `${uuidv4()}.mp4.tmp`),
+    filename: (_req, _file, cb) => cb(null, `${randomUUID()}.mp4.tmp`),
   }),
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
     if (file.mimetype !== 'video/mp4') {

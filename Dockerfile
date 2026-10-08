@@ -5,13 +5,8 @@ ENV NODE_ENV=build
 # Create app directory
 WORKDIR /usr/src/app
 
-# Install pnpm and build dependencies
+# Install pnpm
 RUN npm install -g pnpm@10.14.0
-
-# Install build deps needed for native modules and prisma generation
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential python3 curl ca-certificates gcc g++ make && \
-    rm -rf /var/lib/apt/lists/*
 
 # Install app dependencies (including dev dependencies) for the build
 COPY package.json pnpm-lock.yaml .npmrc pnpm-workspace.yaml ./
@@ -38,11 +33,6 @@ WORKDIR /usr/src/app
 
 # Create a non-root user and group with specific UID/GID to match host user
 RUN groupadd -g 1001 app && useradd -u 1001 -g app -m app
-
-# Install runtime dependencies for Sharp image processing
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libvips-dev && \
-    rm -rf /var/lib/apt/lists/*
 
 # Copy built artifacts and dependencies from builder with ownership set during copy
 COPY --chown=app:app package.json pnpm-lock.yaml ./

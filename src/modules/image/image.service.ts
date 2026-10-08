@@ -17,7 +17,7 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { lastValueFrom } from 'rxjs';
 import { RouteHelperService } from '@/utils/route.utils';
@@ -75,7 +75,7 @@ export class ImageService {
     isPrivate?: boolean,
     username?: string,
   ) {
-    const imageId = uuidv4();
+    const imageId = randomUUID();
     this.logger.debug(
       `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`,
     );
@@ -710,7 +710,7 @@ export class ImageService {
       throw new NotFoundException('Image not found');
     }
 
-    const readToken = uuidv4();
+    const readToken = randomUUID();
 
     const shareLink = await this.prisma.imageShareLink.create({
       data: {
