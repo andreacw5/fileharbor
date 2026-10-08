@@ -32,15 +32,25 @@ export class StorageCleanupJob {
       for (const domain of domains) {
         try {
           // A client's storage dir is `client.domain || client.id`
-          const client = await this.prisma.client.findFirst({
+          const matches = await this.prisma.client.findMany({
             where: { OR: [{ domain }, { id: domain }] },
             select: { id: true },
+            take: 2,
           });
 
-          if (!client) {
+          if (matches.length === 0) {
             this.logger.warn(`Client not found for domain: ${domain}`);
             continue;
           }
+          // One client's domain equal to another's id: whose files these are
+          // is ambiguous, and guessing wrong deletes live media.
+          if (matches.length > 1) {
+            this.logger.warn(
+              `Skipping storage dir ${domain}: matches more than one client`,
+            );
+            continue;
+          }
+          const [client] = matches;
 
           // Clean orphaned images
           const imageIds = await this.storage.getClientImageIds(domain);
