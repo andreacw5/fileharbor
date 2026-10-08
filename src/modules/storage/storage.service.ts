@@ -309,11 +309,6 @@ export class StorageService {
     return `${this.getVideoPath(domain, videoId)}/${variant}.${ext}`;
   }
 
-  async getClientVideoIds(domain: string): Promise<string[]> {
-    const videosPath = path.join(this.getClientPath(domain), 'videos');
-    return this.listDirectories(videosPath);
-  }
-
   async copyFromTemp(srcPath: string, destPath: string): Promise<void> {
     try {
       this.validatePath(destPath);

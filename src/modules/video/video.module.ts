@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
 import { VideoService } from './video.service';
 import { VideoController } from './video.controller';
 import { StorageModule } from '@/modules/storage/storage.module';
@@ -9,21 +8,19 @@ import { CreatorModule } from '@/modules/creator/creator.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { RouteHelperModule } from '@/utils/route.utils';
 import { MetricsModule } from '@/modules/metrics/metrics.module';
-import { VideoCleanupJob } from './jobs/video.cleanup.job';
 
 @Module({
   imports: [
     StorageModule,
     PrismaModule,
     WebhookModule,
-    HttpModule,
     CreatorModule,
     ClientModule,
     RouteHelperModule,
     MetricsModule,
   ],
   controllers: [VideoController],
-  providers: [VideoService, VideoCleanupJob],
+  providers: [VideoService],
   exports: [VideoService],
 })
 export class VideoModule {}

@@ -66,7 +66,7 @@ export class ClientService {
   }
 
   /**
-   * Create a new client and seed its default 'administrator' and 'system' creators
+   * Create a new client and seed its default 'system' creator
    */
   async createClient(data: {
     name: string;
@@ -93,31 +93,14 @@ export class ClientService {
       this.mapUniqueConstraintViolation(error);
     }
 
-    // Check if creators exist for this client
-    const creatorCount = await this.prisma.creator.count({
-      where: { clientId: client.id },
+    // System creator for images without explicit creatorId
+    await this.prisma.creator.create({
+      data: {
+        clientId: client.id,
+        externalId: 'system',
+        username: 'system',
+      },
     });
-
-    // If no creators, create default creators
-    if (creatorCount === 0) {
-      // Create administrator creator
-      await this.prisma.creator.create({
-        data: {
-          clientId: client.id,
-          externalId: 'administrator',
-          username: 'administrator',
-        },
-      });
-
-      // Create system creator for images without explicit creatorId
-      await this.prisma.creator.create({
-        data: {
-          clientId: client.id,
-          externalId: 'system',
-          username: 'system',
-        },
-      });
-    }
 
     return client;
   }
