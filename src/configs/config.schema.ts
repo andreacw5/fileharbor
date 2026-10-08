@@ -33,6 +33,13 @@ export default () => ({
     compressionQuality: parseInt(process.env.COMPRESSION_QUALITY, 10) || 90,
   },
 
+  image: {
+    // Same contract as video.xAccelRedirect: opt-in, and only behind an nginx
+    // declaring an internal `/internal-images/` location aliased to STORAGE_PATH.
+    // Without one the response is headers with an empty body.
+    xAccelRedirect: process.env.IMAGE_X_ACCEL_REDIRECT === 'true',
+  },
+
   // Video Processing
   video: {
     maxVideoSize: parseInt(process.env.MAX_VIDEO_SIZE, 10) || 524288000,

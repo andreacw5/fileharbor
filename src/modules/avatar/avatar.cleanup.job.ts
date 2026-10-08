@@ -80,6 +80,7 @@ export class AvatarCleanupJob {
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
       where: { id: avatar.clientId },
+      select: { domain: true },
     });
     const domain = client?.domain || avatar.clientId;
 

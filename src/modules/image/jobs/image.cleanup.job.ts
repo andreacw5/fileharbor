@@ -101,6 +101,7 @@ export class ImageCleanupJob {
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
       where: { id: image.clientId },
+      select: { domain: true },
     });
     const domain = client?.domain || image.clientId;
 
@@ -123,6 +124,7 @@ export class ImageCleanupJob {
 
     // Save back
     await this.storage.saveFile(originalPath, optimizedBuffer);
+    await this.storage.clearImageVariants(domain, imageId);
 
     // Re-create thumbnail with optimization
     const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');

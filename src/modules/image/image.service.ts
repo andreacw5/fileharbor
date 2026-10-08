@@ -4,7 +4,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  OnModuleDestroy,
 } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
@@ -35,9 +37,25 @@ import {
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
 
+// On-demand resizes cached per image; past this many, new ones are served but
+// not stored, so arbitrary width/height/quality combinations can't fill the disk.
+const MAX_CACHED_VARIANTS = 20;
+
+export interface ImageFileOptions {
+  width?: number;
+  height?: number;
+  format?: 'webp' | 'jpeg' | 'png';
+  quality?: number;
+  thumb?: boolean;
+  /** Return only `filePath` when the file is already on disk (X-Accel-Redirect). */
+  skipDiskRead?: boolean;
+}
+
 @Injectable()
-export class ImageService {
+export class ImageService implements OnModuleDestroy {
   private readonly logger = new Logger(ImageService.name);
+  // ponytail: views buffered in memory, up to VIEW_FLUSH_MS of counts lost on a crash
+  private pendingViews = new Map<string, number>();
   private readonly originalQuality: number;
   private readonly thumbnailQuality: number;
   private readonly thumbnailSize: number;
@@ -92,6 +110,7 @@ export class ImageService {
       // Get client to retrieve domain
       const client = await this.prisma.client.findUnique({
         where: { id: clientId },
+        select: { domain: true },
       });
       if (!client) {
         this.logger.error(
@@ -142,12 +161,15 @@ export class ImageService {
 
       // Convert to WebP for original (high quality)
       this.logger.debug(
-        `[uploadImage] Converting to WebP - ID: ${imageId}, Quality: ${this.originalQuality}`,
+        `[uploadImage] Encoding WebP + thumbnail - ID: ${imageId}, Quality: ${this.originalQuality}`,
       );
-      const webpBuffer = await this.storage.convertToWebP(
-        file.buffer,
-        this.originalQuality,
-      );
+      const { original: webpBuffer, thumb: thumbBuffer } =
+        await this.storage.encodeWebpWithThumbnail(
+          file.buffer,
+          this.originalQuality,
+          this.thumbnailSize,
+          this.thumbnailQuality,
+        );
 
       // Save original
       this.logger.debug(
@@ -160,15 +182,6 @@ export class ImageService {
       );
       await this.storage.saveFile(originalPath, webpBuffer);
 
-      // Create thumbnail (lower quality for smaller size)
-      this.logger.debug(
-        `[uploadImage] Creating thumbnail - ID: ${imageId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`,
-      );
-      const thumbBuffer = await this.storage.createThumbnail(
-        webpBuffer,
-        this.thumbnailSize,
-        this.thumbnailQuality,
-      );
       const thumbnailPath = this.storage.getImageFilePath(
         domain,
         imageId,
@@ -257,16 +270,18 @@ export class ImageService {
   /**
    * Get image by ID
    */
-  async getImageById(imageId: string, clientId?: string) {
+  async getImageById(imageId: string, clientId?: string, withTags = true) {
     const where: any = { id: imageId };
     if (clientId) {
       where.clientId = clientId;
     }
 
+    // Tags cost two more queries; serving the file doesn't need them
     const image = await this.prisma.image.findFirst({
       where,
       include: {
-        imageTags: {
+        client: { select: { domain: true } },
+        imageTags: withTags && {
           include: {
             tag: {
               select: {
@@ -286,57 +301,72 @@ export class ImageService {
   }
 
   /**
-   * Get image file
+   * Resolve the file for a view of an already-loaded image (`image.client` must
+   * carry `domain`). Thumbnails, untouched originals and cached resizes come from
+   * disk; a resize not cached yet is made and stored under `{imageDir}/variants/`.
+   * `filePath` is set whenever the bytes exist on disk; `buffer` is set unless
+   * `skipDiskRead` asked to leave an on-disk file unread.
    */
   async getImageFile(
-    imageId: string,
-    width?: number,
-    height?: number,
-    format: 'webp' | 'jpeg' | 'png' = 'webp',
-    quality: number = 85,
-    thumb: boolean = false,
-  ): Promise<{ buffer: Buffer; mimeType: string }> {
-    const image = await this.getImageById(imageId);
-
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: image.clientId },
+    image: { id: string; clientId: string; client?: { domain: string | null } },
+    {
+      width,
+      height,
+      format = 'webp',
+      quality = 85,
+      thumb = false,
+      skipDiskRead = false,
+    }: ImageFileOptions = {},
+  ): Promise<{ mimeType: string; filePath?: string; buffer?: Buffer }> {
+    const domain = image.client?.domain || image.clientId;
+    const fromDisk = async (filePath: string, mimeType: string) => ({
+      mimeType,
+      filePath,
+      buffer: skipDiskRead ? undefined : await this.storage.readFile(filePath),
     });
-    const domain = client?.domain || image.clientId;
 
-    // If thumbnail explicitly requested
     if (thumb) {
-      const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+      const thumbPath = this.storage.getImageFilePath(
+        domain,
+        image.id,
+        'thumb',
+      );
       if (await this.storage.fileExists(thumbPath)) {
-        const buffer = await this.storage.readFile(thumbPath);
-        return { buffer, mimeType: 'image/webp' };
+        return fromDisk(thumbPath, 'image/webp');
       }
     }
 
-    // Load original
     const originalPath = this.storage.getImageFilePath(
       domain,
-      imageId,
+      image.id,
       'original',
     );
-    const originalBuffer = await this.storage.readFile(originalPath);
-
-    // If no resize needed and format matches
-    if (!width && !height && format === 'webp') {
-      return { buffer: originalBuffer, mimeType: 'image/webp' };
+    if (thumb || (!width && !height && format === 'webp')) {
+      return fromDisk(originalPath, 'image/webp');
     }
 
-    // Resize on-demand
-    const resizedBuffer = await this.storage.resizeImage(
-      originalBuffer,
+    const mimeType = `image/${format}`;
+    const variantsDir = this.storage.getImageVariantsPath(domain, image.id);
+    const variantPath = `${variantsDir}/${width ?? ''}x${height ?? ''}-q${quality}.${format}`;
+    if (await this.storage.fileExists(variantPath)) {
+      return fromDisk(variantPath, mimeType);
+    }
+
+    const buffer = await this.storage.resizeImage(
+      await this.storage.readFile(originalPath),
       width,
       height,
       format,
       quality,
     );
-
-    const mimeType = `image/${format}`;
-    return { buffer: resizedBuffer, mimeType };
+    if ((await this.storage.countEntries(variantsDir)) < MAX_CACHED_VARIANTS) {
+      this.storage
+        .saveFile(variantPath, buffer)
+        .catch((e) =>
+          this.logger.warn(`[getImageFile] Variant not cached: ${e.message}`),
+        );
+    }
+    return { mimeType, buffer };
   }
 
   /**
@@ -657,29 +687,40 @@ export class ImageService {
   }
 
   /**
-   * Increment views counter
+   * Count a view. Buffered and written in one statement every few seconds:
+   * one UPDATE per view was a write on the hottest read path.
    */
   async incrementViews(imageId: string) {
-    await this.prisma.image.update({
-      where: { id: imageId },
-      data: {
-        views: { increment: 1 },
-      },
-    });
+    this.pendingViews.set(imageId, (this.pendingViews.get(imageId) ?? 0) + 1);
+  }
+
+  @Interval(10_000)
+  async flushViews() {
+    if (this.pendingViews.size === 0) return;
+    const batch = this.pendingViews;
+    this.pendingViews = new Map();
+    // Raw SQL on purpose: Prisma would bump updatedAt, which feeds the ETag
+    await this.prisma.$executeRaw`
+      UPDATE images AS i SET views = i.views + v.n
+      FROM unnest(${[...batch.keys()]}::text[], ${[...batch.values()]}::int[]) AS v(id, n)
+      WHERE i.id = v.id`.catch((e) =>
+      this.logger.warn(
+        `[flushViews] Dropped ${batch.size} counts: ${e.message}`,
+      ),
+    );
+  }
+
+  async onModuleDestroy() {
+    await this.flushViews();
   }
 
   /**
-   * Increment downloads counter
+   * Increment downloads counter (raw SQL so updatedAt, and the ETag, stay put)
    */
   async incrementDownloads(imageId: string, clientId: string) {
-    await this.getImageById(imageId, clientId);
-
-    await this.prisma.image.update({
-      where: { id: imageId },
-      data: {
-        downloads: { increment: 1 },
-      },
-    });
+    await this.prisma.$executeRaw`
+      UPDATE images SET downloads = downloads + 1
+      WHERE id = ${imageId} AND "clientId" = ${clientId}`;
   }
 
   /**
@@ -807,6 +848,7 @@ export class ImageService {
       include: {
         image: {
           include: {
+            client: { select: { domain: true } },
             imageTags: {
               include: {
                 tag: {
@@ -837,13 +879,16 @@ export class ImageService {
    * Check if creator has access to image (for private images)
    */
   async checkImageAccess(
-    imageId: string,
+    image: {
+      id: string;
+      clientId: string;
+      creatorId: string;
+      isPrivate: boolean;
+    },
     clientId: string,
     externalCreatorId?: string,
     shareToken?: string,
   ): Promise<boolean> {
-    const image = await this.getImageById(imageId);
-
     // If image is not private, everyone has access
     if (!image.isPrivate) {
       return true;
@@ -869,7 +914,7 @@ export class ImageService {
         where: { readToken: shareToken },
       });
 
-      if (shareLink && shareLink.imageId === imageId) {
+      if (shareLink && shareLink.imageId === image.id) {
         // Check if link has not expired
         if (!shareLink.expiresAt || shareLink.expiresAt > new Date()) {
           return true;
@@ -915,7 +960,7 @@ export class ImageService {
     }
 
     const hasAccess = await this.checkImageAccess(
-      imageId,
+      image,
       clientId,
       externalCreatorId,
       token,
@@ -1279,6 +1324,7 @@ export class ImageService {
 
       // Save compressed file, replacing the original
       await this.storage.saveFile(originalPath, compressedBuffer);
+      await this.storage.clearImageVariants(domain, imageId);
       this.logger.debug(
         `[compressImageWithTinify] Compressed file saved - ID: ${imageId}`,
       );

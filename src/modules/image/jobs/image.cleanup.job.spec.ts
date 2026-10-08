@@ -18,6 +18,7 @@ describe('ImageCleanupJob.optimizeImages', () => {
       }),
       optimizeImage: jest.fn().mockResolvedValue(Buffer.from('opt')),
       saveFile: jest.fn().mockResolvedValue(undefined),
+      clearImageVariants: jest.fn().mockResolvedValue(undefined),
       createThumbnail: jest.fn().mockResolvedValue(Buffer.from('thumb')),
     };
     const prisma = {

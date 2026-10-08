@@ -52,6 +52,7 @@ export const configValidationSchema = Joi.object({
   // Only enable behind an nginx that serves the `/internal-videos/` internal
   // location; otherwise video responses come back empty.
   VIDEO_X_ACCEL_REDIRECT: Joi.boolean().default(false),
+  IMAGE_X_ACCEL_REDIRECT: Joi.boolean().default(false),
 
   // Admin
   ADMIN_SECRET: Joi.string().required(),

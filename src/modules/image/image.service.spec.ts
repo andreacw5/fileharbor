@@ -94,6 +94,7 @@ describe('ImageService', () => {
 
   // Mock services
   const mockPrismaService = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     client: {
       findUnique: jest.fn(),
     },
@@ -136,11 +137,15 @@ describe('ImageService', () => {
     readFile: jest.fn(),
     deleteDirectory: jest.fn(),
     getImageMetadata: jest.fn(),
-    convertToWebP: jest.fn(),
-    createThumbnail: jest.fn(),
+    encodeWebpWithThumbnail: jest.fn(),
     getDefaultImage: jest.fn(),
     resizeImage: jest.fn(),
     fileExists: jest.fn(),
+    getImageVariantsPath: jest.fn(
+      (d: string, id: string) => `storage/${d}/images/${id}/variants`,
+    ),
+    countEntries: jest.fn().mockResolvedValue(0),
+    clearImageVariants: jest.fn(),
   };
 
   const mockConfigService = {
@@ -222,12 +227,10 @@ describe('ImageService', () => {
       mockPrismaService.creator.upsert.mockResolvedValue(mockCreator);
       mockCreatorServiceMock.resolveCreator.mockResolvedValue(mockCreator);
       mockStorageService.getImageMetadata.mockResolvedValue(mockImageMetadata);
-      mockStorageService.convertToWebP.mockResolvedValue(
-        Buffer.from('webp-data'),
-      );
-      mockStorageService.createThumbnail.mockResolvedValue(
-        Buffer.from('thumb-data'),
-      );
+      mockStorageService.encodeWebpWithThumbnail.mockResolvedValue({
+        original: Buffer.from('webp-data'),
+        thumb: Buffer.from('thumb-data'),
+      });
       mockStorageService.getImagePath.mockReturnValue(
         `storage/${mockDomain}/images/${mockImageId}`,
       );
@@ -250,9 +253,11 @@ describe('ImageService', () => {
       expect(result.originalName).toBe('test.jpg');
       expect(mockPrismaService.client.findUnique).toHaveBeenCalledWith({
         where: { id: mockClientId },
+        select: { domain: true },
       });
-      expect(mockStorageService.convertToWebP).toHaveBeenCalled();
-      expect(mockStorageService.createThumbnail).toHaveBeenCalled();
+      expect(mockStorageService.encodeWebpWithThumbnail).toHaveBeenCalledTimes(
+        1,
+      );
       expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2); // original + thumbnail
       expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
         mockClientId,
@@ -436,6 +441,7 @@ describe('ImageService', () => {
           clientId: mockClientId,
         },
         include: {
+          client: { select: { domain: true } },
           imageTags: {
             include: {
               tag: {
@@ -540,69 +546,109 @@ describe('ImageService', () => {
   });
 
   describe('getImageFile', () => {
+    const image = { ...mockImage, client: { domain: mockDomain } };
+    const original = `storage/${mockDomain}/images/${mockImageId}/original.webp`;
+
     beforeEach(() => {
-      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
-      mockStorageService.getImageFilePath.mockReturnValue(
-        `storage/${mockDomain}/images/${mockImageId}/original.webp`,
+      mockStorageService.getImageFilePath.mockImplementation(
+        (d: string, id: string, v: string) =>
+          `storage/${d}/images/${id}/${v}.webp`,
       );
       mockStorageService.readFile.mockResolvedValue(Buffer.from('image-data'));
       mockStorageService.fileExists.mockResolvedValue(true);
+      mockStorageService.saveFile.mockResolvedValue(undefined);
+      mockStorageService.resizeImage.mockResolvedValue(Buffer.from('resized'));
     });
 
-    it('should return image file', async () => {
-      const result = await service.getImageFile(mockImageId);
+    it('serves the original from disk without touching the database', async () => {
+      const result = await service.getImageFile(image);
 
-      expect(result).toBeDefined();
       expect(result.buffer).toBeInstanceOf(Buffer);
       expect(result.mimeType).toBe('image/webp');
+      expect(result.filePath).toBe(original);
+      expect(mockPrismaService.image.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.client.findUnique).not.toHaveBeenCalled();
     });
 
-    it('should return thumbnail when requested', async () => {
-      mockStorageService.getImageFilePath.mockReturnValue(
+    it('leaves an on-disk file unread when asked (X-Accel-Redirect)', async () => {
+      const result = await service.getImageFile(image, { skipDiskRead: true });
+
+      expect(result.buffer).toBeUndefined();
+      expect(result.filePath).toBe(original);
+      expect(mockStorageService.readFile).not.toHaveBeenCalled();
+    });
+
+    it('returns the thumbnail when requested', async () => {
+      const result = await service.getImageFile(image, { thumb: true });
+
+      expect(result.filePath).toBe(
         `storage/${mockDomain}/images/${mockImageId}/thumb.webp`,
       );
-
-      const result = await service.getImageFile(
-        mockImageId,
-        undefined,
-        undefined,
-        'webp',
-        85,
-        true,
-      );
-
-      expect(mockStorageService.getImageFilePath).toHaveBeenCalledWith(
-        mockDomain,
-        mockImageId,
-        'thumb',
-      );
-      expect(result.buffer).toBeInstanceOf(Buffer);
     });
 
-    it('should resize image with custom dimensions', async () => {
-      mockStorageService.resizeImage = jest
-        .fn()
-        .mockResolvedValue(Buffer.from('resized-data'));
+    it('resizes once, then serves the cached variant', async () => {
+      mockStorageService.fileExists.mockResolvedValue(false);
+      const first = await service.getImageFile(image, {
+        width: 800,
+        height: 600,
+        format: 'jpeg',
+      });
+      const variant = `storage/${mockDomain}/images/${mockImageId}/variants/800x600-q85.jpeg`;
 
-      const result = await service.getImageFile(mockImageId, 800, 600);
-
-      expect(result).toBeDefined();
-    });
-
-    it('should convert image to different format', async () => {
-      mockStorageService.resizeImage = jest
-        .fn()
-        .mockResolvedValue(Buffer.from('converted-data'));
-
-      const result = await service.getImageFile(
-        mockImageId,
-        undefined,
-        undefined,
-        'jpeg',
+      expect(first.mimeType).toBe('image/jpeg');
+      expect(first.buffer).toEqual(Buffer.from('resized'));
+      expect(mockStorageService.saveFile).toHaveBeenCalledWith(
+        variant,
+        Buffer.from('resized'),
       );
 
-      expect(result.mimeType).toBe('image/jpeg');
+      mockStorageService.fileExists.mockResolvedValue(true);
+      const second = await service.getImageFile(image, {
+        width: 800,
+        height: 600,
+        format: 'jpeg',
+      });
+      expect(second.filePath).toBe(variant);
+      expect(mockStorageService.resizeImage).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops caching variants past the per-image cap', async () => {
+      mockStorageService.fileExists.mockResolvedValue(false);
+      mockStorageService.countEntries.mockResolvedValueOnce(20);
+
+      const result = await service.getImageFile(image, { width: 123 });
+
+      expect(result.buffer).toEqual(Buffer.from('resized'));
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('view and download counters', () => {
+    it('batches views into one UPDATE per flush', async () => {
+      await service.incrementViews('a');
+      await service.incrementViews('a');
+      await service.incrementViews('b');
+      expect(mockPrismaService.$executeRaw).not.toHaveBeenCalled();
+
+      await service.flushViews();
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
+      const values = mockPrismaService.$executeRaw.mock.calls[0].slice(1);
+      expect(values).toEqual([
+        ['a', 'b'],
+        [2, 1],
+      ]);
+
+      await service.flushViews();
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('never writes through Prisma update (which would bump updatedAt / the ETag)', async () => {
+      await service.incrementViews('a');
+      await service.flushViews();
+      await service.incrementDownloads('a', mockClientId);
+
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -769,7 +815,11 @@ describe('ImageService', () => {
       mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
 
       await expect(
-        service.checkImageAccess(mockImageId, mockClientId, mockExternalUserId),
+        service.checkImageAccess(
+          privateImage,
+          mockClientId,
+          mockExternalUserId,
+        ),
       ).resolves.toBe(true);
       expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -790,14 +840,14 @@ describe('ImageService', () => {
       });
 
       await expect(
-        service.checkImageAccess(mockImageId, mockClientId, 'other-ext'),
+        service.checkImageAccess(privateImage, mockClientId, 'other-ext'),
       ).resolves.toBe(false);
     });
 
     it('denies the same external id under another client', async () => {
       await expect(
         service.checkImageAccess(
-          mockImageId,
+          privateImage,
           'other-client',
           mockExternalUserId,
         ),

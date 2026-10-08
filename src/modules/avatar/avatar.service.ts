@@ -127,12 +127,15 @@ export class AvatarService {
 
       // Convert to WebP for original (high quality)
       this.logger.debug(
-        `[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.originalQuality}`,
+        `[uploadAvatar] Encoding WebP + thumbnail - Client: ${clientId}, Quality: ${this.originalQuality}`,
       );
-      const webpBuffer = await this.storage.convertToWebP(
-        file.buffer,
-        this.originalQuality,
-      );
+      const { original: webpBuffer, thumb: thumbBuffer } =
+        await this.storage.encodeWebpWithThumbnail(
+          file.buffer,
+          this.originalQuality,
+          this.thumbnailSize,
+          this.thumbnailQuality,
+        );
 
       // Save original avatar (renamed to original.webp for consistency)
       this.logger.debug(
@@ -145,15 +148,6 @@ export class AvatarService {
       );
       await this.storage.saveFile(originalPath, webpBuffer);
 
-      // Create and save thumbnail (lower quality for smaller size)
-      this.logger.debug(
-        `[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`,
-      );
-      const thumbBuffer = await this.storage.createThumbnail(
-        webpBuffer,
-        this.thumbnailSize,
-        this.thumbnailQuality,
-      );
       const thumbnailPath = this.storage.getAvatarFilePath(
         domain,
         creatorId,
