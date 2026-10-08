@@ -1,9 +1,5 @@
 import { Controller, Get, UseInterceptors } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { ClientService } from './client.service';
 import { ClientId } from './decorators/client.decorator';
