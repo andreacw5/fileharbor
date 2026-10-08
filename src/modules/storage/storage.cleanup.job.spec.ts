@@ -13,6 +13,9 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
   const clients = [
     { id: 'client-nodomain', domain: null },
     { id: 'client-domain', domain: 'example.com' },
+    // Two clients claiming one dir: an id equal to another client's domain.
+    { id: 'shared.example', domain: null },
+    { id: 'client-squatter', domain: 'shared.example' },
   ];
   const images = [
     { clientId: 'client-nodomain', storagePath: '' }, // set in beforeEach
@@ -21,12 +24,10 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
 
   const prisma = {
     client: {
-      findFirst: jest.fn(async ({ where }) => {
+      findMany: jest.fn(async ({ where }) => {
         const [byDomain, byId] = where.OR;
-        return (
-          clients.find(
-            (c) => c.domain === byDomain.domain || c.id === byId.id,
-          ) ?? null
+        return clients.filter(
+          (c) => c.domain === byDomain.domain || c.id === byId.id,
         );
       }),
     },
@@ -93,5 +94,13 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
 
     expect(await exists(fresh)).toBe(true);
+  });
+
+  it('leaves a storage dir that maps to more than one client untouched', async () => {
+    const ambiguous = await makeImageDir('shared.example', 'img');
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(ambiguous)).toBe(true);
   });
 });

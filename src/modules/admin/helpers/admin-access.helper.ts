@@ -42,3 +42,20 @@ export function buildClientWhere(
   }
   return { clientId: { in: admin.allowedClientIds } };
 }
+
+/**
+ * A client's tenant mapping decides who sees it. Without `fullAccess` an admin
+ * may map a client to their own tenant or unmap it, never hand it to (or pull
+ * it into) another tenant.
+ */
+export function assertTenantSlugAllowed(
+  admin: AdminJwtPayload,
+  tenantSlug: string | null | undefined,
+): void {
+  if (admin.fullAccess || !tenantSlug || tenantSlug === admin.tenantSlug) {
+    return;
+  }
+  throw new ForbiddenException(
+    'bastionTenantSlug may only be your own tenant or null',
+  );
+}

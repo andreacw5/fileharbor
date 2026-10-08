@@ -41,10 +41,20 @@ export class StorageCleanupJob {
         for (const domain of domains) {
           try {
             // A client's storage dir is `client.domain || client.id`
-            const client = await this.prisma.client.findFirst({
+            const matches = await this.prisma.client.findMany({
               where: { OR: [{ domain }, { id: domain }] },
               select: { id: true },
+              take: 2,
             });
+            if (matches.length > 1) {
+              // One client's domain equal to another's id: whose files these are
+              // is ambiguous, and guessing wrong deletes live media.
+              this.logger.warn(
+                `Skipping storage dir ${domain}: matches more than one client`,
+              );
+              continue;
+            }
+            const [client] = matches;
 
             if (!client) {
               this.logger.warn(`Client not found for domain: ${domain}`);

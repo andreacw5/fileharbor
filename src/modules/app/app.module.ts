@@ -4,9 +4,9 @@ import {
   NestModule,
   RequestMethod,
 } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
@@ -145,6 +145,8 @@ function sanitizeLoggedUrl(url: string): string {
     MeModule,
   ],
   providers: [
+    // Rate limiting applies to every route; opt out with `@SkipThrottle()`.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Writes the Bastion audit event declared by `@Audit()` on an admin handler.
     // Registered globally rather than per controller so a new admin route cannot
     // silently skip auditing: a handler with no `@Audit()` is a no-op here.
