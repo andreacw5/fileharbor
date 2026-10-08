@@ -9,7 +9,14 @@ export class AdminClientResponseDto {
   @ApiPropertyOptional() @Expose() domain?: string;
   @ApiProperty() @Expose() active: boolean;
   @ApiProperty() @Expose() webhookEnabled: boolean;
-  @ApiPropertyOptional() @Expose() webhookUrl?: string;
+  @ApiPropertyOptional({
+    description: 'Discord webhook URL, token masked',
+    example: 'https://discord.com/api/webhooks/123456/****',
+  })
+  @Expose()
+  // The last path segment is the webhook's secret token.
+  @Transform(({ value }) => value?.replace(/\/[^/?]+(\?.*)?$/, '/****'))
+  webhookUrl?: string;
   @ApiProperty({
     description: 'Whether Tinify compression is enabled for this client',
   })

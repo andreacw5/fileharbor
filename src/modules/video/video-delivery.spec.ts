@@ -45,6 +45,9 @@ describe('sendVideo', () => {
     const full = await fetch(`${base}/original.mp4`);
     expect(full.status).toBe(200);
     expect(full.headers.get('content-type')).toBe('video/mp4');
+    expect(full.headers.get('content-disposition')).toBe(
+      `inline; filename="clip.mp4"; filename*=UTF-8''clip.mp4`,
+    );
     expect((await full.arrayBuffer()).byteLength).toBe(1000);
 
     const part = await fetch(`${base}/original.mp4`, {

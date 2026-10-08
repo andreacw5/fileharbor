@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
+import { contentDisposition } from '@/utils/content-disposition';
 
 /** Multer options shared by the client and admin MP4 upload routes. */
 export const videoMulterOptions = {
@@ -40,10 +41,12 @@ export function sendVideo(
     throw new ForbiddenException('Invalid storage path');
   }
 
-  const safeName = video.originalName.replace(/["\n\r]/g, '_');
   res.set({
     'Content-Type': 'video/mp4',
-    'Content-Disposition': `${opts.download ? 'attachment' : 'inline'}; filename="${safeName}"`,
+    'Content-Disposition': contentDisposition(
+      video.originalName,
+      opts.download ? 'attachment' : 'inline',
+    ),
   });
 
   if (opts.xAccelRedirect) {

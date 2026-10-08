@@ -26,12 +26,15 @@ import { AvatarService } from './avatar.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { ClientId } from '@/modules/client/decorators/client.decorator';
 import { Public } from '@heyatom/bastion-client/nest';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadAvatarDto,
   AvatarResponseDto,
   GetAvatarDto,
   DeleteAvatarResponseDto,
 } from './dto';
+import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
+import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Avatars')
 @ApiSecurity('api-key')
@@ -63,7 +66,9 @@ export class AvatarController {
     status: 401,
     description: 'Missing or invalid X-API-Key header',
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { ...IMAGE_UPLOAD_LIMITS, files: 1 } }),
+  )
   async uploadAvatar(
     @ClientId() clientId: string,
     @UploadedFile() file: Express.Multer.File,
@@ -106,6 +111,8 @@ export class AvatarController {
   }
 
   @Public()
+  // Media delivery: one page can embed dozens of these.
+  @SkipThrottle()
   @Get(':externalUserId')
   @ApiOperation({
     summary: 'Get creator avatar (public endpoint)',
@@ -118,6 +125,8 @@ export class AvatarController {
     @Param('externalUserId') externalUserId: string,
     @Query() query: GetAvatarDto,
     @Res() res: Response,
+    // Set only when a valid X-API-Key is sent (the route is public).
+    @ClientId() clientId: string | undefined,
   ) {
     this.logger.debug(
       `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Format: ${query.format ?? 'webp'}, Download: ${query.download}`,
@@ -126,8 +135,10 @@ export class AvatarController {
     try {
       // If info mode, return metadata as JSON
       if (query.info) {
-        const avatar =
-          await this.avatarService.getAvatarByExternalId(externalUserId);
+        const avatar = await this.avatarService.getAvatarByExternalId(
+          clientId,
+          externalUserId,
+        );
         const metadata = this.avatarService.getAvatarMetadata(
           avatar,
           externalUserId,
@@ -140,6 +151,7 @@ export class AvatarController {
 
       // Otherwise return the file
       const { buffer, mimeType } = await this.avatarService.getAvatarFile(
+        clientId,
         externalUserId,
         query.thumb,
         query.format,
@@ -152,11 +164,13 @@ export class AvatarController {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=86400',
         ETag: `"avatar-${externalUserId}${variant}"`,
+        // The API key picks the client, hence the creator: keep caches apart.
+        Vary: 'X-API-Key',
       };
 
       if (query.download) {
         const filename = `avatar-${externalUserId}${variant}.${format === 'jpeg' ? 'jpg' : format}`;
-        headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+        headers['Content-Disposition'] = contentDisposition(filename);
         this.logger.debug(`[getAvatar] Download - Creator: ${externalUserId}`);
       } else {
         this.logger.debug(

@@ -5,6 +5,14 @@ import { firstValueFrom, catchError, of } from 'rxjs';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { formatFileSize } from '@/modules/webhook/helpers/file-size.helper';
 
+/**
+ * Webhooks only ever post to Discord. Pinning the URL shape keeps a client's
+ * webhook from being pointed at internal hosts (SSRF). Checked on write (DTO)
+ * and again before every send, for rows stored before the check existed.
+ */
+export const DISCORD_WEBHOOK_URL =
+  /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+(?:\?[\w=&-]*)?$/;
+
 export interface WebhookPayload {
   event: string;
   clientId: string;
@@ -60,6 +68,13 @@ export class WebhookService {
       if (!client || !client.webhookEnabled || !client.webhookUrl) {
         this.logger.debug(
           `[sendWebhook] Webhooks disabled for client ${clientId} or URL not configured`,
+        );
+        return;
+      }
+
+      if (!DISCORD_WEBHOOK_URL.test(client.webhookUrl)) {
+        this.logger.warn(
+          `[sendWebhook] Skipped: webhook URL of client ${clientId} is not a Discord webhook`,
         );
         return;
       }

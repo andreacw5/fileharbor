@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
@@ -10,7 +11,12 @@ import { APP_VERSION } from '@/common/version';
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create(AppModule, { bufferLogs: true });
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+      bufferLogs: true,
+    });
+    // One proxy hop (nginx): req.ip is the client, so the throttler keys on it
+    // rather than on the proxy's address.
+    app.set('trust proxy', 1);
     app.useLogger(app.get(PinoLogger));
 
     // Global validation pipe

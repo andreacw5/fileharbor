@@ -39,6 +39,8 @@ export class ClientInterceptor implements NestInterceptor {
           const client = await this.clientService.validateClient(apiKey);
           request.clientId = client.id;
           request.client = client;
+          // Lets the owner of a private image read it on GET /images/:id.
+          request.externalCreatorId = resolveExternalCreatorId(request);
         } catch (e) {
           // Invalid API key on public endpoint, continue without client
         }
@@ -49,7 +51,6 @@ export class ClientInterceptor implements NestInterceptor {
 
     // Get API key from header
     const apiKey = request.headers['x-api-key'];
-    const externalCreatorIdHeader = request.headers['x-user-id'];
 
     if (!apiKey) {
       throw new UnauthorizedException('API key required (X-API-Key header)');
@@ -62,24 +63,21 @@ export class ClientInterceptor implements NestInterceptor {
     request.clientId = client.id;
     request.client = client;
 
-    // Resolve the creator's external id. The wire names stay `X-User-Id` /
-    // `externalUserId`: they name a creator in the *calling* system, which
-    // FileHarbor records as a Creator.
-    let externalCreatorId = externalCreatorIdHeader;
-    if (!externalCreatorId) {
-      externalCreatorId =
-        request.query?.externalUserId || request.body?.externalUserId;
-    }
-    // Treat empty string as missing
-    if (
-      typeof externalCreatorId === 'string' &&
-      externalCreatorId.trim() === ''
-    ) {
-      externalCreatorId = undefined;
-    }
     // Services handle creator lookup/creation from here
-    request.externalCreatorId = externalCreatorId;
+    request.externalCreatorId = resolveExternalCreatorId(request);
 
     return next.handle();
   }
+}
+
+// The wire names stay `X-User-Id` / `externalUserId`: they name a creator in
+// the *calling* system, which FileHarbor records as a Creator.
+function resolveExternalCreatorId(request: any): string | undefined {
+  const value =
+    request.headers['x-user-id'] ||
+    request.query?.externalUserId ||
+    request.body?.externalUserId;
+  // Treat empty string as missing
+  if (typeof value === 'string' && value.trim() === '') return undefined;
+  return value;
 }

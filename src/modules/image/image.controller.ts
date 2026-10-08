@@ -29,13 +29,17 @@ import {
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ImageService } from './image.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  IMAGE_UPLOAD_LIMITS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import {
   ClientId,
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
 import { Public } from '@heyatom/bastion-client/nest';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadImageDto,
   GetImageDto,
@@ -48,6 +52,7 @@ import {
   ListImagesResponseDto,
 } from './dto';
 import { Readable } from 'node:stream';
+import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Images')
 @ApiSecurity('api-key')
@@ -93,7 +98,9 @@ export class ImageController {
   })
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { ...IMAGE_UPLOAD_LIMITS, files: 1 } }),
+  )
   async uploadImage(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,
@@ -177,6 +184,8 @@ export class ImageController {
   }
 
   @Public()
+  // Media delivery: one page can embed dozens of these.
+  @SkipThrottle()
   @Get(':imageId')
   @ApiOperation({
     summary: 'Get image',
@@ -207,7 +216,7 @@ export class ImageController {
     @Req() req?: import('express').Request,
   ) {
     const clientId = req['clientId'];
-    const creatorId = req['creatorId'];
+    const creatorId = req['externalCreatorId'];
     const requestType = query.info
       ? 'metadata'
       : query.download
@@ -279,15 +288,27 @@ export class ImageController {
       ]);
 
       // Set response headers
+      // Private bytes and token-gated responses must never land in a shared
+      // cache (CDN, proxy): the next requester would get them without a check.
+      const restricted = image.isPrivate || !!query.token;
+      const variant = query.thumb
+        ? 'thumb'
+        : [
+            query.width ?? '',
+            query.height ?? '',
+            query.format || 'webp',
+            query.quality || 85,
+          ].join('-');
       const headers: Record<string, string> = {
         'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        ETag: `"${imageId}${query.thumb ? '-thumb' : ''}"`,
+        'Cache-Control': restricted
+          ? 'private, no-store'
+          : 'public, max-age=31536000, immutable',
+        ETag: `"${imageId}-${variant}"`,
       };
 
       if (query.download) {
-        headers['Content-Disposition'] =
-          `attachment; filename="${image.originalName}"`;
+        headers['Content-Disposition'] = contentDisposition(image.originalName);
       }
 
       res.set(headers);
@@ -322,7 +343,11 @@ export class ImageController {
 
           res.set({
             'Content-Type': mimeType,
-            'Cache-Control': 'public, max-age=3600',
+            // A denial depends on who asks: don't let a cache replay it to the owner.
+            'Cache-Control':
+              defaultType === 'permission_denied'
+                ? 'private, no-store'
+                : 'public, max-age=3600',
             'X-FileHarbor-Fallback': defaultType,
           });
 
