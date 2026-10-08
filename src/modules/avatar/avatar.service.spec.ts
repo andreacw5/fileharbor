@@ -5,7 +5,10 @@ import { GetAvatarDto } from './dto';
 describe('AvatarService.getAvatarFile format', () => {
   const stored = Buffer.from('stored-webp');
   const prisma = {
-    creator: { findFirst: jest.fn().mockResolvedValue({ id: 'creator-1' }) },
+    creator: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'creator-1' }),
+      findFirst: jest.fn(),
+    },
     avatar: {
       findFirst: jest
         .fn()
@@ -31,13 +34,23 @@ describe('AvatarService.getAvatarFile format', () => {
   beforeEach(() => storage.resizeImage.mockClear());
 
   it('returns the stored webp bytes untouched when no format is given', async () => {
-    const res = await service.getAvatarFile('ext-1');
+    const res = await service.getAvatarFile('client-1', 'ext-1');
     expect(res).toEqual({ buffer: stored, mimeType: 'image/webp' });
     expect(storage.resizeImage).not.toHaveBeenCalled();
   });
 
+  it('scopes the creator lookup to the client', async () => {
+    await service.getAvatarFile('client-1', 'ext-1');
+    expect(prisma.creator.findUnique).toHaveBeenLastCalledWith({
+      where: {
+        clientId_externalId: { clientId: 'client-1', externalId: 'ext-1' },
+      },
+    });
+    expect(prisma.creator.findFirst).not.toHaveBeenCalled();
+  });
+
   it('converts to png when format=png (thumb too)', async () => {
-    const res = await service.getAvatarFile('ext-1', true, 'png');
+    const res = await service.getAvatarFile('client-1', 'ext-1', true, 'png');
     expect(res.mimeType).toBe('image/png');
     expect(storage.getAvatarFilePath).toHaveBeenLastCalledWith(
       'test',

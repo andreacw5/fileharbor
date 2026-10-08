@@ -124,6 +124,8 @@ export class AvatarController {
     @Param('externalUserId') externalUserId: string,
     @Query() query: GetAvatarDto,
     @Res() res: Response,
+    // Set only when a valid X-API-Key is sent (the route is public).
+    @ClientId() clientId: string | undefined,
   ) {
     this.logger.debug(
       `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Format: ${query.format ?? 'webp'}, Download: ${query.download}`,
@@ -132,8 +134,10 @@ export class AvatarController {
     try {
       // If info mode, return metadata as JSON
       if (query.info) {
-        const avatar =
-          await this.avatarService.getAvatarByExternalId(externalUserId);
+        const avatar = await this.avatarService.getAvatarByExternalId(
+          clientId,
+          externalUserId,
+        );
         const metadata = this.avatarService.getAvatarMetadata(
           avatar,
           externalUserId,
@@ -146,6 +150,7 @@ export class AvatarController {
 
       // Otherwise return the file
       const { buffer, mimeType } = await this.avatarService.getAvatarFile(
+        clientId,
         externalUserId,
         query.thumb,
         query.format,
@@ -158,6 +163,8 @@ export class AvatarController {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=86400',
         ETag: `"avatar-${externalUserId}${variant}"`,
+        // The API key picks the client, hence the creator: keep caches apart.
+        Vary: 'X-API-Key',
       };
 
       if (query.download) {
