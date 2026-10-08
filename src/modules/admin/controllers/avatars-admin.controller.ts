@@ -30,7 +30,7 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
-import { RouteHelperService } from '@/utils/route.utils';
+import { RouteHelperService, clientRef } from '@/utils/route.utils';
 
 @ApiTags('Admin - Avatars')
 @Controller('admin/avatars')
@@ -72,7 +72,11 @@ export class AvatarsAdminController {
     const data = avatars.map((avatar) => {
       const externalId = avatar.creator?.externalId;
       const fullPath = externalId
-        ? this.route.fullUrl('avatars', externalId)
+        ? this.route.fullUrl(
+            'avatars',
+            clientRef({ id: avatar.clientId, domain: avatar.client?.domain }),
+            externalId,
+          )
         : null;
       return { ...avatar, fullPath };
     });
@@ -101,7 +105,11 @@ export class AvatarsAdminController {
 
     const externalId = avatar.creator?.externalId;
     const fullPath = externalId
-      ? this.route.fullUrl('avatars', externalId)
+      ? this.route.fullUrl(
+          'avatars',
+          clientRef({ id: avatar.clientId, domain: avatar.client?.domain }),
+          externalId,
+        )
       : null;
 
     return plainToInstance(

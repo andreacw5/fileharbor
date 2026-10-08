@@ -113,20 +113,57 @@ export class AvatarController {
   @Public()
   // Media delivery: one page can embed dozens of these.
   @SkipThrottle()
-  @Get(':externalUserId')
+  @Get(':clientRef/:externalUserId')
   @ApiOperation({
     summary: 'Get creator avatar (public endpoint)',
     description:
-      'Retrieve creator avatar by external creator ID. Query parameters: info (return JSON metadata), thumb (return thumbnail), format (webp | jpeg | png, default webp; converted on the fly, combinable with thumb), download (force download), t (timestamp for cache busting)',
+      'Retrieve a creator avatar. clientRef is the client domain, or its id when it has none (the url/fullPath returned by the API already carry it). Query parameters: info (return JSON metadata), thumb (return thumbnail), format (webp | jpeg | png, default webp; converted on the fly, combinable with thumb), download (force download), t (timestamp for cache busting)',
   })
   @ApiResponse({ status: 200, description: 'Avatar file or metadata' })
-  @ApiResponse({ status: 404, description: 'Avatar not found' })
+  @ApiResponse({ status: 404, description: 'Client or avatar not found' })
+  async getClientAvatar(
+    @Param('clientRef') ref: string,
+    @Param('externalUserId') externalUserId: string,
+    @Query() query: GetAvatarDto,
+    @Res() res: Response,
+  ) {
+    const clientId = await this.avatarService.resolveClientRef(ref);
+    return this.sendAvatar(clientId, externalUserId, query, res, {});
+  }
+
+  @Public()
+  @SkipThrottle()
+  @Get(':externalUserId')
+  @ApiOperation({
+    summary: 'Get creator avatar (deprecated)',
+    deprecated: true,
+    description:
+      'Deprecated: use GET /avatars/{clientRef}/{externalUserId}. An external id is unique only within a client: without an X-API-Key this route serves it only when exactly one client has a creator with that id, and 404s otherwise.',
+  })
+  @ApiResponse({ status: 200, description: 'Avatar file or metadata' })
+  @ApiResponse({ status: 404, description: 'Avatar not found or ambiguous' })
   async getAvatar(
     @Param('externalUserId') externalUserId: string,
     @Query() query: GetAvatarDto,
     @Res() res: Response,
     // Set only when a valid X-API-Key is sent (the route is public).
     @ClientId() clientId: string | undefined,
+  ) {
+    // Calls still landing here show up as
+    // http_request_duration_seconds{route="/avatars/:externalUserId"}.
+    return this.sendAvatar(clientId, externalUserId, query, res, {
+      Deprecation: 'true',
+      // The API key picks the client, hence the creator: keep caches apart.
+      Vary: 'X-API-Key',
+    });
+  }
+
+  private async sendAvatar(
+    clientId: string | undefined,
+    externalUserId: string,
+    query: GetAvatarDto,
+    res: Response,
+    extraHeaders: Record<string, string>,
   ) {
     this.logger.debug(
       `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Format: ${query.format ?? 'webp'}, Download: ${query.download}`,
@@ -146,6 +183,7 @@ export class AvatarController {
         this.logger.log(
           `[getAvatar] Metadata returned - Creator: ${externalUserId}`,
         );
+        res.set(extraHeaders);
         return res.json(metadata);
       }
 
@@ -164,8 +202,7 @@ export class AvatarController {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=86400',
         ETag: `"avatar-${externalUserId}${variant}"`,
-        // The API key picks the client, hence the creator: keep caches apart.
-        Vary: 'X-API-Key',
+        ...extraHeaders,
       };
 
       if (query.download) {

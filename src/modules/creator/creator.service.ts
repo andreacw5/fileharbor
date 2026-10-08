@@ -21,7 +21,7 @@ import { UpdateCreatorByExternalIdDto } from './dto/update-creator-by-external-i
 import { UpdateCreatorAdminDto } from './dto/update-creator-admin.dto';
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { generateAnonymousUsername } from '@/utils/username.generator';
-import { RouteHelperService } from '@/utils/route.utils';
+import { RouteHelperService, clientRef } from '@/utils/route.utils';
 
 /** Reserved external creator ID — never expose or mutate this creator via API endpoints. */
 const SYSTEM_USER_ID = 'system';
@@ -283,7 +283,7 @@ export class CreatorService {
     const data = creators.map((u) => {
       const avatarUrl =
         u.avatars.length > 0
-          ? this.route.fullUrl('avatars', u.externalId)
+          ? this.route.fullUrl('avatars', clientRef(u.client), u.externalId)
           : undefined;
       return this.mapCreator(CreatorListResponseDto, u, {
         isBookmarked: bookmarkedCreatorExternalIds.has(u.id),
@@ -347,7 +347,11 @@ export class CreatorService {
 
     const avatarUrl =
       creator.avatars.length > 0
-        ? this.route.fullUrl('avatars', creator.externalId)
+        ? this.route.fullUrl(
+            'avatars',
+            clientRef(creator.client),
+            creator.externalId,
+          )
         : undefined;
 
     return this.mapCreator(CreatorResponseDto, creator, {
