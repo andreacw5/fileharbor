@@ -66,20 +66,6 @@ export class ClientService {
   }
 
   /**
-   * Get creator by external ID
-   */
-  async getCreatorByExternalId(clientId: string, externalId: string) {
-    return this.prisma.creator.findUnique({
-      where: {
-        clientId_externalId: {
-          clientId,
-          externalId,
-        },
-      },
-    });
-  }
-
-  /**
    * Create a new client and seed its default 'administrator' and 'system' creators
    */
   async createClient(data: {

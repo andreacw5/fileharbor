@@ -213,38 +213,6 @@ describe('ClientService', () => {
     });
   });
 
-  describe('getCreatorByExternalId', () => {
-    it('should return creator when found', async () => {
-      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
-
-      const result = await service.getCreatorByExternalId(
-        'client-123',
-        'ext-creator-123',
-      );
-
-      expect(result).toEqual(mockCreator);
-      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
-        where: {
-          clientId_externalId: {
-            clientId: 'client-123',
-            externalId: 'ext-creator-123',
-          },
-        },
-      });
-    });
-
-    it('should return null when creator is not found', async () => {
-      mockPrismaService.creator.findUnique.mockResolvedValue(null);
-
-      const result = await service.getCreatorByExternalId(
-        'client-123',
-        'non-existent-creator',
-      );
-
-      expect(result).toBeNull();
-    });
-  });
-
   describe('createClient', () => {
     it('should create a new client with generated API key and default creators', async () => {
       const newClient = {

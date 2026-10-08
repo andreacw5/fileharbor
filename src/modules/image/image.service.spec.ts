@@ -461,49 +461,6 @@ describe('ImageService', () => {
     });
   });
 
-  describe('getCreatorImages', () => {
-    it('should return creator images', async () => {
-      const images = [mockImage];
-      mockPrismaService.image.findMany.mockResolvedValue(images);
-
-      const result = await service.getCreatorImages(
-        mockClientId,
-        mockCreatorExternalId,
-      );
-
-      expect(result).toHaveLength(1);
-      expect(mockPrismaService.image.findMany).toHaveBeenCalledWith({
-        where: {
-          clientId: mockClientId,
-          creatorId: mockCreatorExternalId,
-        },
-        include: {
-          imageTags: {
-            include: {
-              tag: {
-                select: {
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-    });
-
-    it('should handle empty results', async () => {
-      mockPrismaService.image.findMany.mockResolvedValue([]);
-
-      const result = await service.getCreatorImages(
-        mockClientId,
-        mockCreatorExternalId,
-      );
-
-      expect(result).toEqual([]);
-    });
-  });
-
   describe('deleteImage', () => {
     beforeEach(() => {
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);

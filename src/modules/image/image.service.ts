@@ -340,34 +340,6 @@ export class ImageService {
   }
 
   /**
-   * Get creator images
-   */
-  async getCreatorImages(clientId: string, creatorId: string) {
-    const images = await this.prisma.image.findMany({
-      where: {
-        clientId,
-        creatorId,
-      },
-      include: {
-        imageTags: {
-          include: {
-            tag: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    return images.map((img) => this.formatImageResponse(img));
-  }
-
-  /**
    * List images with filtering
    */
   async listImages(filters: {

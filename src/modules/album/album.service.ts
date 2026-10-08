@@ -205,30 +205,6 @@ export class AlbumService {
     };
   }
 
-  async getCreatorAlbums(clientId: string, creatorId: string) {
-    const albums = await this.prisma.album.findMany({
-      where: { clientId, creatorId },
-      include: {
-        _count: { select: { albumItems: true } },
-        ...this.coverInclude(),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const countMap = await this.fetchItemCountMap(albums.map((a) => a.id));
-
-    return albums.map((album) => {
-      const { imageCount = 0, videoCount = 0 } = countMap.get(album.id) ?? {};
-      return {
-        ...this.formatAlbumResponse(album),
-        itemCount: album._count.albumItems,
-        imageCount,
-        videoCount,
-        coverUrl: this.resolveCoverUrl(album),
-      };
-    });
-  }
-
   async listAlbums(filters: {
     clientId?: string;
     creatorId?: string;
