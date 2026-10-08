@@ -7,7 +7,7 @@ import {
 } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma/prisma.service';
-import { Public } from '@/modules/client/decorators/public.decorator';
+import { Public } from '@heyatom/bastion-client/nest';
 
 @ApiTags('health')
 @SkipThrottle()

@@ -15,7 +15,7 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
 import { CreatorService } from '@/modules/creator/creator.service';
@@ -122,7 +122,7 @@ export class AvatarService {
         await this.storage.deleteDirectory(oldAvatarPath);
       }
 
-      const avatarId = existingAvatar?.id || uuidv4();
+      const avatarId = existingAvatar?.id || randomUUID();
       const avatarPath = this.storage.getAvatarPath(domain, creatorId);
 
       // Convert to WebP for original (high quality)

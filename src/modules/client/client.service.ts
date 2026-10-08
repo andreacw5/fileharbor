@@ -6,7 +6,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
-import { GlobalStatsResponseDto } from './dto/global-stats-response.dto';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -67,21 +66,7 @@ export class ClientService {
   }
 
   /**
-   * Get creator by external ID
-   */
-  async getCreatorByExternalId(clientId: string, externalId: string) {
-    return this.prisma.creator.findUnique({
-      where: {
-        clientId_externalId: {
-          clientId,
-          externalId,
-        },
-      },
-    });
-  }
-
-  /**
-   * Create a new client and seed its default 'administrator' and 'system' creators
+   * Create a new client and seed its default 'system' creator
    */
   async createClient(data: {
     name: string;
@@ -108,31 +93,14 @@ export class ClientService {
       this.mapUniqueConstraintViolation(error);
     }
 
-    // Check if creators exist for this client
-    const creatorCount = await this.prisma.creator.count({
-      where: { clientId: client.id },
+    // System creator for images without explicit creatorId
+    await this.prisma.creator.create({
+      data: {
+        clientId: client.id,
+        externalId: 'system',
+        username: 'system',
+      },
     });
-
-    // If no creators, create default creators
-    if (creatorCount === 0) {
-      // Create administrator creator
-      await this.prisma.creator.create({
-        data: {
-          clientId: client.id,
-          externalId: 'administrator',
-          username: 'administrator',
-        },
-      });
-
-      // Create system creator for images without explicit creatorId
-      await this.prisma.creator.create({
-        data: {
-          clientId: client.id,
-          externalId: 'system',
-          username: 'system',
-        },
-      });
-    }
 
     return client;
   }
@@ -325,21 +293,6 @@ export class ClientService {
       totalAlbums: updated._count.albums,
       totalVideos: updated._count.videos,
       totalStorage: storageAgg._sum.size || 0,
-    };
-  }
-
-  /**
-   * Get aggregated statistics across ALL clients (admin use only)
-   */
-  async getGlobalStats(): Promise<GlobalStatsResponseDto> {
-    const [totalImages, totalStorage] = await Promise.all([
-      this.prisma.image.count(),
-      this.prisma.image.aggregate({ _sum: { size: true } }),
-    ]);
-
-    return {
-      totalImages,
-      totalStorage: totalStorage._sum.size || 0,
     };
   }
 }

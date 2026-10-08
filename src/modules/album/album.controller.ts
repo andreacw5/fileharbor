@@ -25,7 +25,7 @@ import {
   ClientId,
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@/modules/client/decorators/public.decorator';
+import { Public } from '@heyatom/bastion-client/nest';
 import {
   CreateAlbumDto,
   UpdateAlbumDto,

@@ -11,7 +11,7 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 import { RouteHelperService } from '@/utils/route.utils';
 
@@ -203,30 +203,6 @@ export class AlbumService {
       videoCount,
       coverUrl: this.resolveCoverUrl(album),
     };
-  }
-
-  async getCreatorAlbums(clientId: string, creatorId: string) {
-    const albums = await this.prisma.album.findMany({
-      where: { clientId, creatorId },
-      include: {
-        _count: { select: { albumItems: true } },
-        ...this.coverInclude(),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const countMap = await this.fetchItemCountMap(albums.map((a) => a.id));
-
-    return albums.map((album) => {
-      const { imageCount = 0, videoCount = 0 } = countMap.get(album.id) ?? {};
-      return {
-        ...this.formatAlbumResponse(album),
-        itemCount: album._count.albumItems,
-        imageCount,
-        videoCount,
-        coverUrl: this.resolveCoverUrl(album),
-      };
-    });
   }
 
   async listAlbums(filters: {
@@ -595,7 +571,7 @@ export class AlbumService {
         'You can only generate tokens for your own albums',
       );
 
-    const token = uuidv4();
+    const token = randomUUID();
     const expiresAt = expiresInDays
       ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
       : null;

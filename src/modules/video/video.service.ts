@@ -16,7 +16,7 @@ import {
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { MetricsService } from '@/modules/metrics/metrics.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import {
   VideoResponseDto,
@@ -57,7 +57,7 @@ export class VideoService {
     isPrivate?: boolean,
     albumId?: string,
   ): Promise<VideoResponseDto> {
-    const videoId = uuidv4();
+    const videoId = randomUUID();
     this.logger.debug(
       `[uploadVideo] Start - ID: ${videoId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}`,
     );

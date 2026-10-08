@@ -135,7 +135,9 @@ export class CreatorService {
       `listCreatorsForClient returned ${creators.length}/${total} creators`,
     );
 
-    const data = creators.map((u) => this.mapCreator(CreatorListResponseDto, u));
+    const data = creators.map((u) =>
+      this.mapCreator(CreatorListResponseDto, u),
+    );
 
     return {
       data,

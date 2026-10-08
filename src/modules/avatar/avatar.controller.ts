@@ -25,7 +25,7 @@ import { Response } from 'express';
 import { AvatarService } from './avatar.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { ClientId } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@/modules/client/decorators/public.decorator';
+import { Public } from '@heyatom/bastion-client/nest';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadAvatarDto,

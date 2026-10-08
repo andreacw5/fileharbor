@@ -277,25 +277,6 @@ export class AdminAvatarResponseDto {
   creator?: AdminImageCreatorDto;
 }
 
-export class AdminAlbumImageEntryDto {
-  @ApiProperty() @Expose() imageId: string;
-  @ApiProperty() @Expose() order: number;
-}
-
-export class AdminAddImagesToAlbumResponseDto {
-  @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
-  @ApiProperty({
-    description: 'Images added with their order',
-    type: [AdminAlbumImageEntryDto],
-  })
-  @Expose()
-  @Type(() => AdminAlbumImageEntryDto)
-  images: AdminAlbumImageEntryDto[];
-  @ApiProperty({ description: 'Number of images processed' })
-  @Expose()
-  count: number;
-}
-
 export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
   @ApiProperty({ description: 'Number of images removed' })
@@ -395,18 +376,6 @@ export class AdminCreatorBookmarkResponseDto {
   @Expose()
   @Type(() => AdminBookmarkedCreatorDto)
   creator: AdminBookmarkedCreatorDto;
-}
-
-export class AdminCreatorBookmarkListResponseDto {
-  @ApiProperty({ type: [AdminCreatorBookmarkResponseDto] })
-  @Expose()
-  @Type(() => AdminCreatorBookmarkResponseDto)
-  data: AdminCreatorBookmarkResponseDto[];
-
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  @Expose()
-  @Type(() => AdminPaginationResponseDto)
-  pagination: AdminPaginationResponseDto;
 }
 
 export class AdminVideoResponseDto {

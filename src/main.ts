@@ -7,7 +7,6 @@ import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
-import cookieParser from 'cookie-parser';
 import { APP_VERSION } from '@/common/version';
 
 async function bootstrap() {
@@ -39,14 +38,12 @@ async function bootstrap() {
         'X-User-Id',
         'Authorization',
       ],
-      credentials: true,
     });
 
     // Use global exception filter
     app.useGlobalFilters(new HttpExceptionFilter());
 
     app.use(json({ limit: '5mb' }));
-    app.use(cookieParser());
 
     const apiPrefix = process.env.API_PREFIX ?? 'v2';
     const isProduction =
