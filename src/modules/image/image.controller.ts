@@ -52,6 +52,7 @@ import {
   ListImagesResponseDto,
 } from './dto';
 import { Readable } from 'node:stream';
+import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Images')
 @ApiSecurity('api-key')
@@ -307,8 +308,7 @@ export class ImageController {
       };
 
       if (query.download) {
-        headers['Content-Disposition'] =
-          `attachment; filename="${image.originalName}"`;
+        headers['Content-Disposition'] = contentDisposition(image.originalName);
       }
 
       res.set(headers);

@@ -49,6 +49,7 @@ import {
   UpdateVideoDto,
   DeleteVideoResponseDto,
 } from './dto';
+import { contentDisposition } from '@/utils/content-disposition';
 
 const videoMulterOptions = {
   storage: diskStorage({
@@ -184,11 +185,10 @@ export class VideoController {
     @Res() res: Response,
   ) {
     const video = await this.videoService.getVideoStreamPath(id, clientId);
-    const safeName = video.originalName.replace(/["\n\r]/g, '_');
-    const disposition =
-      download === 'true'
-        ? `attachment; filename="${safeName}"`
-        : `inline; filename="${safeName}"`;
+    const disposition = contentDisposition(
+      video.originalName,
+      download === 'true' ? 'attachment' : 'inline',
+    );
 
     // See the admin stream route: X-Accel-Redirect sends an empty body and only
     // works behind an nginx declaring the `/internal-videos/` internal location,

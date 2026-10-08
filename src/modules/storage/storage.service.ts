@@ -90,7 +90,13 @@ export class StorageService {
     const normalizedTarget = path.resolve(targetPath);
     const normalizedStorage = path.resolve(this.storagePath);
 
-    if (!normalizedTarget.startsWith(normalizedStorage)) {
+    // A prefix check would let `storage-evil/` pass for `storage/`.
+    const relative = path.relative(normalizedStorage, normalizedTarget);
+    if (
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
       this.logger.error(
         `[validatePath] Path traversal attempt detected: ${targetPath}`,
       );

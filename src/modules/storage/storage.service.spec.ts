@@ -77,3 +77,20 @@ describe('StorageService.getImageMetadata', () => {
     ).rejects.toThrow(BadRequestException);
   });
 });
+
+describe('StorageService.validatePath', () => {
+  const storage = new StorageService({
+    get: () => '/srv/storage',
+  } as unknown as ConfigService) as any;
+
+  it('accepts paths inside the storage root', () => {
+    expect(() =>
+      storage.validatePath('/srv/storage/example.com/images/x'),
+    ).not.toThrow();
+  });
+
+  it.each(['/srv/storage-evil/x', '/srv/storage/../etc/passwd', '/etc'])(
+    'rejects %s',
+    (target) => expect(() => storage.validatePath(target)).toThrow(),
+  );
+});

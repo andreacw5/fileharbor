@@ -34,6 +34,7 @@ import {
   DeleteAvatarResponseDto,
 } from './dto';
 import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
+import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Avatars')
 @ApiSecurity('api-key')
@@ -169,7 +170,7 @@ export class AvatarController {
 
       if (query.download) {
         const filename = `avatar-${externalUserId}${variant}.${format === 'jpeg' ? 'jpg' : format}`;
-        headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+        headers['Content-Disposition'] = contentDisposition(filename);
         this.logger.debug(`[getAvatar] Download - Creator: ${externalUserId}`);
       } else {
         this.logger.debug(

@@ -55,6 +55,7 @@ import {
 } from '@/modules/tag/tag.utils';
 import { RouteHelperService } from '@/utils/route.utils';
 import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
+import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Admin - Images')
 @Controller('admin/images')
@@ -386,7 +387,7 @@ export class ImagesAdminController {
 
     res.set({
       'Content-Type': mimeType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': contentDisposition(filename),
       'Content-Length': buffer.length.toString(),
     });
 

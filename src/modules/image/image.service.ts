@@ -721,7 +721,7 @@ export class ImageService {
     });
 
     this.logger.log(
-      `[createShareLink] Success - ID: ${imageId}, Token: ${readToken}, Expires: ${expiresAt?.toISOString() || 'never'}`,
+      `[createShareLink] Success - ID: ${imageId}, Link: ${shareLink.id}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
     return this.formatShareLinkResponse(shareLink);
   }
