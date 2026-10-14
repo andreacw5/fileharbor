@@ -42,7 +42,7 @@ prod (`services/fileharbor/config/fileharbor.env` nel repo `server-backup`, giti
 | 1.6 ✅ | `BASE_URL` con slash finale genera `//` negli URL | `route.utils.ts:64` | XS |
 | 1.7 ✅ | `totalStorage` per singolo client conta ancora solo le immagini (le stats admin ora includono video e avatar) | `client.service.ts:~315` | XS |
 | 1.8 ✅ | Errore dell'incremento views video ingoiato in silenzio: allinearlo al `warn` delle immagini | `video.service.ts` | XS |
-| 1.9 | Doc obsolete in Meridian: `FILEHARBOR_API_PREFIX=v2`, "setGlobalPrefix never called" | `../meridian/CLAUDE.md:656,756`, `fileharbor-proxy.ts:21` | XS |
+| 1.9 | Doc obsolete in Meridian: `FILEHARBOR_API_PREFIX=v2`, "setGlobalPrefix never called" | `../../meridian/CLAUDE.md:656,756`, `fileharbor-proxy.ts:21` | XS |
 | 1.10 | Race `deleteAvatar` / `uploadAvatar` contemporanei sullo stesso creator → riga con file mancanti (pre-esistente) | `avatar.service.ts` | S |
 | 1.11 ✅ | Sweep orfani: un errore su una dir interrompe il resto del dominio per quella notte (pre-esistente) | `storage.cleanup.job.ts` | XS |
 

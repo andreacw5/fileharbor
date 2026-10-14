@@ -472,6 +472,10 @@ Knowledge graph at `graphify-out/` with god nodes, community structure, and cros
 
 ## Docs
 
-- `../docs/FILEHARBOR_INTEGRATION.md` — integration guide per altri servizi (fonte di verità)
-- `../docs/BASTION_INTEGRATION.md` — Bastion JWT/JWKS guide
-- `../docs/CODING_STANDARDS.md` — NestJS conventions condivise
+- [`docs/BACKLOG.md`](docs/BACKLOG.md) — lavoro da fare senza piano, bloccanti pre-deploy
+- [`docs/external-album-api.md`](docs/external-album-api.md) — album via `externalAlbumId`
+- [`../docs/integrations/fileharbor.md`](../docs/integrations/fileharbor.md) — integration guide per altri servizi (fonte di verità)
+- [`../docs/integrations/bastion.md`](../docs/integrations/bastion.md) — Bastion JWT/JWKS guide (importata sotto)
+- [`../docs/standards/coding.md`](../docs/standards/coding.md) — NestJS conventions condivise
+
+@../docs/integrations/bastion.md
