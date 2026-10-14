@@ -36,9 +36,12 @@ import {
   extractTagNames,
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
+import { snapQuality, snapSize } from './image-variants';
 
 // On-demand resizes cached per image; past this many, new ones are served but
 // not stored, so arbitrary width/height/quality combinations can't fill the disk.
+// Requests are snapped to a fixed grid first (image-variants.ts), so in practice
+// a handful of variants per image covers every URL in use.
 const MAX_CACHED_VARIANTS = 20;
 
 export interface ImageFileOptions {
@@ -304,20 +307,25 @@ export class ImageService implements OnModuleDestroy {
    * Resolve the file for a view of an already-loaded image (`image.client` must
    * carry `domain`). Thumbnails, untouched originals and cached resizes come from
    * disk; a resize not cached yet is made and stored under `{imageDir}/variants/`.
+   * width/height/quality are snapped to the variant grid (`image-variants.ts`)
+   * before anything else, so close values share one cached file.
    * `filePath` is set whenever the bytes exist on disk; `buffer` is set unless
    * `skipDiskRead` asked to leave an on-disk file unread.
    */
   async getImageFile(
     image: { id: string; clientId: string; client?: { domain: string | null } },
     {
-      width,
-      height,
+      width: requestedWidth,
+      height: requestedHeight,
       format = 'webp',
-      quality = 85,
+      quality: requestedQuality,
       thumb = false,
       skipDiskRead = false,
     }: ImageFileOptions = {},
   ): Promise<{ mimeType: string; filePath?: string; buffer?: Buffer }> {
+    const width = snapSize(requestedWidth);
+    const height = snapSize(requestedHeight);
+    const quality = snapQuality(requestedQuality);
     const domain = image.client?.domain || image.clientId;
     const fromDisk = async (filePath: string, mimeType: string) => ({
       mimeType,

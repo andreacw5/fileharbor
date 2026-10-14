@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
@@ -30,6 +31,7 @@ function openImage(input: Buffer) {
 import * as os from 'os';
 import { randomUUID } from 'crypto';
 import fluentFfmpeg from 'fluent-ffmpeg';
+import { Semaphore } from '@/utils/semaphore';
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -76,10 +78,17 @@ export const OPTIMIZE_GIVEN_UP_WHERE = {
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly storagePath: string;
+  // Caps concurrent on-demand renders (public, unthrottled GETs): each one
+  // decodes a full original, so unbounded they would saturate CPU and memory.
+  private readonly renderLimiter: Semaphore;
 
   constructor(private configService: ConfigService) {
     this.storagePath =
       this.configService.get<string>('STORAGE_PATH') || './storage';
+    this.renderLimiter = new Semaphore(
+      this.configService.get<number>('RENDER_CONCURRENCY') || 2,
+      this.configService.get<number>('RENDER_QUEUE_LIMIT') ?? 20,
+    );
   }
 
   /**
@@ -677,7 +686,10 @@ export class StorageService {
   }
 
   /**
-   * Resize image on-demand
+   * Render a resized/re-encoded copy for a request (image variants, avatar
+   * format conversion). Runs behind `renderLimiter`: past RENDER_CONCURRENCY
+   * renders callers wait, past RENDER_QUEUE_LIMIT waiters they get a 503.
+   * Waiters already hold their source buffer, hence the small queue.
    */
   async resizeImage(
     buffer: Buffer,
@@ -685,6 +697,24 @@ export class StorageService {
     height?: number,
     format: 'webp' | 'jpeg' | 'png' = 'webp',
     quality: number = 85,
+  ): Promise<Buffer> {
+    return this.renderLimiter.run(
+      () => this.render(buffer, width, height, format, quality),
+      () => {
+        this.logger.warn(
+          `[resizeImage] Render queue full (${this.renderLimiter.pending} waiting)`,
+        );
+        return new ServiceUnavailableException('Image renderer busy, retry');
+      },
+    );
+  }
+
+  private async render(
+    buffer: Buffer,
+    width: number | undefined,
+    height: number | undefined,
+    format: 'webp' | 'jpeg' | 'png',
+    quality: number,
   ): Promise<Buffer> {
     try {
       let pipeline = openImage(buffer);

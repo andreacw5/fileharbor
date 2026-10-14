@@ -28,9 +28,15 @@ async function bootstrap() {
       }),
     );
 
-    // Enable CORS
+    const config = app.get(ConfigService);
+
+    // Enable CORS. CORS_ORIGIN is validated at boot (required in production).
+    const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
     app.enableCors({
-      origin: process.env.CORS_ORIGIN || '*',
+      origin:
+        corsOrigin === '*'
+          ? '*'
+          : corsOrigin.split(',').map((origin) => origin.trim()),
       methods: ['GET', 'POST', 'PATCH', 'DELETE'],
       allowedHeaders: [
         'Content-Type',
@@ -52,7 +58,7 @@ async function bootstrap() {
     // /docs enumerates the whole API surface, admin routes included:
     // development only, as in Bastion, Herald, Beacon and Gatherly.
     if (!isProduction) {
-      const config = new DocumentBuilder()
+      const swaggerConfig = new DocumentBuilder()
         .setTitle('FileHarbor 2.0')
         .setDescription('Multi-tenant image management system API')
         .setVersion(APP_VERSION)
@@ -73,7 +79,7 @@ async function bootstrap() {
         )
         .build();
 
-      const document = SwaggerModule.createDocument(app, config);
+      const document = SwaggerModule.createDocument(app, swaggerConfig);
       SwaggerModule.setup('/docs', app, document);
     }
 

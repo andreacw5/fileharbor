@@ -546,11 +546,11 @@ describe('ImageService', () => {
     it('resizes once, then serves the cached variant', async () => {
       mockStorageService.fileExists.mockResolvedValue(false);
       const first = await service.getImageFile(image, {
-        width: 800,
-        height: 600,
+        width: 960,
+        height: 640,
         format: 'jpeg',
       });
-      const variant = `storage/${mockDomain}/images/${mockImageId}/variants/800x600-q85.jpeg`;
+      const variant = `storage/${mockDomain}/images/${mockImageId}/variants/960x640-q85.jpeg`;
 
       expect(first.mimeType).toBe('image/jpeg');
       expect(first.buffer).toEqual(Buffer.from('resized'));
@@ -560,13 +560,38 @@ describe('ImageService', () => {
       );
 
       mockStorageService.fileExists.mockResolvedValue(true);
+      // Snaps to the same step: served from the cached 960x640 file
       const second = await service.getImageFile(image, {
         width: 800,
         height: 600,
         format: 'jpeg',
+        quality: 83,
       });
       expect(second.filePath).toBe(variant);
       expect(mockStorageService.resizeImage).toHaveBeenCalledTimes(1);
+    });
+
+    it('snaps requested dimensions and quality before rendering', async () => {
+      mockStorageService.fileExists.mockResolvedValue(false);
+
+      await service.getImageFile(image, {
+        width: 801,
+        height: 1,
+        format: 'png',
+        quality: 52,
+      });
+
+      expect(mockStorageService.resizeImage).toHaveBeenCalledWith(
+        Buffer.from('image-data'),
+        960,
+        16,
+        'png',
+        60,
+      );
+      expect(mockStorageService.saveFile).toHaveBeenCalledWith(
+        `storage/${mockDomain}/images/${mockImageId}/variants/960x16-q60.png`,
+        Buffer.from('resized'),
+      );
     });
 
     it('stops caching variants past the per-image cap', async () => {

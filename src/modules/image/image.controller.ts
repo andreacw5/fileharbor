@@ -54,6 +54,7 @@ import {
 } from './dto';
 import { Readable } from 'node:stream';
 import { contentDisposition } from '@/utils/content-disposition';
+import { snapQuality, snapSize } from './image-variants';
 
 @ApiTags('Images')
 @ApiSecurity('api-key')
@@ -288,10 +289,12 @@ export class ImageController {
       const variant = query.thumb
         ? 'thumb'
         : [
-            query.width ?? '',
-            query.height ?? '',
+            // Snapped like getImageFile does: URLs that render the same
+            // variant share one ETag.
+            snapSize(query.width) ?? '',
+            snapSize(query.height) ?? '',
             query.format || 'webp',
-            query.quality || 85,
+            snapQuality(query.quality),
           ].join('-');
       // updatedAt moves when the file is rewritten (optimize job, Tinify), never on
       // a view or download (those counters skip it), so revalidation stays cheap.
@@ -330,7 +333,7 @@ export class ImageController {
           width: query.thumb ? undefined : query.width,
           height: query.thumb ? undefined : query.height,
           format: query.format || 'webp',
-          quality: query.quality || 85,
+          quality: query.quality,
           thumb: query.thumb,
           skipDiskRead: xAccel,
         }),

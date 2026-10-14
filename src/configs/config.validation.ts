@@ -12,6 +12,13 @@ export const configValidationSchema = Joi.object({
   BASE_URL: Joi.string().uri().default('http://localhost:3000'),
   // Prometheus scrape port — internal network only, never published or proxied.
   METRICS_PORT: Joi.number().port().default(9091),
+  // `*` or a comma-separated list of origins. Required in production: a
+  // forgotten variable must not silently open the API to every origin.
+  CORS_ORIGIN: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.required(),
+    otherwise: Joi.optional().default('*'),
+  }),
 
   // Database
   DATABASE_URL: Joi.string().required(),
@@ -20,12 +27,18 @@ export const configValidationSchema = Joi.object({
   // Storage
   STORAGE_PATH: Joi.string().default('./storage'),
   MAX_FILE_SIZE: Joi.number().positive().default(10485760),
+  // /health/ready reports down below this much free space on STORAGE_PATH.
+  HEALTH_DISK_MIN_FREE_MB: Joi.number().integer().min(0).default(1024),
 
   // Image Processing
   THUMBNAIL_SIZE: Joi.number().positive().default(800),
   ORIGINAL_QUALITY: Joi.number().min(1).max(100).default(100),
   OPTIMIZE_QUALITY: Joi.number().min(1).max(100).default(85),
   THUMBNAIL_QUALITY: Joi.number().min(1).max(100).default(70),
+  // On-demand renders (GET /images/:id resizes, avatar format conversion) run
+  // at most this many at once; up to RENDER_QUEUE_LIMIT more wait, the rest 503.
+  RENDER_CONCURRENCY: Joi.number().integer().min(1).default(2),
+  RENDER_QUEUE_LIMIT: Joi.number().integer().min(0).default(20),
 
   // Rate Limiting
   THROTTLE_TTL: Joi.number().positive().default(60),

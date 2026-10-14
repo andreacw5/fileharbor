@@ -353,6 +353,20 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - EXIF removal
 - Quality set from env vars
 
+### On-demand variants — bounded by design
+
+`GET /images/:id` is public and `@SkipThrottle()`, so its transforms are bounded instead of rate-limited:
+
+- **Snapped, never rejected** (`image/image-variants.ts`): width/height round **up** to the next of
+  `VARIANT_SIZES` (16 … 4096), quality to the nearest of `VARIANT_QUALITIES` (40/60/75/85/100). Old URLs
+  keep working; close values share one cached file and one ETag (the controller snaps too).
+- **Cache**: at most `MAX_CACHED_VARIANTS` (20) files under `{imageDir}/variants/`; past that a variant is
+  rendered but not stored.
+- **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
+  which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
+  at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503`. Uploads and the optimize jobs
+  don't use it.
+
 ## DB Entities
 
 `Client` → `Creator` (by `externalId`) → `Image`, `Avatar`
@@ -421,6 +435,26 @@ Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localho
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
   - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).
   - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via manual `optimizeAttempts = 0`, deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
+- Alert rules for all of the above live in `monitoring/alerts.yml` (load it via `rule_files`). Change a metric or threshold → change it there too.
+
+## Health
+
+`/health/live` always 200. `/health/ready` (public, `@SkipThrottle`, outside `API_PREFIX`) checks:
+
+- `database` — Prisma ping.
+- `storage` (`health/storage-health.indicator.ts`) — `STORAGE_PATH` writable and at least
+  `HEALTH_DISK_MIN_FREE_MB` (default 1024) free (`fs.statfs`, `bavail`). The response carries `freeMb` /
+  `minFreeMb` and an errno code, never the path.
+
+`MediaToolsCheck` (`health/media-tools.check.ts`) logs a `warn` at boot when the ffmpeg/ffprobe binaries
+from `ffmpeg-static`/`ffprobe-static` are missing or not executable. It never blocks startup: only video
+thumbnails/metadata need them.
+
+## CORS
+
+`CORS_ORIGIN` (`*` or a comma-separated origin list) is Joi-validated and read through `ConfigService` in
+`main.ts`. **Required when `NODE_ENV=production`** — boot fails without it rather than defaulting to `*`;
+elsewhere it defaults to `*`.
 
 ## graphify
 

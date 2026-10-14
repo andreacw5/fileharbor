@@ -1,0 +1,45 @@
+# Prometheus alerting rules for FileHarbor. Load from prometheus.yml:
+#   rule_files: [/etc/prometheus/fileharbor-alerts.yml]
+# Metrics come from `GET /metrics` on METRICS_PORT (internal network only);
+# see CLAUDE.md → Metrics for what each series means.
+groups:
+  - name: fileharbor
+    rules:
+      - alert: FileHarborVideoProcessingFailing
+        # Uploads still return 2xx when ffmpeg/ffprobe fail, so HTTP metrics stay
+        # green: a missing binary or the 30s timeout only shows up here.
+        expr: increase(fileharbor_video_processing_failures_total[1h]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'FileHarbor video {{ $labels.stage }} extraction failing'
+          description: >-
+            {{ $value | humanize }} video {{ $labels.stage }} failures in the last hour
+            on {{ $labels.instance }}. Check that ffmpeg-static/ffprobe-static are
+            present (boot log of MediaToolsCheck) and the 30s timeout.
+
+      - alert: FileHarborOptimizeBacklogStale
+        # A failing row is given up after 3 hourly runs, so it can't hold this up:
+        # an old backlog means the job is stalled or can't keep up.
+        expr: fileharbor_unoptimized_oldest_age_seconds > 3 * 3600
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'FileHarbor {{ $labels.kind }} optimize job stalled or behind'
+          description: >-
+            Oldest unoptimized {{ $labels.kind }} has waited
+            {{ $value | humanizeDuration }} (threshold 3h). Check the hourly
+            optimize job logs and the advisory-lock skips.
+
+      - alert: FileHarborOptimizeGivenUp
+        # A standing count, not an event: fires until the rows are fixed, reset
+        # (optimizeAttempts = 0), deleted or (avatars) re-uploaded.
+        expr: fileharbor_optimize_given_up > 0
+        labels:
+          severity: info
+        annotations:
+          summary: 'FileHarbor {{ $labels.kind }} rows the optimize job gave up on'
+          description: >-
+            {{ $value }} {{ $labels.kind }} rows reached MAX_OPTIMIZE_ATTEMPTS.
+            Inspect the files, then set optimizeAttempts = 0 to retry or delete them.
