@@ -138,4 +138,21 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     // A video id known only under another client is still an orphan here.
     expect(await exists(otherClient)).toBe(false);
   });
+
+  it('keeps sweeping a domain after one dir fails to delete', async () => {
+    const first = await makeImageDir('client-nodomain', 'img-a');
+    const second = await makeImageDir('client-nodomain', 'img-b');
+    const deleteDirectory = jest
+      .spyOn(storage, 'deleteDirectory')
+      .mockRejectedValueOnce(new Error('EACCES'));
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(deleteDirectory).toHaveBeenCalledTimes(2);
+    // Exactly one of the two survived the injected failure.
+    expect([await exists(first), await exists(second)].sort()).toEqual([
+      false,
+      true,
+    ]);
+  });
 });

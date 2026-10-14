@@ -110,8 +110,7 @@ describe('AlbumService', () => {
 
   const mockRouteService = {
     fullUrl: jest.fn(
-      (...segments: string[]) =>
-        `http://localhost:3000/${segments.join('/')}`,
+      (...segments: string[]) => `http://localhost:3000/${segments.join('/')}`,
     ),
     path: jest.fn((...segments: string[]) => `/${segments.join('/')}`),
   };

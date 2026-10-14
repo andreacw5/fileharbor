@@ -7,6 +7,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { RenderBusyException } from '@/modules/storage/storage.service';
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -186,6 +187,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     this.logger.error(`${status} ${exception.message}`);
     if (exception.stack) {
       this.logger.debug(exception.stack);
+    }
+
+    if (exception instanceof RenderBusyException) {
+      response.setHeader('Retry-After', '1');
     }
 
     response.status(status).json({

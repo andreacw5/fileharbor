@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { parseCorsOrigin } from '@/utils/cors.utils';
 
 export const configValidationSchema = Joi.object({
   // Environment
@@ -14,11 +15,22 @@ export const configValidationSchema = Joi.object({
   METRICS_PORT: Joi.number().port().default(9091),
   // `*` or a comma-separated list of origins. Required in production: a
   // forgotten variable must not silently open the API to every origin.
-  CORS_ORIGIN: Joi.string().when('NODE_ENV', {
-    is: 'production',
-    then: Joi.required(),
-    otherwise: Joi.optional().default('*'),
-  }),
+  // An empty value counts as unset.
+  CORS_ORIGIN: Joi.string()
+    .empty('')
+    .custom((value: string, helpers) => {
+      try {
+        parseCorsOrigin(value);
+        return value;
+      } catch (error) {
+        return helpers.message({ custom: (error as Error).message });
+      }
+    })
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.required(),
+      otherwise: Joi.optional().default('*'),
+    }),
 
   // Database
   DATABASE_URL: Joi.string().required(),

@@ -47,7 +47,13 @@ describe('ClientService', () => {
       create: jest.fn(),
     },
     image: {
-      aggregate: jest.fn(),
+      groupBy: jest.fn(),
+    },
+    video: {
+      groupBy: jest.fn(),
+    },
+    avatar: {
+      groupBy: jest.fn(),
     },
   };
 
@@ -91,9 +97,9 @@ describe('ClientService', () => {
         ...mockClient,
         _count: { images: 0, avatars: 0, albums: 0, videos: 0 },
       });
-      mockPrismaService.image.aggregate.mockResolvedValue({
-        _sum: { size: 0 },
-      });
+      mockPrismaService.image.groupBy.mockResolvedValue([]);
+      mockPrismaService.video.groupBy.mockResolvedValue([]);
+      mockPrismaService.avatar.groupBy.mockResolvedValue([]);
 
       await service.validateClient('fh_test_api_key_123');
       await service.validateClient('fh_test_api_key_123');
@@ -352,9 +358,15 @@ describe('ClientService', () => {
 
     it('updates the client and returns it enriched with stats', async () => {
       mockPrismaService.client.update.mockResolvedValue(updatedClient);
-      mockPrismaService.image.aggregate.mockResolvedValue({
-        _sum: { size: 1024 },
-      });
+      mockPrismaService.image.groupBy.mockResolvedValue([
+        { clientId: 'client-123', _sum: { size: 1024 } },
+      ]);
+      mockPrismaService.video.groupBy.mockResolvedValue([
+        { clientId: 'client-123', _sum: { size: BigInt(4096) } },
+      ]);
+      mockPrismaService.avatar.groupBy.mockResolvedValue([
+        { clientId: 'client-123', _sum: { size: 512 } },
+      ]);
 
       const result = await service.updateClientWithStats('client-123', {
         bastionTenantSlug: 'heyatom',
@@ -370,7 +382,8 @@ describe('ClientService', () => {
         },
       });
       expect(result.bastionTenantSlug).toBe('heyatom');
-      expect(result.totalStorage).toBe(1024);
+      // Images + videos (BigInt) + avatars, like the admin stats
+      expect(result.totalStorage).toBe(1024 + 4096 + 512);
     });
 
     it('maps a bastionTenantSlug unique constraint violation to a ConflictException', async () => {

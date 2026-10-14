@@ -83,12 +83,14 @@ export class StorageCleanupJob {
               if (!knownImageIds.has(imageId)) {
                 // Image not in database, delete from disk
                 const imagePath = this.storage.getImagePath(domain, imageId);
-                if (await isRecent(imagePath)) continue;
-                await this.storage.deleteDirectory(imagePath);
-                orphanedImagesCount++;
-                this.logger.log(
-                  `Deleted orphaned image: ${domain}/images/${imageId}`,
-                );
+                if (
+                  await this.removeOrphan(
+                    imagePath,
+                    `${domain}/images/${imageId}`,
+                  )
+                ) {
+                  orphanedImagesCount++;
+                }
               }
             }
 
@@ -114,12 +116,14 @@ export class StorageCleanupJob {
                   domain,
                   creatorId,
                 );
-                if (await isRecent(avatarPath)) continue;
-                await this.storage.deleteDirectory(avatarPath);
-                orphanedAvatarsCount++;
-                this.logger.log(
-                  `Deleted orphaned avatar: ${domain}/avatars/${creatorId}`,
-                );
+                if (
+                  await this.removeOrphan(
+                    avatarPath,
+                    `${domain}/avatars/${creatorId}`,
+                  )
+                ) {
+                  orphanedAvatarsCount++;
+                }
               }
             }
 
@@ -139,12 +143,14 @@ export class StorageCleanupJob {
               if (!knownVideoIds.has(videoId)) {
                 // Video not in database, delete from disk
                 const videoPath = this.storage.getVideoPath(domain, videoId);
-                if (await isRecent(videoPath)) continue;
-                await this.storage.deleteDirectory(videoPath);
-                orphanedVideosCount++;
-                this.logger.log(
-                  `Deleted orphaned video: ${domain}/videos/${videoId}`,
-                );
+                if (
+                  await this.removeOrphan(
+                    videoPath,
+                    `${domain}/videos/${videoId}`,
+                  )
+                ) {
+                  orphanedVideosCount++;
+                }
               }
             }
           } catch (error) {
@@ -162,5 +168,23 @@ export class StorageCleanupJob {
         this.logger.error('Orphaned files cleanup job failed:', error.message);
       }
     });
+  }
+
+  /**
+   * Delete one orphaned dir unless it is too young. A failure is logged and
+   * skipped: one unreadable dir must not stop the rest of the domain's sweep.
+   */
+  private async removeOrphan(dir: string, label: string): Promise<boolean> {
+    try {
+      if (await isRecent(dir)) return false;
+      await this.storage.deleteDirectory(dir);
+      this.logger.log(`Deleted orphaned dir: ${label}`);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete orphaned dir ${label}: ${error.message}`,
+      );
+      return false;
+    }
   }
 }

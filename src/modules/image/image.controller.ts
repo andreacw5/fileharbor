@@ -277,10 +277,13 @@ export class ImageController {
         return metadata;
       }
 
-      // Counters: views are buffered in memory, downloads are one UPDATE
-      const counterPromise = query.download
-        ? this.imageService.incrementDownloads(imageId, image.clientId)
-        : this.imageService.incrementViews(imageId);
+      // Counters: views are buffered in memory, downloads are one UPDATE.
+      // Counted only once the bytes are served (or a 304 confirms them), so a
+      // 503 from a full render queue is not a view.
+      const countHit = () =>
+        query.download
+          ? this.imageService.incrementDownloads(imageId, image.clientId)
+          : this.imageService.incrementViews(imageId);
 
       // Set response headers
       // Private bytes and token-gated responses must never land in a shared
@@ -320,7 +323,7 @@ export class ImageController {
             (t) => t.trim().replace(/^W\//, '') === etag || t.trim() === '*',
           )
       ) {
-        await counterPromise;
+        await countHit();
         res.status(304).set(headers);
         return;
       }
@@ -328,17 +331,16 @@ export class ImageController {
       // Behind nginx, hand files already on disk to it instead of streaming
       // them from Node (see IMAGE_X_ACCEL_REDIRECT)
       const xAccel = this.config.get<boolean>('image.xAccelRedirect');
-      const [{ buffer, mimeType, filePath }] = await Promise.all([
-        this.imageService.getImageFile(image, {
+      const { buffer, mimeType, filePath } =
+        await this.imageService.getImageFile(image, {
           width: query.thumb ? undefined : query.width,
           height: query.thumb ? undefined : query.height,
           format: query.format || 'webp',
           quality: query.quality,
           thumb: query.thumb,
           skipDiskRead: xAccel,
-        }),
-        counterPromise,
-      ]);
+        });
+      await countHit();
       headers['Content-Type'] = mimeType;
       res.set(headers);
 

@@ -8,6 +8,7 @@ import { AppModule } from './modules/app/app.module';
 import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
 import { APP_VERSION } from '@/common/version';
+import { parseCorsOrigin } from '@/utils/cors.utils';
 
 async function bootstrap() {
   try {
@@ -33,10 +34,7 @@ async function bootstrap() {
     // Enable CORS. CORS_ORIGIN is validated at boot (required in production).
     const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
     app.enableCors({
-      origin:
-        corsOrigin === '*'
-          ? '*'
-          : corsOrigin.split(',').map((origin) => origin.trim()),
+      origin: parseCorsOrigin(corsOrigin),
       methods: ['GET', 'POST', 'PATCH', 'DELETE'],
       allowedHeaders: [
         'Content-Type',

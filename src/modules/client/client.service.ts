@@ -185,14 +185,11 @@ export class ClientService {
    * Get aggregated statistics for a client
    */
   async getStats(clientId: string): Promise<ClientStatsResponseDto> {
-    const [totalImages, totalAlbums, totalStorage, uploadedLast7Days] =
+    const [totalImages, totalAlbums, storage, uploadedLast7Days] =
       await Promise.all([
         this.prisma.image.count({ where: { clientId } }),
         this.prisma.album.count({ where: { clientId } }),
-        this.prisma.image.aggregate({
-          where: { clientId },
-          _sum: { size: true },
-        }),
+        this.storageByClient([clientId]),
         this.prisma.image.count({
           where: {
             clientId,
@@ -204,7 +201,7 @@ export class ClientService {
     return {
       totalImages,
       totalAlbums,
-      totalStorage: totalStorage._sum.size || 0,
+      totalStorage: storage.get(clientId) ?? 0,
       uploadedLast7Days,
     };
   }
@@ -234,15 +231,7 @@ export class ClientService {
       },
     });
 
-    const storagePerClient = await this.prisma.image.groupBy({
-      by: ['clientId'],
-      where: allowed !== null ? { clientId: { in: allowed } } : undefined,
-      _sum: { size: true },
-    });
-
-    const storageMap = new Map(
-      storagePerClient.map((s) => [s.clientId, s._sum.size || 0]),
-    );
+    const storageMap = await this.storageByClient(allowed);
 
     return clients.map((c) => ({
       ...c,
@@ -251,7 +240,7 @@ export class ClientService {
       totalAlbums: c._count.albums,
       totalVideos: c._count.videos,
       totalCreators: c._count.creators,
-      totalStorage: storageMap.get(c.id) || 0,
+      totalStorage: storageMap.get(c.id) ?? 0,
     }));
   }
 
@@ -277,10 +266,7 @@ export class ClientService {
 
     if (!client) return null;
 
-    const storageAgg = await this.prisma.image.aggregate({
-      where: { clientId },
-      _sum: { size: true },
-    });
+    const storage = await this.storageByClient([clientId]);
 
     return {
       ...client,
@@ -289,7 +275,7 @@ export class ClientService {
       totalAlbums: client._count.albums,
       totalVideos: client._count.videos,
       totalCreators: client._count.creators,
-      totalStorage: storageAgg._sum.size || 0,
+      totalStorage: storage.get(clientId) ?? 0,
     };
   }
 
@@ -313,10 +299,7 @@ export class ClientService {
     }
     this.clientCache.clear();
 
-    const storageAgg = await this.prisma.image.aggregate({
-      where: { clientId },
-      _sum: { size: true },
-    });
+    const storage = await this.storageByClient([clientId]);
 
     return {
       ...updated,
@@ -324,7 +307,48 @@ export class ClientService {
       totalAvatars: updated._count.avatars,
       totalAlbums: updated._count.albums,
       totalVideos: updated._count.videos,
-      totalStorage: storageAgg._sum.size || 0,
+      totalStorage: storage.get(clientId) ?? 0,
     };
+  }
+
+  /**
+   * Bytes on disk per client: images, videos and avatars, like the admin stats.
+   * Video sizes are BigInt; a Number is exact up to 8 PiB.
+   */
+  private async storageByClient(
+    clientIds: string[],
+  ): Promise<Map<string, number>> {
+    const where = { clientId: { in: clientIds } };
+    const groups = await Promise.all([
+      this.prisma.image.groupBy({
+        by: ['clientId'],
+        where,
+        _sum: { size: true },
+      }),
+      this.prisma.video.groupBy({
+        by: ['clientId'],
+        where,
+        _sum: { size: true },
+      }),
+      this.prisma.avatar.groupBy({
+        by: ['clientId'],
+        where,
+        _sum: { size: true },
+      }),
+    ]);
+
+    const totals = new Map<string, number>();
+    for (const rows of groups) {
+      for (const row of rows as {
+        clientId: string;
+        _sum: { size: number | bigint | null };
+      }[]) {
+        totals.set(
+          row.clientId,
+          (totals.get(row.clientId) ?? 0) + Number(row._sum.size ?? 0),
+        );
+      }
+    }
+    return totals;
   }
 }

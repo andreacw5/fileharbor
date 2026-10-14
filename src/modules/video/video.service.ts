@@ -234,8 +234,8 @@ export class VideoService {
 
     // Raw SQL on purpose: Prisma would bump updatedAt on every view
     this.prisma.$executeRaw`
-      UPDATE videos SET views = views + 1 WHERE id = ${videoId}`.catch(
-      () => {},
+      UPDATE videos SET views = views + 1 WHERE id = ${videoId}`.catch((e) =>
+      this.logger.warn(`[getVideoStreamPath] View not counted: ${e.message}`),
     );
 
     return {

@@ -52,7 +52,10 @@ export class RouteHelperService {
 
   constructor(private readonly config: ConfigService) {
     this.apiPrefix = config.get<string>('apiPrefix') ?? '';
-    this.baseUrl = config.get<string>('BASE_URL') ?? 'http://localhost:3000';
+    // `https://cdn.example.com/` would otherwise yield `//images/...`
+    this.baseUrl = (
+      config.get<string>('BASE_URL') ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
   }
 
   /** Returns the route path, e.g. `/images/abc` (`/{prefix}/images/abc` with API_PREFIX) */

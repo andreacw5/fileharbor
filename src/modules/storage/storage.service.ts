@@ -74,6 +74,16 @@ export const OPTIMIZE_GIVEN_UP_WHERE = {
   optimizeAttempts: { gte: MAX_OPTIMIZE_ATTEMPTS },
 };
 
+/**
+ * 503 from a full render queue. The queue drains in well under a second, so
+ * `HttpExceptionFilter` adds `Retry-After: 1` for it.
+ */
+export class RenderBusyException extends ServiceUnavailableException {
+  constructor() {
+    super('Image renderer busy, retry');
+  }
+}
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -712,7 +722,7 @@ export class StorageService {
         this.logger.warn(
           `[resizeImage] Render queue full (${this.renderLimiter.pending} waiting)`,
         );
-        return new ServiceUnavailableException('Image renderer busy, retry');
+        return new RenderBusyException();
       },
     );
   }

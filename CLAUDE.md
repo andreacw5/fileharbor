@@ -367,7 +367,8 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   rendered but not stored.
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
-  at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503`. Uploads and the optimize jobs
+  at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
+  (`RenderBusyException`, header set by `HttpExceptionFilter`). A view is counted only after the file is served. Uploads and the optimize jobs
   don't use it.
 
 ## DB Entities
@@ -457,7 +458,8 @@ thumbnails/metadata need them.
 
 `CORS_ORIGIN` (`*` or a comma-separated origin list) is Joi-validated and read through `ConfigService` in
 `main.ts`. **Required when `NODE_ENV=production`** — boot fails without it rather than defaulting to `*`;
-elsewhere it defaults to `*`.
+elsewhere it defaults to `*` (an empty value counts as unset). `parseCorsOrigin` (`utils/cors.utils.ts`) parses it
+for both Joi and `main.ts`: empty entries dropped, trailing `/` stripped, `*` mixed into a list rejected at boot.
 
 ## graphify
 

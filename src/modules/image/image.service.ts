@@ -996,7 +996,8 @@ export class ImageService implements OnModuleDestroy {
       ShareLinkResponseDto,
       {
         ...shareLink,
-        shareUrl: this.route.path('images', 'shared', shareLink.readToken),
+        // GET /images/:id resolves `?token=` as a share link first.
+        shareUrl: `${this.route.path('images', shareLink.imageId)}?token=${shareLink.readToken}`,
       },
       { excludeExtraneousValues: true },
     );

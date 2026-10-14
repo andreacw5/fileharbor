@@ -676,6 +676,10 @@ describe('ImageService', () => {
       expect(result).toBeDefined();
       expect(result.imageId).toBe(mockImageId);
       expect(result.expiresAt).toBeDefined();
+      // GET /images/:id?token= is the route that resolves share tokens
+      expect(result.shareUrl).toBe(
+        `/images/${mockImageId}?token=test-token-123`,
+      );
       expect(mockPrismaService.imageShareLink.create).toHaveBeenCalled();
     });
 
