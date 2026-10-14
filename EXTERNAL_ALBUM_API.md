@@ -34,7 +34,7 @@ Headers:
 Quando create un album nella vostra app, passate il vostro ID album a FileHarbor.
 
 ```bash
-POST /v2/albums
+POST /albums
 Content-Type: application/json
 X-API-Key: your-api-key
 X-User-Id: user-123
@@ -64,7 +64,7 @@ X-User-Id: user-123
 **Codice di Esempio (JavaScript/TypeScript):**
 ```typescript
 const createAlbum = async (externalAlbumId: string, name: string) => {
-  const response = await fetch('https://fileharbor.com/v2/albums', {
+  const response = await fetch('https://fileharbor.com/albums', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ const createAlbum = async (externalAlbumId: string, name: string) => {
 Aggiungete immagini al album usando il vostro `externalAlbumId`.
 
 ```bash
-POST /v2/albums/external/your-album-456/images
+POST /albums/external/your-album-456/images
 Content-Type: application/json
 X-API-Key: your-api-key
 X-User-Id: user-123
@@ -115,7 +115,7 @@ X-User-Id: user-123
 ```typescript
 const addImagesToAlbum = async (externalAlbumId: string, imageIds: string[]) => {
   const response = await fetch(
-    `https://fileharbor.com/v2/albums/external/${externalAlbumId}/images`,
+    `https://fileharbor.com/albums/external/${externalAlbumId}/images`,
     {
       method: 'POST',
       headers: {
@@ -137,7 +137,7 @@ const addImagesToAlbum = async (externalAlbumId: string, imageIds: string[]) => 
 Recuperate l'album con tutte le immagini associate.
 
 ```bash
-GET /v2/albums/external/your-album-456
+GET /albums/external/your-album-456
 X-API-Key: your-api-key
 X-User-Id: user-123
 ```
@@ -163,8 +163,8 @@ X-User-Id: user-123
       "height": 1080,
       "size": 524288,
       "createdAt": "2025-01-15T20:31:00.000Z",
-      "url": "/v2/images/image-id-1",
-      "thumbnailUrl": "/v2/images/image-id-1/thumb",
+      "url": "/images/image-id-1",
+      "thumbnailUrl": "/images/image-id-1/thumb",
       "order": 1
     },
     {
@@ -175,8 +175,8 @@ X-User-Id: user-123
       "height": 1536,
       "size": 786432,
       "createdAt": "2025-01-15T20:32:00.000Z",
-      "url": "/v2/images/image-id-2",
-      "thumbnailUrl": "/v2/images/image-id-2/thumb",
+      "url": "/images/image-id-2",
+      "thumbnailUrl": "/images/image-id-2/thumb",
       "order": 2
     },
     {
@@ -187,8 +187,8 @@ X-User-Id: user-123
       "height": 1200,
       "size": 458752,
       "createdAt": "2025-01-15T20:33:00.000Z",
-      "url": "/v2/images/image-id-3",
-      "thumbnailUrl": "/v2/images/image-id-3/thumb",
+      "url": "/images/image-id-3",
+      "thumbnailUrl": "/images/image-id-3/thumb",
       "order": 3
     }
   ]
@@ -199,7 +199,7 @@ X-User-Id: user-123
 ```typescript
 const getAlbumWithImages = async (externalAlbumId: string) => {
   const response = await fetch(
-    `https://fileharbor.com/v2/albums/external/${externalAlbumId}`,
+    `https://fileharbor.com/albums/external/${externalAlbumId}`,
     {
       headers: {
         'X-API-Key': process.env.FILEHARBOR_API_KEY,
@@ -218,7 +218,7 @@ const getAlbumWithImages = async (externalAlbumId: string) => {
 Aggiornate il nome, descrizione, o accesso pubblico dell'album.
 
 ```bash
-PATCH /v2/albums/external/your-album-456
+PATCH /albums/external/your-album-456
 Content-Type: application/json
 X-API-Key: your-api-key
 X-User-Id: user-123
@@ -250,7 +250,7 @@ X-User-Id: user-123
 ```typescript
 const updateAlbum = async (externalAlbumId: string, updates: Partial<Album>) => {
   const response = await fetch(
-    `https://fileharbor.com/v2/albums/external/${externalAlbumId}`,
+    `https://fileharbor.com/albums/external/${externalAlbumId}`,
     {
       method: 'PATCH',
       headers: {
@@ -272,7 +272,7 @@ const updateAlbum = async (externalAlbumId: string, updates: Partial<Album>) => 
 Rimuovete specifiche immagini dall'album senza cancellarle da FileHarbor.
 
 ```bash
-DELETE /v2/albums/external/your-album-456/images
+DELETE /albums/external/your-album-456/images
 Content-Type: application/json
 X-API-Key: your-api-key
 X-User-Id: user-123
@@ -301,7 +301,7 @@ const removeImagesFromAlbum = async (
   imageIds: string[]
 ) => {
   const response = await fetch(
-    `https://fileharbor.com/v2/albums/external/${externalAlbumId}/images`,
+    `https://fileharbor.com/albums/external/${externalAlbumId}/images`,
     {
       method: 'DELETE',
       headers: {
@@ -329,7 +329,7 @@ const removeImagesFromAlbum = async (
              │
              ▼
     ┌────────────────────────────────┐
-    │ POST /v2/albums                │
+    │ POST /albums                │
     │ {                              │
     │   externalAlbumId: "my-album-  │
     │   123",                        │
@@ -417,7 +417,7 @@ const removeImagesFromAlbum = async (
 async function createAndPopulateAlbum() {
   try {
     // 1. Creare l'album
-    const albumRes = await fetch('https://fileharbor.com/v2/albums', {
+    const albumRes = await fetch('https://fileharbor.com/albums', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -441,7 +441,7 @@ async function createAndPopulateAlbum() {
 
     // 2. Aggiungere immagini
     const imagesRes = await fetch(
-      `https://fileharbor.com/v2/albums/external/${album.externalAlbumId}/images`,
+      `https://fileharbor.com/albums/external/${album.externalAlbumId}/images`,
       {
         method: 'POST',
         headers: {
@@ -464,7 +464,7 @@ async function createAndPopulateAlbum() {
 
     // 3. Recuperare l'album con immagini
     const getRes = await fetch(
-      `https://fileharbor.com/v2/albums/external/${album.externalAlbumId}`,
+      `https://fileharbor.com/albums/external/${album.externalAlbumId}`,
       {
         headers: {
           'X-API-Key': process.env.FILEHARBOR_API_KEY,
@@ -493,7 +493,7 @@ async function createAndPopulateAlbum() {
 ```typescript
 async function syncAlbumChanges(externalAlbumId: string, changes: object) {
   const response = await fetch(
-    `https://fileharbor.com/v2/albums/external/${externalAlbumId}`,
+    `https://fileharbor.com/albums/external/${externalAlbumId}`,
     {
       method: 'PATCH',
       headers: {

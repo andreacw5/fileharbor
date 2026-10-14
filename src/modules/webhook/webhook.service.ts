@@ -156,7 +156,7 @@ export class WebhookService {
       footer: {
         text: 'FileHarbor Monitoring',
         icon_url:
-          'https://fileharbor.heyatom.dev/v2/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
+          'https://fileharbor.heyatom.dev/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
       },
     };
 

@@ -51,9 +51,15 @@ async function bootstrap() {
 
     app.use(json({ limit: '5mb' }));
 
-    const apiPrefix = process.env.API_PREFIX ?? 'v2';
-    const isProduction =
-      app.get(ConfigService).get<string>('NODE_ENV') === 'production';
+    // Same value RouteHelperService builds URLs from: served routes and returned
+    // URLs always agree. Probes stay at /health/* whatever the prefix.
+    const apiPrefix = config.get<string>('apiPrefix') ?? '';
+    if (apiPrefix) {
+      app.setGlobalPrefix(apiPrefix, {
+        exclude: ['health/live', 'health/ready'],
+      });
+    }
+    const isProduction = config.get<string>('NODE_ENV') === 'production';
 
     // /docs enumerates the whole API surface, admin routes included:
     // development only, as in Bastion, Herald, Beacon and Gatherly.
@@ -67,7 +73,6 @@ async function bootstrap() {
           'api-key',
         )
         .addBearerAuth()
-        .setBasePath(apiPrefix ? `/${apiPrefix}` : '/')
         .setLicense(
           'MIT',
           'https://github.com/heyatomdev/fileharbor/blob/main/README.md',

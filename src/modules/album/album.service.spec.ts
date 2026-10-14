@@ -111,8 +111,9 @@ describe('AlbumService', () => {
   const mockRouteService = {
     fullUrl: jest.fn(
       (...segments: string[]) =>
-        `http://localhost:3000/v2/${segments.join('/')}`,
+        `http://localhost:3000/${segments.join('/')}`,
     ),
+    path: jest.fn((...segments: string[]) => `/${segments.join('/')}`),
   };
 
   beforeEach(async () => {
@@ -672,7 +673,7 @@ describe('AlbumService', () => {
       expect(result.token).toBeDefined();
       expect(result.albumId).toBe(mockAlbumId);
       expect(result.expiresAt).toBeDefined();
-      expect(result.url).toContain('/v2/albums/shared/');
+      expect(result.url).toBe(`/albums/shared/${result.token}`);
     });
 
     it('should generate token without expiration when expiresInDays not provided', async () => {
@@ -776,7 +777,7 @@ describe('AlbumService', () => {
       expect(result.id).toBe(mockAlbumId);
       expect(result.itemCount).toBe(1);
       expect(result.coverUrl).toBe(
-        `http://localhost:3000/v2/images/${mockImageId}`,
+        `http://localhost:3000/images/${mockImageId}`,
       );
     });
 
@@ -1044,10 +1045,10 @@ describe('AlbumService', () => {
       // `/images/:id/thumb` does not exist — image.controller.ts declares only
       // `@Get()` and `@Get(':imageId')`, and the thumbnail is a query on it.
       expect(image.thumbnailPath).toBe(
-        `http://localhost:3000/v2/images/${mockImageId}?thumb=true`,
+        `http://localhost:3000/images/${mockImageId}?thumb=true`,
       );
       expect(image.fullPath).toBe(
-        `http://localhost:3000/v2/images/${mockImageId}`,
+        `http://localhost:3000/images/${mockImageId}`,
       );
     });
 
@@ -1086,9 +1087,9 @@ describe('AlbumService', () => {
 
       // Unlike images, the video controller really does declare `@Get(':id/thumb')`,
       // so here the path segment is correct and must stay that way.
-      expect(video.url).toBe(`http://localhost:3000/v2/videos/${mockVideoId}`);
+      expect(video.url).toBe(`http://localhost:3000/videos/${mockVideoId}`);
       expect(video.thumbnailUrl).toBe(
-        `http://localhost:3000/v2/videos/${mockVideoId}/thumb`,
+        `http://localhost:3000/videos/${mockVideoId}/thumb`,
       );
     });
   });

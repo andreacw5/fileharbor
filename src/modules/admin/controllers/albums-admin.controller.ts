@@ -21,7 +21,6 @@ import {
   ApiQuery,
   ApiBody,
 } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
 import { AlbumResourceType } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
@@ -46,6 +45,7 @@ import {
 } from '@/modules/album/dto';
 import { AlbumService } from '@/modules/album/album.service';
 import { ClientService } from '@/modules/client/client.service';
+import { RouteHelperService } from '@/utils/route.utils';
 import {
   assertClientAccess,
   buildClientWhere,
@@ -62,7 +62,7 @@ export class AlbumsAdminController {
   constructor(
     private readonly albumService: AlbumService,
     private readonly clientService: ClientService,
-    private readonly config: ConfigService,
+    private readonly route: RouteHelperService,
   ) {}
 
   @Post()
@@ -360,8 +360,6 @@ export class AlbumsAdminController {
   }
 
   private buildImageFullPath(imageId: string): string {
-    const apiPrefix = this.config.get('apiPrefix') || 'v2';
-    const baseUrl = this.config.get('baseUrl') || 'http://localhost:3000';
-    return `${baseUrl}/${apiPrefix}/images/${imageId}`;
+    return this.route.fullUrl('images', imageId);
   }
 }

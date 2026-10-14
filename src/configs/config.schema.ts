@@ -2,7 +2,10 @@ import * as process from 'node:process';
 
 export default () => ({
   // Server
-  apiPrefix: process.env.API_PREFIX ?? 'v2',
+  // Route prefix, empty by default: routes are served at `/images/...`. The same
+  // value drives both setGlobalPrefix (main.ts) and every URL FileHarbor hands out
+  // (RouteHelperService), so the two can't disagree. Slashes are trimmed.
+  apiPrefix: (process.env.API_PREFIX ?? '').replace(/^\/+|\/+$/g, ''),
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
   metricsPort: parseInt(process.env.METRICS_PORT, 10) || 9091,
 

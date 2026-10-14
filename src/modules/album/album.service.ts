@@ -633,7 +633,12 @@ export class AlbumService {
     this.logger.log(
       `[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
-    return { token, albumId, expiresAt, url: `/v2/albums/shared/${token}` };
+    return {
+      token,
+      albumId,
+      expiresAt,
+      url: this.route.path('albums', 'shared', token),
+    };
   }
 
   async validateAlbumToken(albumId: string, token: string) {

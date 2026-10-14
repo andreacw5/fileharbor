@@ -88,8 +88,8 @@ describe('AvatarService.getAvatarFile format', () => {
   it('metadata urls carry the client ref', async () => {
     const avatar = await service.getAvatarByExternalId('client-1', 'ext-1');
     const dto = service.getAvatarMetadata(avatar, 'ext-1');
-    expect(dto.url).toBe('/v2/avatars/test/ext-1');
-    expect(dto.fullPath).toBe('https://cdn.test/v2/avatars/test/ext-1');
+    expect(dto.url).toBe('/avatars/test/ext-1');
+    expect(dto.fullPath).toBe('https://cdn.test/avatars/test/ext-1');
   });
 
   it('converts to png when format=png (thumb too)', async () => {

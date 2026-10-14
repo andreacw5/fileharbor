@@ -129,14 +129,14 @@ export class ImageResponseDto {
 
   @ApiProperty({
     description: 'URL to access the image',
-    example: '/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423',
+    example: '/images/b2ce77c1-3836-4e28-807f-51f929e12423',
   })
   @Expose()
   url: string;
 
   @ApiPropertyOptional({
     description: 'URL to access the thumbnail',
-    example: '/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423?thumb=true',
+    example: '/images/b2ce77c1-3836-4e28-807f-51f929e12423?thumb=true',
   })
   @Expose()
   thumbnailUrl?: string;
@@ -144,7 +144,7 @@ export class ImageResponseDto {
   @ApiProperty({
     description: 'Full URL to access the image (baseUrl + url)',
     example:
-      'http://localhost:3000/v2/images/b2ce77c1-3836-4e28-807f-51f929e12423',
+      'http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423',
   })
   @Expose()
   fullPath: string;

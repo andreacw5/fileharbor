@@ -204,7 +204,7 @@ describe('ImageService', () => {
               (...segments: string[]) =>
                 'http://localhost:3000/' + segments.join('/'),
             ),
-            apiPrefix: 'v2',
+            apiPrefix: '',
             baseUrl: 'http://localhost:3000',
           },
         },

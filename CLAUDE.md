@@ -343,7 +343,9 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 
 ## API Versioning
 
-Prefix set via `API_PREFIX` env var (default: `v2`). Example: `POST /v2/images/upload`.
+`API_PREFIX` (default empty → `POST /images`) is the single source of truth: `config.schema.ts` `apiPrefix` drives
+`setGlobalPrefix` in `main.ts` (`/health/*` excluded) **and** every returned `url`/`fullPath` via `RouteHelperService`
+(`src/utils/route.utils.ts`). Never concatenate a prefix by hand.
 
 ## Image Processing
 

@@ -185,7 +185,7 @@ pnpm run prisma:migrate
 4. Configure reverse proxy (Nginx)
 5. Enable SSL/TLS
 6. Set up monitoring and logging
-7. Configure `API_PREFIX` if different from default (v2)
+7. Leave `API_PREFIX` empty (default) unless routes should live under a prefix — it applies to served routes and generated URLs alike
 
 ## Roadmap
 
