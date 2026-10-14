@@ -177,8 +177,9 @@ export class VideoController {
       {
         download: download === 'true',
         xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
-        // getVideoStreamPath refuses private videos: everything here is public
-        cacheControl: 'public, max-age=86400',
+        // Browser cache only: the route is X-API-Key gated, so a shared cache
+        // (nginx/CDN) must not serve it keyless or after isPrivate flips.
+        cacheControl: 'private, max-age=86400',
       },
     );
   }
