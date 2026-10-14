@@ -1,574 +1,325 @@
-# 📋 FileHarbor - External Album API Guide
+# Album API (client) — incluso `externalAlbumId`
 
-Guida completa per integrare la gestione album con FileHarbor usando `externalAlbumId`.
+Riferimento delle route `/albums` esposte ai servizi client (auth `X-API-Key`). Scritto dal codice:
+`src/modules/album/album.controller.ts`, `album.service.ts`, `dto/`. Le route admin
+(`/admin/albums`, console Meridian) non sono trattate qui.
 
----
-
-## 🎯 Cosa è cambiato?
-
-Ora potete referenziare i vostri album interni usando un `externalAlbumId` quando create album in FileHarbor. Questo vi permette di:
-
-- ✅ **Mantenere i vostri ID album interni** - Non dovete memorizzare UUID lunghi
-- ✅ **Non dover mappare/memorizzare gli UUID interni di FileHarbor** - Usate sempre il vostro ID
-- ✅ **Aggiungere/rimuovere immagini facilmente** - Usando il vostro ID album noto
-- ✅ **Sincronizzazione bidirezionale** - Tutto sincronizzato tra le due piattaforme
+> ⚠️ Leggere prima [Problemi noti](#problemi-noti): oggi l'identità del creator negli album non è
+> risolta come per immagini e video, e alcune route si comportano diversamente da quanto dichiarano
+> DTO e Swagger.
 
 ---
 
-## 🔑 Autenticazione
+## Autenticazione e contesto
 
-Tutti gli endpoint richiedono:
+| Header | Obbligatorio | Note |
+|---|---|---|
+| `X-API-Key` | sì (tranne `GET /albums/shared/:token`) | Risolve il client. Assente → `401 API key required`; non valida o client inattivo → `401 Invalid or inactive client` |
+| `X-User-Id` | su tutte le scritture | Identifica il creator. Fallback: `?externalUserId=` o `externalUserId` nel body. Stringa vuota = assente. Assente su una scrittura → `400 Creator ID is required (X-User-Id header)` |
 
-```
-Headers:
-  X-API-Key: your-api-key          (REQUIRED)
-  X-User-Id: your-user-id          (REQUIRED per la maggior parte degli endpoint)
-```
+Ogni query è scoped al client della API key: un album di un altro client risponde `404`.
+
+**Proprietà**: ogni album ha un `creatorId`. Modifica, cancellazione, gestione item e token
+richiedono che il creator della richiesta coincida con quello dell'album, altrimenti `403`.
+
+**Privacy** (`isPublic`, default `false`):
+
+| Route | Album privato | Album pubblico |
+|---|---|---|
+| `GET /albums/:albumId`, `GET /albums/external/:externalAlbumId` | solo il creator (`403 Access denied to private album` per gli altri) | chiunque abbia la API key del client |
+| `GET /albums` | **incluso** nella lista, nessun filtro di privacy | incluso |
+| `GET /albums/:albumId/items` | **nessun controllo**: basta la API key | idem |
+| `GET /albums/shared/:token` | accessibile con un token valido, senza API key | idem |
+
+"Pubblico" significa quindi "visibile a ogni creator dello stesso client", non "accessibile senza
+autenticazione": l'unico accesso anonimo è via token condiviso.
 
 ---
 
-## 📌 Endpoint Disponibili
+## Oggetti
 
-### 1️⃣ Creare un Album con External ID
+### `Album`
 
-Quando create un album nella vostra app, passate il vostro ID album a FileHarbor.
+Restituito da create, get, update e dalla lista.
 
-```bash
-POST /albums
-Content-Type: application/json
-X-API-Key: your-api-key
-X-User-Id: user-123
-
+```ts
 {
-  "externalAlbumId": "your-album-456",  // 🔑 Il VOSTRO ID album
-  "name": "Vacanze Estate 2025",
-  "description": "Foto dalle ferie in Italia",
-  "isPublic": false
+  id: string;                    // UUID interno FileHarbor
+  externalAlbumId: string | null; // il vostro id, unico per client
+  clientId: string;
+  creatorId: string;             // id interno del Creator (vedi Problemi noti)
+  name: string;
+  description: string | null;
+  isPublic: boolean;
+  coverImageId: string | null;
+  createdAt: string;             // ISO 8601, UTC
+  // solo su get, lista e shared:
+  itemCount?: number;            // immagini + video
+  imageCount?: number;
+  videoCount?: number;
+  coverUrl?: string;             // URL assoluto dell'immagine di copertina
 }
 ```
 
-**Response (201 Created):**
+Create e update **non** includono i contatori né `coverUrl`. Nessuna risposta include gli item: si
+leggono con `GET /albums/:albumId/items`.
+
+`coverUrl`: la prima immagine dell'album per `order`. Solo `GET /albums/external/:externalAlbumId`
+usa `coverImageId` quando è impostato; le altre route lo ignorano e prendono sempre la prima immagine.
+
+### `AlbumItem` (lista item)
+
+```ts
+{
+  id: string;                    // id della riga AlbumItem, non della risorsa
+  resourceType: 'IMAGE' | 'VIDEO';
+  order: number;
+  addedAt: string;
+  image?: {                      // se IMAGE
+    id, originalName, mimeType, width, height, size,
+    tags: string[],
+    fullPath: string,            // {BASE_URL}/images/{id}
+    thumbnailPath: string,       // {BASE_URL}/images/{id}?thumb=true
+  };
+  video?: {                      // se VIDEO
+    id, originalName, mimeType, duration?, width?, height?, size,
+    tags: string[],
+    url: string,                 // {BASE_URL}/videos/{id}
+    thumbnailUrl: string,        // {BASE_URL}/videos/{id}/thumb
+  };
+}
+```
+
+Gli URL seguono `API_PREFIX` (vedi `RouteHelperService`): non costruirli a mano.
+
+### Paginazione
+
+```ts
+{ data: T[]; pagination: { page: number; perPage: number; total: number; totalPages: number } }
+```
+
+---
+
+## Route per id interno
+
+### `POST /albums` — crea
+
+`X-User-Id` obbligatorio. Body:
+
+| Campo | Tipo | Obbl. | Note |
+|---|---|---|---|
+| `name` | string | sì | |
+| `externalAlbumId` | string | no | Unico per client (`@@unique([clientId, externalAlbumId])`) |
+| `description` | string | no | |
+| `isPublic` | boolean | no | default `false` |
+| `coverImageId` | UUID | no | **Accettato ma ignorato** in creazione: impostarlo poi con `PATCH` |
+
+`201` → `Album`. Webhook `album.created`.
+
+### `GET /albums` — lista
+
+Query: `creatorId` (id interno), `public` (`true`/`false`), `search` (contiene nel nome,
+case-insensitive), `page` (default 1), `perPage` (default 20, max 100). Ordine: `createdAt` desc.
+
+`200` → `{ data: Album[], pagination }`, con contatori e `coverUrl`.
+
+### `GET /albums/:albumId` — dettaglio
+
+`X-User-Id` necessario solo per album privati. `200` → `Album` con contatori.
+
+### `PATCH /albums/:albumId` — aggiorna
+
+`X-User-Id` obbligatorio, deve essere il creator. Body, tutto opzionale:
+
+| Campo | Note |
+|---|---|
+| `externalAlbumId` | Cambia l'id esterno. Un valore già usato nel client → errore (vedi Errori) |
+| `name`, `description`, `isPublic` | |
+| `coverImageId` | UUID di un'immagine **già nell'album** e dello stesso creator, altrimenti `400`. `null` rimuove la copertina |
+
+`200` → `Album` (senza contatori). Webhook `album.updated`.
+
+### `DELETE /albums/:albumId` — cancella
+
+`X-User-Id` obbligatorio, deve essere il creator. Cancella album, item e token; immagini e video
+restano. `200` → `{ success: true, message: "Album deleted successfully" }`. Webhook `album.deleted`.
+
+Non esiste la variante per `externalAlbumId`: usare l'`id` interno.
+
+### `POST /albums/:albumId/items` — aggiungi immagini e/o video
+
+`X-User-Id` obbligatorio, deve essere il creator. Body:
+
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",  // ID interno FileHarbor
-  "externalAlbumId": "your-album-456",            // 🔑 Il vostro ID (ritornato)
-  "clientId": "client-123",
-  "userId": "user-123",
-  "name": "Vacanze Estate 2025",
-  "description": "Foto dalle ferie in Italia",
-  "isPublic": false,
-  "createdAt": "2025-01-15T20:30:00.000Z"
-}
-```
-
-**Codice di Esempio (JavaScript/TypeScript):**
-```typescript
-const createAlbum = async (externalAlbumId: string, name: string) => {
-  const response = await fetch('https://fileharbor.com/albums', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': process.env.FILEHARBOR_API_KEY,
-      'X-User-Id': getCurrentUserId(),
-    },
-    body: JSON.stringify({
-      externalAlbumId,
-      name,
-      isPublic: false,
-    }),
-  });
-  return response.json();
-};
-```
-
----
-
-### 2️⃣ Aggiungere Immagini all'Album
-
-Aggiungete immagini al album usando il vostro `externalAlbumId`.
-
-```bash
-POST /albums/external/your-album-456/images
-Content-Type: application/json
-X-API-Key: your-api-key
-X-User-Id: user-123
-
-{
-  "imageIds": [
-    "image-id-1",
-    "image-id-2",
-    "image-id-3"
+  "items": [
+    { "id": "<uuid immagine>", "resourceType": "IMAGE" },
+    { "id": "<uuid video>", "resourceType": "VIDEO", "order": 5 }
   ]
 }
 ```
 
-**Response (201 Created):**
-```json
-{
-  "success": true,
-  "message": "Added 3 image(s) to album",
-  "added": 3
-}
-```
+- Massimo 100 item per richiesta.
+- Ogni risorsa deve appartenere al client **e** allo stesso creator, altrimenti
+  `404 Image <id> not found or unauthorized` (o `Video …`) e non viene aggiunto nulla.
+- Duplicati nella richiesta: vince l'ultimo.
+- `order` omesso → in coda, nell'ordine della richiesta. Una risorsa già nell'album non viene
+  duplicata: ne cambia solo l'`order`.
 
-**Codice di Esempio:**
-```typescript
-const addImagesToAlbum = async (externalAlbumId: string, imageIds: string[]) => {
-  const response = await fetch(
-    `https://fileharbor.com/albums/external/${externalAlbumId}/images`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.FILEHARBOR_API_KEY,
-        'X-User-Id': getCurrentUserId(),
-      },
-      body: JSON.stringify({ imageIds }),
-    }
-  );
-  return response.json();
+`201` → `{ albumId, count, items: [{ id, resourceType, order }] }` (`id` = riga AlbumItem).
+Webhook `album.image_added`, uno per immagine (nessuno per i video).
+
+### `DELETE /albums/:albumId/items` — rimuovi
+
+`X-User-Id` obbligatorio, deve essere il creator. Body: `{ "items": [{ "id", "resourceType" }] }`,
+max 100. Le risorse non presenti nell'album sono ignorate in silenzio. Immagini e video non vengono
+cancellati.
+
+`200` → `{ albumId, removed, success: true, message: "<n> item(s) removed" }`.
+Webhook `album.image_removed`, uno per immagine rimossa.
+
+### `GET /albums/:albumId/items` — lista item
+
+Query: `resourceType` (`IMAGE` | `VIDEO`), `page` (default 1), `perPage` (default 20, max 100).
+Ordine: `order` asc. `200` → `{ data: AlbumItem[], pagination }`.
+
+---
+
+## Token di condivisione
+
+### `POST /albums/:albumId/token`
+
+`X-User-Id` obbligatorio, deve essere il creator. Body opzionale: `{ "expiresInDays": 7 }`
+(intero ≥ 1). **Se omesso il token non scade** (la descrizione Swagger "default: 7" è sbagliata).
+Si possono avere più token attivi per album.
+
+`201` → `{ token, albumId, expiresAt: string | null, url: "/albums/shared/<token>" }`.
+
+### `DELETE /albums/:albumId/token`
+
+Revoca **tutti** i token dell'album. `200` → `{ success: true, message: "Album tokens revoked", count }`.
+
+I token scaduti sono cancellati ogni notte alle 04:00 (`AlbumCleanupJob`).
+
+### `GET /albums/shared/:token` — pubblica
+
+Nessun header richiesto. `200` → `Album` con contatori e `coverUrl`. Token inesistente o scaduto →
+`403 Invalid token` / `403 Token expired`.
+
+Restituisce solo i metadati: gli item si leggono con `GET /albums/:albumId/items`, che richiede la
+API key.
+
+---
+
+## Route per `externalAlbumId`
+
+Stesso comportamento delle route per id, cercando l'album con `(clientId, externalAlbumId)`.
+Album non trovato → `404 Album not found`.
+
+| Route | Equivalente |
+|---|---|
+| `GET /albums/external/:externalAlbumId` | `GET /albums/:albumId` (ma `coverUrl` rispetta `coverImageId`) |
+| `PATCH /albums/external/:externalAlbumId` | `PATCH /albums/:albumId`. `externalAlbumId` nel body omesso o vuoto → resta quello attuale |
+| `POST /albums/external/:externalAlbumId/items` | `POST /albums/:albumId/items` |
+| `DELETE /albums/external/:externalAlbumId/items` | `DELETE /albums/:albumId/items` |
+
+Non esistono varianti external per `DELETE` album, lista item e token: serve l'`id` interno,
+restituito da create e get.
+
+### Flusso tipico
+
+```ts
+const headers = {
+  'Content-Type': 'application/json',
+  'X-API-Key': apiKey,
+  'X-User-Id': creatorId,
 };
-```
 
----
-
-### 3️⃣ Ottenere Album e Immagini
-
-Recuperate l'album con tutte le immagini associate.
-
-```bash
-GET /albums/external/your-album-456
-X-API-Key: your-api-key
-X-User-Id: user-123
-```
-
-**Response (200 OK):**
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "externalAlbumId": "your-album-456",
-  "clientId": "client-123",
-  "userId": "user-123",
-  "name": "Vacanze Estate 2025",
-  "description": "Foto dalle ferie in Italia",
-  "isPublic": false,
-  "createdAt": "2025-01-15T20:30:00.000Z",
-  "imageCount": 3,
-  "images": [
-    {
-      "id": "image-id-1",
-      "originalName": "foto-spiaggia.jpg",
-      "format": "webp",
-      "width": 1920,
-      "height": 1080,
-      "size": 524288,
-      "createdAt": "2025-01-15T20:31:00.000Z",
-      "url": "/images/image-id-1",
-      "thumbnailUrl": "/images/image-id-1/thumb",
-      "order": 1
-    },
-    {
-      "id": "image-id-2",
-      "originalName": "foto-tramonto.jpg",
-      "format": "webp",
-      "width": 2048,
-      "height": 1536,
-      "size": 786432,
-      "createdAt": "2025-01-15T20:32:00.000Z",
-      "url": "/images/image-id-2",
-      "thumbnailUrl": "/images/image-id-2/thumb",
-      "order": 2
-    },
-    {
-      "id": "image-id-3",
-      "originalName": "foto-amici.jpg",
-      "format": "webp",
-      "width": 1600,
-      "height": 1200,
-      "size": 458752,
-      "createdAt": "2025-01-15T20:33:00.000Z",
-      "url": "/images/image-id-3",
-      "thumbnailUrl": "/images/image-id-3/thumb",
-      "order": 3
-    }
-  ]
-}
-```
-
-**Codice di Esempio:**
-```typescript
-const getAlbumWithImages = async (externalAlbumId: string) => {
-  const response = await fetch(
-    `https://fileharbor.com/albums/external/${externalAlbumId}`,
-    {
-      headers: {
-        'X-API-Key': process.env.FILEHARBOR_API_KEY,
-        'X-User-Id': getCurrentUserId(),
-      },
-    }
-  );
-  return response.json();
-};
-```
-
----
-
-### 4️⃣ Aggiornare Album Metadata
-
-Aggiornate il nome, descrizione, o accesso pubblico dell'album.
-
-```bash
-PATCH /albums/external/your-album-456
-Content-Type: application/json
-X-API-Key: your-api-key
-X-User-Id: user-123
-
-{
-  "name": "Vacanze Estate 2025 - UPDATED",
-  "description": "Foto aggiornate dalle ferie",
-  "isPublic": true
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "externalAlbumId": "your-album-456",
-  "clientId": "client-123",
-  "userId": "user-123",
-  "name": "Vacanze Estate 2025 - UPDATED",
-  "description": "Foto aggiornate dalle ferie",
-  "isPublic": true,
-  "createdAt": "2025-01-15T20:30:00.000Z"
-}
-```
-
-**Nota:** Il campo `externalAlbumId` è opzionale - potete omitterlo senza problemi.
-
-**Codice di Esempio:**
-```typescript
-const updateAlbum = async (externalAlbumId: string, updates: Partial<Album>) => {
-  const response = await fetch(
-    `https://fileharbor.com/albums/external/${externalAlbumId}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.FILEHARBOR_API_KEY,
-        'X-User-Id': getCurrentUserId(),
-      },
-      body: JSON.stringify(updates),
-    }
-  );
-  return response.json();
-};
-```
-
----
-
-### 5️⃣ Rimuovere Immagini dall'Album
-
-Rimuovete specifiche immagini dall'album senza cancellarle da FileHarbor.
-
-```bash
-DELETE /albums/external/your-album-456/images
-Content-Type: application/json
-X-API-Key: your-api-key
-X-User-Id: user-123
-
-{
-  "imageIds": [
-    "image-id-1",
-    "image-id-2"
-  ]
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Removed 2 image(s) from album",
-  "removed": 2
-}
-```
-
-**Codice di Esempio:**
-```typescript
-const removeImagesFromAlbum = async (
-  externalAlbumId: string,
-  imageIds: string[]
-) => {
-  const response = await fetch(
-    `https://fileharbor.com/albums/external/${externalAlbumId}/images`,
-    {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.FILEHARBOR_API_KEY,
-        'X-User-Id': getCurrentUserId(),
-      },
-      body: JSON.stringify({ imageIds }),
-    }
-  );
-  return response.json();
-};
-```
-
----
-
-## 🔄 Flusso Consigliato
-
-```
-┌─────────────────────────┐
-│  Vostra App Interna     │
-└────────────┬────────────┘
-             │
-             ├─ Utente crea album: "my-album-123"
-             │
-             ▼
-    ┌────────────────────────────────┐
-    │ POST /albums                │
-    │ {                              │
-    │   externalAlbumId: "my-album-  │
-    │   123",                        │
-    │   name: "..."                  │
-    │ }                              │
-    └────────────┬───────────────────┘
-                 │
-                 ▼
-    ┌────────────────────────────────┐
-    │  FileHarbor                    │
-    │  (Salva album associato)       │
-    └────────────┬───────────────────┘
-                 │
-                 ▼ Respone con ID interno
-    
-    ┌─────────────────────────┐
-    │  Vostra App Interna     │
-    │  (Può salvare o ignorare│
-    │   l'ID interno)         │
-    └─────────────────────────┘
-             │
-             ├─ Utente aggiunge immagini
-             │
-             ▼
-    ┌────────────────────────────────┐
-    │ POST /albums/external/          │
-    │       my-album-123/images       │
-    │ {                              │
-    │   imageIds: [...]              │
-    │ }                              │
-    └────────────┬───────────────────┘
-                 │
-                 ▼ Immagini aggiunte
-    
-    ┌────────────────────────────────┐
-    │  FileHarbor                    │
-    │  (Associa immagini)            │
-    └────────────┬───────────────────┘
-                 │
-                 ▼
-    ┌─────────────────────────┐
-    │  Vostra App Interna     │
-    │  (Sincronizzato!)       │
-    └─────────────────────────┘
-```
-
----
-
-## 🛡️ Sicurezza & Autorizzazione
-
-### Multi-Tenancy
-- Ogni album è scoped al vostro client tramite `X-API-Key`
-- Non potete accedere agli album di altri client
-
-### Autorizzazione Utente
-- Solo l'utente che crea l'album (`userId`) può modificarlo
-- Tentare di modificare album di altri utenti restituisce `403 Forbidden`
-
-### Accesso agli Album
-- **Album Privati** (`isPublic: false`): Solo owner può accedere
-- **Album Pubblici** (`isPublic: true`): Chiunque con l'API key può accedere
-- Per album privati, considerate di usare token di condivisione
-
----
-
-## ⚠️ Codici di Errore
-
-| Codice | Significato | Esempio |
-|--------|-------------|---------|
-| `200` | OK - Operazione riuscita | GET album |
-| `201` | Created - Risorsa creata | POST album |
-| `400` | Bad Request - Dati non validi | Manca X-User-Id |
-| `403` | Forbidden - Non autorizzato | Cerchi di modificare album di altri |
-| `404` | Not Found - Album non esiste | externalAlbumId inesistente |
-| `409` | Conflict - Album già esiste | externalAlbumId duplicato |
-| `500` | Server Error - Errore interno | Contattate il supporto |
-
----
-
-## 📝 Esempi Completi
-
-### Creare Album e Aggiungere Immagini
-
-```typescript
-async function createAndPopulateAlbum() {
-  try {
-    // 1. Creare l'album
-    const albumRes = await fetch('https://fileharbor.com/albums', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.FILEHARBOR_API_KEY,
-        'X-User-Id': 'user-123',
-      },
-      body: JSON.stringify({
-        externalAlbumId: 'summer-2025',
-        name: 'Summer 2025',
-        description: 'Vacation photos',
-        isPublic: false,
-      }),
-    });
-
-    if (!albumRes.ok) {
-      throw new Error(`Failed to create album: ${albumRes.statusText}`);
-    }
-
-    const album = await albumRes.json();
-    console.log(`✅ Album created:`, album.externalAlbumId);
-
-    // 2. Aggiungere immagini
-    const imagesRes = await fetch(
-      `https://fileharbor.com/albums/external/${album.externalAlbumId}/images`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': process.env.FILEHARBOR_API_KEY,
-          'X-User-Id': 'user-123',
-        },
-        body: JSON.stringify({
-          imageIds: ['img-1', 'img-2', 'img-3'],
-        }),
-      }
-    );
-
-    if (!imagesRes.ok) {
-      throw new Error(`Failed to add images: ${imagesRes.statusText}`);
-    }
-
-    const result = await imagesRes.json();
-    console.log(`✅ Images added:`, result.added);
-
-    // 3. Recuperare l'album con immagini
-    const getRes = await fetch(
-      `https://fileharbor.com/albums/external/${album.externalAlbumId}`,
-      {
-        headers: {
-          'X-API-Key': process.env.FILEHARBOR_API_KEY,
-          'X-User-Id': 'user-123',
-        },
-      }
-    );
-
-    const fullAlbum = await getRes.json();
-    console.log(`✅ Album with images:`, {
-      name: fullAlbum.name,
-      imageCount: fullAlbum.imageCount,
-      images: fullAlbum.images,
-    });
-
-    return fullAlbum;
-  } catch (error) {
-    console.error('❌ Error:', error);
-    throw error;
-  }
-}
-```
-
-### Sincronizzare Album al Cambio
-
-```typescript
-async function syncAlbumChanges(externalAlbumId: string, changes: object) {
-  const response = await fetch(
-    `https://fileharbor.com/albums/external/${externalAlbumId}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.FILEHARBOR_API_KEY,
-        'X-User-Id': getCurrentUserId(),
-      },
-      body: JSON.stringify(changes),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Sync failed: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-// Uso
-await syncAlbumChanges('summer-2025', {
-  name: 'Summer 2025 - Updated',
-  isPublic: true,
+// 1. crea l'album con il vostro id
+await fetch(`${FILEHARBOR_URL}/albums`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ externalAlbumId: 'summer-2025', name: 'Summer 2025' }),
 });
+
+// 2. aggiungi media (già caricati con POST /images o POST /videos dallo stesso creator)
+await fetch(`${FILEHARBOR_URL}/albums/external/summer-2025/items`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    items: [
+      { id: imageId, resourceType: 'IMAGE' },
+      { id: videoId, resourceType: 'VIDEO' },
+    ],
+  }),
+});
+
+// 3. leggi metadati, poi gli item con l'id interno
+const album = await (await fetch(`${FILEHARBOR_URL}/albums/external/summer-2025`, { headers })).json();
+const items = await (await fetch(`${FILEHARBOR_URL}/albums/${album.id}/items`, { headers })).json();
 ```
 
 ---
 
-## 🔄 Sincronizzazione Consigliata
+## Errori
 
-### Scenario 1: Album Creato nella Vostra App
-1. Create l'album internamente
-2. Create l'album in FileHarbor con `externalAlbumId`
-3. Utente aggiunge immagini internamente
-4. Sincronizzate in FileHarbor tramite external ID
+Formato (`HttpExceptionFilter`):
 
-### Scenario 2: Aggiornamento Album
-1. Utente modifica nome/descrizione
-2. Fate PATCH a `/albums/external/{externalAlbumId}`
-3. FileHarbor aggiorna i metadata
+```json
+{ "statusCode": 403, "message": "...", "errors": null, "timestamp": "...", "path": "/albums/..." }
+```
 
-### Scenario 3: Gestione Immagini
-1. Aggiungete immagini usando POST `/albums/external/{externalAlbumId}/images`
-2. Rimovetele usando DELETE `/albums/external/{externalAlbumId}/images`
-3. Non dovete preoccuparvi degli ID interni
+Su `400` di validazione `errors` contiene l'array dei messaggi di `class-validator`.
 
----
+| Status | Quando |
+|---|---|
+| `400` | `X-User-Id` assente su una scrittura; body non valido (UUID, enum, > 100 item); `coverImageId` non nell'album o di un altro creator |
+| `401` | API key assente, non valida o client inattivo |
+| `403` | Album privato letto da un altro creator; modifica/cancellazione/item/token su un album di un altro creator; token condiviso non valido o scaduto |
+| `404` | Album non trovato nel client (per id o `externalAlbumId`); item da aggiungere inesistente o non del creator |
+| `429` | Rate limit globale (`THROTTLE_TTL` / `THROTTLE_LIMIT`) |
+| `500` | `externalAlbumId` duplicato nel client (vedi sotto) |
 
-## 📞 Support & Notes
-
-- **Backward Compatible**: I vecchi endpoint con ID interno continuano a funzionare
-- **Rate Limiting**: Applicato globalmente a tutte le API
-- **Webhook**: FileHarbor invia notifiche per ogni operazione
-- **Timezone**: Tutti i timestamp sono in UTC (ISO 8601)
+**`externalAlbumId` duplicato**: non c'è un `409`. Il vincolo unico del DB solleva un errore Prisma
+(`P2002`) che nessuno traduce, e la risposta è un `500` generico. Controllare prima con
+`GET /albums/external/:id` (404 = libero) finché non è corretto.
 
 ---
 
-## ❓ FAQ
+## Webhook
 
-**D: Posso creare album senza `externalAlbumId`?**
-R: Sì, è opzionale. Se non lo passate, potete sempre accedere via ID interno.
+Se il client ha i webhook attivi (fire-and-forget, vedi `CLAUDE.md`):
 
-**D: Posso cambiare `externalAlbumId` di un album esistente?**
-R: Sì, tramite PATCH, ma assicuratevi che il nuovo valore sia unico per il client.
+| Evento | Quando |
+|---|---|
+| `album.created` | `POST /albums` |
+| `album.updated` | `PATCH` (per id o external) |
+| `album.deleted` | `DELETE /albums/:albumId` |
+| `album.image_added` | per ogni immagine passata a `POST …/items` (anche se già presente) |
+| `album.image_removed` | per ogni immagine effettivamente rimossa |
 
-**D: Che succede se cancello un album dalla vostra app?**
-R: Dovete cancellarlo anche in FileHarbor tramite l'endpoint DELETE (non implementato per external ID, usate l'ID interno).
-
-**D: Posso avere album pubblici?**
-R: Sì, impostare `isPublic: true` quando create o aggiornate l'album.
-
-**D: Le immagini vengono cancellate quando rimuovo da un album?**
-R: No, le immagini rimangono in FileHarbor. Vengono solo rimosse dall'associazione album.
+Nessun evento per i video aggiunti o rimossi.
 
 ---
 
-**Versione:** 1.0  
-**Data:** 15 Gennaio 2026  
-**Ultimo aggiornamento:** 15 Gennaio 2026
+## Problemi noti
+
+Verificati sul codice; non ancora corretti.
+
+1. **`X-User-Id` non viene risolto in un Creator.** Immagini e video passano l'id esterno a
+   `CreatorService.resolveCreator` e salvano l'id interno; il servizio album usa il valore dell'header
+   così com'è, sia come `Album.creatorId` (FK su `Creator.id`) sia nei confronti di proprietà. Effetti
+   con un `X-User-Id` "normale" (l'id dell'utente nel sistema chiamante):
+   - `POST /albums` fallisce sulla foreign key → `500`;
+   - `POST …/items` filtra immagini e video per `creatorId = <id esterno>` → `404` su ogni item;
+   - per un album esistente, le scritture e la lettura degli album privati rispondono `403`.
+
+   Funziona solo passando come `X-User-Id` l'id **interno** del Creator. I test unitari
+   (`album.service.spec.ts`) usano lo stesso valore per i due id e non lo rilevano.
+2. **Duplicato `externalAlbumId` → `500`** invece di `409` (vedi Errori).
+3. **`GET /albums` e `GET /albums/:albumId/items` ignorano la privacy**: qualunque detentore della API
+   key elenca album privati e ne legge gli item.
+4. **`coverImageId` in creazione è ignorato**, e solo il GET per `externalAlbumId` lo usa per `coverUrl`.
+5. **`expiresInDays` omesso → token senza scadenza**, contro il "default: 7" dichiarato nel DTO.
+6. Il DTO di risposta Swagger dichiara un campo `images` che nessuna route restituisce, e non dichiara
+   `clientId`, che invece c'è.
