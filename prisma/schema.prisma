@@ -161,7 +161,7 @@ model Video {
   originalName String
   storagePath  String
   mimeType     String
-  size         Int
+  size         BigInt
   duration     Float?
   width        Int?
   height       Int?

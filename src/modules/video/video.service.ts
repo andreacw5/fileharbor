@@ -165,7 +165,7 @@ export class VideoService {
         .sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
           videoId: video.id,
           originalName: video.originalName,
-          size: video.size,
+          size: Number(video.size),
           creatorId: creator.externalId,
         })
         .catch((err) =>
@@ -232,9 +232,11 @@ export class VideoService {
     });
     const domain = client?.domain || clientId;
 
-    this.prisma.video
-      .update({ where: { id: videoId }, data: { views: { increment: 1 } } })
-      .catch(() => {});
+    // Raw SQL on purpose: Prisma would bump updatedAt on every view
+    this.prisma.$executeRaw`
+      UPDATE videos SET views = views + 1 WHERE id = ${videoId}`.catch(
+      () => {},
+    );
 
     return {
       storagePath: video.storagePath,
@@ -303,9 +305,17 @@ export class VideoService {
     });
     const domain = client?.domain || clientId;
 
-    const videoDir = this.storage.getVideoPath(domain, videoId);
-    await this.storage.deleteDirectory(videoDir);
+    // Row first: a failed file delete leaves a stray dir for the orphan
+    // sweep, never a row pointing at missing files.
     await this.prisma.video.delete({ where: { id: videoId } });
+    const videoDir = this.storage.getVideoPath(domain, videoId);
+    try {
+      await this.storage.deleteDirectory(videoDir);
+    } catch (err) {
+      this.logger.warn(
+        `[deleteVideo] Files left for the orphan sweep - ID: ${videoId}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     this.webhook
       .sendWebhook(clientId, WebhookEvent.VIDEO_DELETED, {

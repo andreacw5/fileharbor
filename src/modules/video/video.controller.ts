@@ -177,6 +177,8 @@ export class VideoController {
       {
         download: download === 'true',
         xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
+        // getVideoStreamPath refuses private videos: everything here is public
+        cacheControl: 'public, max-age=86400',
       },
     );
   }

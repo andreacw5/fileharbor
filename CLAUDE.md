@@ -86,10 +86,11 @@ No `job` module: each cron lives next to the module it serves (`ScheduleModule.f
 | `AvatarCleanupJob.optimizeAvatars` | hourly | same for avatars |
 | `ImageCleanupJob.cleanExpiredShareLinks` | 04:00 | deletes expired image share links |
 | `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
-| `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar dirs with no DB row |
+| `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar/video dirs with no DB row (older than 1h) |
 | `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
 
-Video dirs have no orphan sweep (`StorageCleanupJob` covers images and avatars only).
+Deletes remove the DB row first, then the files; a failed file delete only logs a `warn` and
+leaves the dir to this sweep (a row pointing at missing files would be worse than a stray dir).
 
 Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
 `MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
@@ -122,7 +123,7 @@ Three parts:
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
-  scoped totals, a 7-day trend and a per-day chart. `totalStorage` sums image bytes only.
+  scoped totals, a 7-day trend and a per-day chart. `totalStorage` / `newStorage` sum image, video and avatar bytes.
 
 ### Guard
 

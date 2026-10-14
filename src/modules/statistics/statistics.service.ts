@@ -34,13 +34,17 @@ export class StatisticsService {
       totalAlbums,
       totalVideos,
       totalCreators,
-      storageAgg,
+      imageStorageAgg,
+      videoStorageAgg,
+      avatarStorageAgg,
       newImages,
       newAvatars,
       newAlbums,
       newVideos,
       newCreators,
-      newStorageAgg,
+      newImageStorageAgg,
+      newVideoStorageAgg,
+      newAvatarStorageAgg,
     ] = await Promise.all([
       this.prisma.client.count(
         Object.keys(clientWhere).length
@@ -53,6 +57,11 @@ export class StatisticsService {
       this.prisma.video.count({ where: clientWhere }),
       this.prisma.creator.count({ where: clientWhere }),
       this.prisma.image.aggregate({ where: clientWhere, _sum: { size: true } }),
+      this.prisma.video.aggregate({ where: clientWhere, _sum: { size: true } }),
+      this.prisma.avatar.aggregate({
+        where: clientWhere,
+        _sum: { size: true },
+      }),
       this.prisma.image.count({ where: clientWhere7d }),
       this.prisma.avatar.count({ where: clientWhere7d }),
       this.prisma.album.count({ where: clientWhere7d }),
@@ -62,7 +71,19 @@ export class StatisticsService {
         where: clientWhere7d,
         _sum: { size: true },
       }),
+      this.prisma.video.aggregate({
+        where: clientWhere7d,
+        _sum: { size: true },
+      }),
+      this.prisma.avatar.aggregate({
+        where: clientWhere7d,
+        _sum: { size: true },
+      }),
     ]);
+
+    // Video sizes are BigInt; a Number is exact up to 8 PiB.
+    const sumBytes = (...aggs: { _sum: { size: number | bigint | null } }[]) =>
+      aggs.reduce((total, agg) => total + Number(agg._sum.size ?? 0), 0);
 
     const dailyChart = await this.buildDailyChart(
       admin.allowedClientIds,
@@ -77,7 +98,11 @@ export class StatisticsService {
         newAlbums,
         newVideos,
         newCreators,
-        newStorage: newStorageAgg._sum.size || 0,
+        newStorage: sumBytes(
+          newImageStorageAgg,
+          newVideoStorageAgg,
+          newAvatarStorageAgg,
+        ),
       },
       { excludeExtraneousValues: true },
     );
@@ -92,7 +117,11 @@ export class StatisticsService {
         totalAlbums,
         totalVideos,
         totalCreators,
-        totalStorage: storageAgg._sum.size || 0,
+        totalStorage: sumBytes(
+          imageStorageAgg,
+          videoStorageAgg,
+          avatarStorageAgg,
+        ),
         last7Days,
         dailyChart,
       },

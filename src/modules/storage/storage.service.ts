@@ -369,6 +369,14 @@ export class StorageService {
     return this.listDirectories(avatarsPath);
   }
 
+  /**
+   * Get all video IDs for a client domain
+   */
+  async getClientVideoIds(domain: string): Promise<string[]> {
+    const videosPath = path.join(this.getClientPath(domain), 'videos');
+    return this.listDirectories(videosPath);
+  }
+
   getVideoPath(domain: string, videoId: string): string {
     const sanitizedVideoId = this.sanitizePathComponent(videoId);
     return path.join(this.getClientPath(domain), 'videos', sanitizedVideoId);

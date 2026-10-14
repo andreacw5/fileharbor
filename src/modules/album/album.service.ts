@@ -114,7 +114,7 @@ export class AlbumService {
           duration: item.video.duration,
           width: item.video.width,
           height: item.video.height,
-          size: item.video.size,
+          size: Number(item.video.size),
           tags: item.video.videoTags?.map((t: any) => t.tag.name) ?? [],
           url: this.route.fullUrl('videos', item.video.id),
           thumbnailUrl: this.route.fullUrl('videos', item.video.id, 'thumb'),

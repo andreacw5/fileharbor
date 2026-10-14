@@ -308,14 +308,8 @@ export class AvatarService {
       });
       const domain = client?.domain || clientId;
 
-      // Delete files
-      this.logger.debug(
-        `[deleteAvatar] Deleting files - Client: ${clientId}, Creator: ${creator.id}`,
-      );
-      const avatarPath = this.storage.getAvatarPath(domain, creator.id);
-      await this.storage.deleteDirectory(avatarPath);
-
-      // Delete from database
+      // Row first: a failed file delete leaves a stray dir for the orphan
+      // sweep, never a row pointing at missing files.
       this.logger.debug(
         `[deleteAvatar] Deleting from database - Client: ${clientId}, Creator: ${creator.id}`,
       );
@@ -327,6 +321,18 @@ export class AvatarService {
           },
         },
       });
+
+      this.logger.debug(
+        `[deleteAvatar] Deleting files - Client: ${clientId}, Creator: ${creator.id}`,
+      );
+      const avatarPath = this.storage.getAvatarPath(domain, creator.id);
+      try {
+        await this.storage.deleteDirectory(avatarPath);
+      } catch (error) {
+        this.logger.warn(
+          `[deleteAvatar] Files left for the orphan sweep - Creator: ${creator.id}: ${error.message}`,
+        );
+      }
 
       // Send webhook notification (non-blocking)
       this.webhook

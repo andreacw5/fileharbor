@@ -120,6 +120,7 @@ describe('VideoService', () => {
       delete: jest.fn(),
       count: jest.fn(),
     },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
 
   const mockStorageService = {
@@ -452,10 +453,11 @@ describe('VideoService', () => {
 
       await service.getVideoStreamPath(mockVideoId, mockClientId);
 
-      expect(mockPrismaService.video.update).toHaveBeenCalledWith({
-        where: { id: mockVideoId },
-        data: { views: { increment: 1 } },
-      });
+      // Raw SQL, not prisma.video.update: that would bump updatedAt per view
+      expect(mockPrismaService.video.update).not.toHaveBeenCalled();
+      const [sql, id] = mockPrismaService.$executeRaw.mock.calls[0];
+      expect(sql.join('?')).toContain('SET views = views + 1');
+      expect(id).toBe(mockVideoId);
     });
 
     it('should use clientId as domain when client has no domain', async () => {
@@ -590,6 +592,38 @@ describe('VideoService', () => {
         WebhookEvent.VIDEO_DELETED,
         expect.objectContaining({ id: mockVideoId }),
       );
+    });
+
+    it('deletes the row before the files, and survives a failed file delete', async () => {
+      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
+      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
+      mockStorageService.getVideoPath.mockReturnValue('storage/path');
+      mockPrismaService.video.delete.mockResolvedValue(mockVideo);
+      mockStorageService.deleteDirectory.mockRejectedValueOnce(
+        new Error('EBUSY'),
+      );
+
+      const result = await service.deleteVideo(mockVideoId, mockClientId);
+
+      expect(result.success).toBe(true);
+      expect(
+        mockPrismaService.video.delete.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockStorageService.deleteDirectory.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('leaves the files alone when the row delete fails', async () => {
+      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
+      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
+      mockPrismaService.video.delete.mockRejectedValueOnce(
+        new Error('db down'),
+      );
+
+      await expect(
+        service.deleteVideo(mockVideoId, mockClientId),
+      ).rejects.toThrow('db down');
+      expect(mockStorageService.deleteDirectory).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when video not found', async () => {

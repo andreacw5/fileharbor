@@ -493,6 +493,22 @@ describe('ImageService', () => {
       );
     });
 
+    it('deletes the row before the files, and survives a failed file delete', async () => {
+      mockPrismaService.image.delete.mockResolvedValue(mockImage);
+      mockStorageService.deleteDirectory.mockRejectedValueOnce(
+        new Error('EBUSY'),
+      );
+
+      const result = await service.deleteImage(mockImageId, mockClientId);
+
+      expect(result.success).toBe(true);
+      expect(
+        mockPrismaService.image.delete.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockStorageService.deleteDirectory.mock.invocationCallOrder[0],
+      );
+    });
+
     it('should throw NotFoundException when image not found', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(null);
 

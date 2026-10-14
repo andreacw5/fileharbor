@@ -32,7 +32,12 @@ export const videoMulterOptions = {
 export function sendVideo(
   res: Response,
   video: { storagePath: string; filePath: string; originalName: string },
-  opts: { download: boolean; xAccelRedirect: boolean },
+  opts: {
+    download: boolean;
+    xAccelRedirect: boolean;
+    /** Sent as-is; omitted (no Cache-Control at all) for admin private streams. */
+    cacheControl?: string;
+  },
 ): void {
   if (
     opts.xAccelRedirect &&
@@ -47,6 +52,7 @@ export function sendVideo(
       video.originalName,
       opts.download ? 'attachment' : 'inline',
     ),
+    ...(opts.cacheControl && { 'Cache-Control': opts.cacheControl }),
   });
 
   if (opts.xAccelRedirect) {
@@ -60,7 +66,8 @@ export function sendVideo(
 
   // send handles Range, 206/416, Content-Length and Accept-Ranges. dotfiles:
   // the path comes from StorageService (sanitized), but STORAGE_PATH itself may
-  // sit under a dot-directory. No Cache-Control: admin streams private videos.
+  // sit under a dot-directory. cacheControl: false so send never adds its own;
+  // the caller's opts.cacheControl, if any, was set above.
   res.sendFile(
     path.resolve(video.filePath),
     { dotfiles: 'allow', cacheControl: false },
@@ -69,6 +76,7 @@ export function sendVideo(
       if (!err || res.headersSent) return;
       res.removeHeader('Content-Type');
       res.removeHeader('Content-Disposition');
+      res.removeHeader('Cache-Control');
       res
         .status(err.status ?? 500)
         .set(err.headers ?? {})

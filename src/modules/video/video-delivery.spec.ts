@@ -24,7 +24,11 @@ describe('sendVideo', () => {
             filePath: path.join(dir, req.params.name),
             originalName: 'clip.mp4',
           },
-          { download: false, xAccelRedirect: req.query.x === '1' },
+          {
+            download: false,
+            xAccelRedirect: req.query.x === '1',
+            cacheControl: req.query.cc ? String(req.query.cc) : undefined,
+          },
         );
       } catch {
         res.status(403).end();
@@ -77,5 +81,24 @@ describe('sendVideo', () => {
 
     const bad = await fetch(`${base}/original.mp4?x=1&sp=../etc`);
     expect(bad.status).toBe(403);
+  });
+
+  it('sends no Cache-Control unless asked, and the given one when asked', async () => {
+    const priv = await fetch(`${base}/original.mp4`);
+    expect(priv.headers.get('cache-control')).toBeNull();
+    await priv.arrayBuffer();
+
+    const pub = await fetch(`${base}/original.mp4?cc=public,%20max-age=86400`);
+    expect(pub.headers.get('cache-control')).toBe('public, max-age=86400');
+    await pub.arrayBuffer();
+
+    const accel = await fetch(
+      `${base}/original.mp4?x=1&cc=public,%20max-age=86400`,
+    );
+    expect(accel.headers.get('cache-control')).toBe('public, max-age=86400');
+
+    const missing = await fetch(`${base}/missing.mp4?cc=public`);
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('cache-control')).toBeNull();
   });
 });

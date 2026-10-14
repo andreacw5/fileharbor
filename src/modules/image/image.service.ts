@@ -495,20 +495,26 @@ export class ImageService implements OnModuleDestroy {
       });
       const domain = client?.domain || clientId;
 
-      // Delete files
-      const imagePath = this.storage.getImagePath(domain, imageId);
-      this.logger.debug(
-        `[deleteImage] Deleting files - ID: ${imageId}, Path: ${imagePath}`,
-      );
-      await this.storage.deleteDirectory(imagePath);
-
-      // Delete from database
+      // Row first: a failed file delete leaves a stray dir for the orphan
+      // sweep, never a row pointing at missing files.
       this.logger.debug(
         `[deleteImage] Deleting from database - ID: ${imageId}`,
       );
       await this.prisma.image.delete({
         where: { id: imageId },
       });
+
+      const imagePath = this.storage.getImagePath(domain, imageId);
+      this.logger.debug(
+        `[deleteImage] Deleting files - ID: ${imageId}, Path: ${imagePath}`,
+      );
+      try {
+        await this.storage.deleteDirectory(imagePath);
+      } catch (error) {
+        this.logger.warn(
+          `[deleteImage] Files left for the orphan sweep - ID: ${imageId}: ${error.message}`,
+        );
+      }
 
       // Send webhook notification (non-blocking)
       this.webhook

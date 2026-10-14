@@ -21,6 +21,7 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     { clientId: 'client-nodomain', storagePath: '' }, // set in beforeEach
     { clientId: 'client-domain', storagePath: '' },
   ];
+  const videos = [{ clientId: 'client-domain', id: 'vid-kept' }];
 
   const prisma = {
     client: {
@@ -37,6 +38,11 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
       ),
     },
     avatar: { findMany: jest.fn().mockResolvedValue([]) },
+    video: {
+      findMany: jest.fn(async ({ where }) =>
+        videos.filter((v) => v.clientId === where.clientId),
+      ),
+    },
     runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
   };
 
@@ -53,6 +59,15 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     await fs.utimes(imageDir, twoHoursAgo, twoHoursAgo);
     return imageDir;
+  };
+
+  const makeVideoDir = async (dir: string, videoId: string, ageMs: number) => {
+    const videoDir = storage.getVideoPath(dir, videoId);
+    await fs.mkdir(videoDir, { recursive: true });
+    await fs.writeFile(path.join(videoDir, 'original.mp4'), 'x');
+    const at = new Date(Date.now() - ageMs);
+    await fs.utimes(videoDir, at, at);
+    return videoDir;
   };
 
   beforeEach(async () => {
@@ -102,5 +117,25 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
 
     expect(await exists(ambiguous)).toBe(true);
+  });
+
+  it('keeps referenced videos and deletes orphans older than an hour', async () => {
+    const hours = 2 * 60 * 60 * 1000;
+    const kept = await makeVideoDir('example.com', 'vid-kept', hours);
+    const orphan = await makeVideoDir('example.com', 'vid-orphan', hours);
+    const fresh = await makeVideoDir('example.com', 'vid-fresh', 0);
+    const otherClient = await makeVideoDir(
+      'client-nodomain',
+      'vid-kept',
+      hours,
+    );
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(kept)).toBe(true);
+    expect(await exists(orphan)).toBe(false);
+    expect(await exists(fresh)).toBe(true);
+    // A video id known only under another client is still an orphan here.
+    expect(await exists(otherClient)).toBe(false);
   });
 });

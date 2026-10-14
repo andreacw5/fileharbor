@@ -8,7 +8,11 @@ export class VideoResponseDto {
   @ApiProperty() @Expose() client: object;
   @ApiProperty() @Expose() originalName: string;
   @ApiProperty() @Expose() mimeType: string;
-  @ApiProperty() @Expose() size: number;
+  // BigInt in the DB: JSON.stringify throws on a bigint (exact up to 8 PiB)
+  @ApiProperty()
+  @Expose()
+  @Transform(({ value }) => (typeof value === 'bigint' ? Number(value) : value))
+  size: number;
   @ApiPropertyOptional() @Expose() duration?: number;
   @ApiPropertyOptional() @Expose() width?: number;
   @ApiPropertyOptional() @Expose() height?: number;
