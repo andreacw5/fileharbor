@@ -369,7 +369,7 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
-  (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header in `AllExceptionsFilter`). A view is counted only after the file is served. Uploads and the optimize jobs
+  (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. Uploads and the optimize jobs
   don't use it.
 
 ## DB Entities
@@ -392,9 +392,8 @@ throw new BadRequestException('Invalid file format');
 throw new ConflictException({ code: 'SLUG_TAKEN', message: '…' }); // domain code
 ```
 
-One global filter, `ShareTokenSafeExceptionsFilter` (`common/share-tokens.ts`, `APP_FILTER`): nest-common's
-`AllExceptionsFilter` with the URL sanitized while it logs (the package logs the raw path, which would leak
-`/albums/shared/:token`; `TODO(nest-common)`). Every exception gets a response (api.md §3):
+One global filter, nest-common's `AllExceptionsFilter` (`APP_FILTER`); it logs the route pattern, so
+`/albums/shared/:token` never reaches the logs. Every exception gets a response (api.md §3):
 
 ```json
 { "statusCode": 404, "code": "NOT_FOUND", "message": "Image not found", "requestId": "…" }
@@ -478,9 +477,9 @@ thumbnails/metadata need them.
 
 `main.ts` calls nest-common's `setupHttpApp`: `enableShutdownHooks`, `trust proxy` = `TRUST_PROXY_HOPS`
 (default 0, **required in production**: behind nginx it is 1, or every client shares the throttler bucket of
-the proxy), helmet, CORS, 5mb JSON limit, the global `ValidationPipe`. Helmet's
-`Cross-Origin-Resource-Policy: same-origin` is overridden to `cross-origin` right after it: other sites embed
-our images and videos (`TODO(nest-common)`: no helmet options). `PORT` comes from the validated config only
+the proxy), helmet, CORS, 5mb JSON limit, the global `ValidationPipe`. Helmet gets
+`Cross-Origin-Resource-Policy: cross-origin` (`helmet` option): other sites embed our images and videos.
+Outside production `upgrade-insecure-requests` is dropped from the CSP so `/docs` loads over plain http. `PORT` comes from the validated config only
 (default 3000).
 
 Logging is nest-common's `loggerParams`: the request id is always server-generated and returned as
@@ -492,9 +491,8 @@ Logging is nest-common's `loggerParams`: the request id is always server-generat
 `main.ts`. **Required when `NODE_ENV=production`** — boot fails without it rather than defaulting to `*`;
 elsewhere it defaults to `*` (an empty value counts as unset). `parseCorsOrigin` (`utils/cors.utils.ts`) parses it
 for both Joi and `main.ts`: empty entries dropped, trailing `/` stripped, `*` mixed into a list rejected at boot.
-A list goes to `setupHttpApp` (credentials allowed, `X-API-Key`/`X-User-Id` accepted, `X-Request-Id` exposed);
-`*` is not supported by the package, so `main.ts` registers a plain `enableCors({ origin: '*' })` before it
-(`TODO(nest-common)`).
+Either goes to `setupHttpApp` as `corsOrigins` (`X-API-Key`/`X-User-Id` accepted, `X-Request-Id` exposed);
+a list allows credentials, `*` does not (browsers refuse the combination).
 
 ## graphify
 

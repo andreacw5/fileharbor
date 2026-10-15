@@ -4,7 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
-import { loggerParams } from '@heyatom/nest-common';
+import { AllExceptionsFilter, loggerParams } from '@heyatom/nest-common';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { StorageModule } from '@/modules/storage/storage.module';
 import { ClientModule } from '@/modules/client/client.module';
@@ -24,10 +24,7 @@ import config from '../../configs/config.schema';
 import { validateConfig } from '@/configs/config.validation';
 import { MetricsModule } from '@heyatom/nest-common/metrics';
 import { RouteHelperModule } from '@/utils/route.utils';
-import {
-  sanitizeLoggedUrl,
-  ShareTokenSafeExceptionsFilter,
-} from '@/common/share-tokens';
+import { sanitizeLoggedUrl } from '@/common/share-tokens';
 
 @Module({
   imports: [
@@ -127,7 +124,7 @@ import {
     // api.md §3: answers every exception (HTTP, Prisma P2002/P2003/P2025, anything
     // else as 500) with { statusCode, code, message, errors?, requestId }. Logs only
     // 5xx/401/403/429, so scanner 404s stay out of the logs and still get a reply.
-    { provide: APP_FILTER, useClass: ShareTokenSafeExceptionsFilter },
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
 export class AppModule {}

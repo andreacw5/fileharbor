@@ -4,7 +4,6 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
-import type { NextFunction, Request, Response } from 'express';
 import { setupHttpApp, setupSwagger } from '@heyatom/nest-common';
 import { SWAGGER_OPTIONS } from '@/common/openapi';
 import { parseCorsOrigin } from '@/utils/cors.utils';
@@ -24,40 +23,27 @@ async function bootstrap() {
     const corsOrigin = parseCorsOrigin(
       config.getOrThrow<string>('CORS_ORIGIN'),
     );
-    const corsAllowedHeaders = ['X-API-Key', 'X-User-Id'];
-    if (corsOrigin === '*') {
-      // TODO(nest-common): setupHttpApp only takes an allowlist. Registered first,
-      // this middleware answers preflights and sets `Access-Control-Allow-Origin: *`;
-      // the package's own CORS middleware, given no origins, then adds nothing but
-      // Vary, Allow-Credentials and the exposed headers. Drop once `*` is supported.
-      app.enableCors({
-        origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: [
-          'Content-Type',
-          'Authorization',
-          ...corsAllowedHeaders,
-        ],
-        exposedHeaders: ['X-Request-Id'],
-      });
-    }
+    // CDN: other sites embed our images and videos, so CORP must be cross-origin.
+    // Over plain http (LAN IP) `upgrade-insecure-requests` would break /docs.
+    const production = config.get<string>('NODE_ENV') === 'production';
 
-    // Shutdown hooks, trust proxy, helmet, CORS allowlist, JSON body limit,
+    // Shutdown hooks, trust proxy, helmet, CORS, JSON body limit,
     // global ValidationPipe (whitelist, forbidNonWhitelisted, transform).
     setupHttpApp(app, {
       trustProxyHops: config.getOrThrow<number>('TRUST_PROXY_HOPS'),
-      corsOrigins: corsOrigin === '*' ? [] : corsOrigin,
-      corsAllowedHeaders,
+      corsOrigins: corsOrigin,
+      corsAllowedHeaders: ['X-API-Key', 'X-User-Id'],
       jsonBodyLimit: '5mb',
-    });
-
-    // TODO(nest-common): helmet's default `Cross-Origin-Resource-Policy: same-origin`
-    // makes browsers refuse cross-origin <img>/<video> loads, and serving media to
-    // other sites is this service's job. setupHttpApp takes no helmet options, so
-    // the header is overridden after it.
-    app.use((_req: Request, res: Response, next: NextFunction) => {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      next();
+      helmet: {
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+        ...(production
+          ? {}
+          : {
+              contentSecurityPolicy: {
+                directives: { upgradeInsecureRequests: null },
+              },
+            }),
+      },
     });
 
     // Same value RouteHelperService builds URLs from: served routes and returned
