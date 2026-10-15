@@ -1,4 +1,4 @@
-import { ArgumentsHost, Catch } from '@nestjs/common';
+import { ArgumentsHost, Catch, HttpException } from '@nestjs/common';
 import { AllExceptionsFilter } from '@heyatom/nest-common';
 
 /**
@@ -34,11 +34,44 @@ export class ShareTokenSafeExceptionsFilter extends AllExceptionsFilter {
     const url = req?.url;
     if (req && url) req.url = sanitizeLoggedUrl(url);
     try {
-      super.catch(exception, host);
+      super.catch(asHttpException(exception), host);
     } finally {
       // The response is already written (synchronously); routing and pino-http's
       // request line read originalUrl, but restore anyway.
       if (req && url) req.url = url;
     }
   }
+}
+
+/**
+ * TODO(nest-common): the package filter answers 500 to http-errors-style errors,
+ * e.g. body-parser's 413 for a JSON body over the 5mb limit, which Nest's default
+ * handler answered 413. Rewrapped until it maps them.
+ *
+ * Only the http-errors shape (a boolean `expose`, `statusCode === status`) and
+ * only 4xx: an AxiosError also has `status` (the upstream's) and must stay a
+ * logged 500, and a 5xx http-error keeps its own stack in the 500 log line.
+ */
+function asHttpException(exception: unknown): unknown {
+  const err = exception as {
+    status?: unknown;
+    statusCode?: unknown;
+    expose?: unknown;
+    message?: string;
+  };
+  if (
+    exception instanceof HttpException ||
+    !(exception instanceof Error) ||
+    typeof err.expose !== 'boolean' ||
+    err.statusCode !== err.status ||
+    !Number.isInteger(err.status) ||
+    (err.status as number) < 400 ||
+    (err.status as number) > 499
+  ) {
+    return exception;
+  }
+  return new HttpException(
+    err.expose && err.message ? err.message : 'Request failed',
+    err.status as number,
+  );
 }
