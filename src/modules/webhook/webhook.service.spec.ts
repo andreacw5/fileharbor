@@ -110,6 +110,7 @@ describe('WebhookService', () => {
           ]),
           timestamp: expect.any(String),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
 
@@ -205,6 +206,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -242,6 +244,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -287,6 +290,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -320,6 +324,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -363,6 +368,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
 
@@ -426,6 +432,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -459,6 +466,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -496,6 +504,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -529,6 +538,7 @@ describe('WebhookService', () => {
             }),
           ]),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
   });
@@ -551,6 +561,7 @@ describe('WebhookService', () => {
         expect.objectContaining({
           timestamp: expect.any(String),
         }),
+        expect.objectContaining({ maxRedirects: 0 }),
       );
     });
 

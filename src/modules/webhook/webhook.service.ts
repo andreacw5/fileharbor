@@ -120,15 +120,19 @@ export class WebhookService {
 
     try {
       await firstValueFrom(
-        this.httpService.post(webhookUrl, message).pipe(
-          catchError((error) => {
-            this.logger.error(
-              `[sendDiscordWebhook] Failed to post to Discord webhook:`,
-              error instanceof Error ? error.message : error,
-            );
-            return of(null);
-          }),
-        ),
+        // The host is pinned to Discord (DISCORD_WEBHOOK_URL), so no SSRF guard;
+        // a redirect is never followed, so the pinned host is the only one hit.
+        this.httpService
+          .post(webhookUrl, message, { maxRedirects: 0, timeout: 10_000 })
+          .pipe(
+            catchError((error) => {
+              this.logger.error(
+                `[sendDiscordWebhook] Failed to post to Discord webhook:`,
+                error instanceof Error ? error.message : error,
+              );
+              return of(null);
+            }),
+          ),
       );
     } catch (error) {
       this.logger.error(
