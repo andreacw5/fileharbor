@@ -1,9 +1,9 @@
 import { ArgumentsHost, NotFoundException } from '@nestjs/common';
-import { AllExceptionsFilter } from '@heyatom/nest-common';
+import { ShareTokenSafeExceptionsFilter } from '@/common/share-tokens';
 import { RenderBusyException } from './storage.service';
 
-describe('AllExceptionsFilter with fileharbor exceptions', () => {
-  const filter = new AllExceptionsFilter();
+describe('exception filter with fileharbor exceptions', () => {
+  const filter = new ShareTokenSafeExceptionsFilter();
 
   const respond = (exception: unknown, url: string) => {
     const res = {
