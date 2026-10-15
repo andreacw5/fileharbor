@@ -15,13 +15,14 @@ import {
 } from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
-import { MetricsService } from '@/modules/metrics/metrics.service';
+import { MetricsService } from '@heyatom/nest-common/metrics';
+import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 
 jest.mock('fs/promises');
 
 describe('VideoService', () => {
   let service: VideoService;
-  let metrics: MetricsService;
+  let metrics: FileharborMetrics;
 
   const failures = async (stage: string) =>
     (await metrics.videoProcessingFailures.get()).values.find(
@@ -168,12 +169,16 @@ describe('VideoService', () => {
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: CreatorService, useValue: mockCreatorService },
         { provide: RouteHelperService, useValue: mockRouteHelperService },
-        MetricsService,
+        FileharborMetrics,
+        {
+          provide: MetricsService,
+          useValue: new MetricsService({ app: 'fileharbor' }),
+        },
       ],
     }).compile();
 
     service = module.get<VideoService>(VideoService);
-    metrics = module.get<MetricsService>(MetricsService);
+    metrics = module.get(FileharborMetrics);
     jest.clearAllMocks();
   });
 

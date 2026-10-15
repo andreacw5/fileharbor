@@ -1,16 +1,17 @@
 import { Logger } from '@nestjs/common';
-import { MetricsService } from './metrics.service';
+import { MetricsService } from '@heyatom/nest-common/metrics';
+import { FileharborMetrics } from './fileharbor-metrics.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
-describe('MetricsService optimize backlog gauges', () => {
-  let service: MetricsService;
+describe('FileharborMetrics optimize backlog gauges', () => {
+  let service: FileharborMetrics;
   const model = () => ({ count: jest.fn(), aggregate: jest.fn() });
   const mockPrisma = { image: model(), avatar: model() };
 
   /** One scrape of a gauge: value by `kind` label. */
   async function scrape(name: string): Promise<Record<string, number>> {
     const { values } = await (
-      service.registry.getSingleMetric(name) as unknown as {
+      service['metrics'].registry.getSingleMetric(name) as unknown as {
         get(): Promise<{
           values: Array<{ labels: Record<string, string>; value: number }>;
         }>;
@@ -24,7 +25,10 @@ describe('MetricsService optimize backlog gauges', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new MetricsService(mockPrisma as unknown as PrismaService);
+    service = new FileharborMetrics(
+      new MetricsService({ app: 'fileharbor' }),
+      mockPrisma as unknown as PrismaService,
+    );
   });
 
   it('runs no query before a scrape', () => {

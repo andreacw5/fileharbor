@@ -1,9 +1,4 @@
-import {
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  RequestMethod,
-} from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AllExceptionsFilter } from '@heyatom/nest-common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -28,8 +23,7 @@ import { TagModule } from '@/modules/tag/tag.module';
 import { HealthModule } from '@/modules/health/health.module';
 import config from '../../configs/config.schema';
 import { configValidationSchema } from '@/configs/config.validation';
-import { MetricsModule } from '@/modules/metrics/metrics.module';
-import { MetricsMiddleware } from '@/modules/metrics/metrics.middleware';
+import { MetricsModule } from '@heyatom/nest-common/metrics';
 import { RouteHelperModule } from '@/utils/route.utils';
 
 // Share tokens grant read access to a private image or album: keep them out of
@@ -104,8 +98,16 @@ function sanitizeLoggedUrl(url: string): string {
       },
     }),
 
-    // Prometheus metrics, served on METRICS_PORT — not on the API port
-    MetricsModule,
+    // Prometheus metrics on their own server (METRICS_PORT), never on the API port.
+    // Applies MetricsMiddleware to every route itself: a middleware, not an
+    // interceptor, so guard 401s and throttler 429s are counted.
+    MetricsModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        app: 'fileharbor',
+        port: config.getOrThrow<number>('metricsPort'),
+      }),
+    }),
 
     // Rate limiting
     ThrottlerModule.forRootAsync({
@@ -158,12 +160,4 @@ function sanitizeLoggedUrl(url: string): string {
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    // MetricsMiddleware is a middleware and not an APP_INTERCEPTOR on purpose:
-    // interceptors run after the guards, so 401s and 429s would never be counted.
-    consumer
-      .apply(MetricsMiddleware)
-      .forRoutes({ path: '{*splat}', method: RequestMethod.ALL });
-  }
-}
+export class AppModule {}

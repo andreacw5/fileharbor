@@ -7,7 +7,7 @@ import { WebhookModule } from '@/modules/webhook/webhook.module';
 import { CreatorModule } from '@/modules/creator/creator.module';
 import { ClientModule } from '@/modules/client/client.module';
 import { RouteHelperModule } from '@/utils/route.utils';
-import { MetricsModule } from '@/modules/metrics/metrics.module';
+import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.module';
 
 @Module({
   imports: [
@@ -17,7 +17,7 @@ import { MetricsModule } from '@/modules/metrics/metrics.module';
     CreatorModule,
     ClientModule,
     RouteHelperModule,
-    MetricsModule,
+    FileharborMetricsModule,
   ],
   controllers: [VideoController],
   providers: [VideoService],

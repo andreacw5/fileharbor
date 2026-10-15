@@ -1,11 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  Registry,
-  Counter,
-  Gauge,
-  Histogram,
-  collectDefaultMetrics,
-} from '@prometheus-io/client';
+import { Counter, Gauge } from '@prometheus-io/client';
+import { MetricsService } from '@heyatom/nest-common/metrics';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
   OPTIMIZE_GIVEN_UP_WHERE,
@@ -37,36 +32,23 @@ const QUEUED_AT: Record<MediaKind, AgeField> = {
 };
 
 /**
- * Prometheus metrics for fileharbor. Uses its own `Registry` rather than the
- * @prometheus-io/client global one, so a `MetricsService` created per test (or per
- * NestJS TestingModule) never collides with metrics registered by another
- * test in the same process.
+ * fileharbor's domain metrics, on the registry of nest-common's `MetricsService`
+ * (which owns `app="fileharbor"`, the default metrics, the HTTP histogram and the
+ * `/metrics` server on METRICS_PORT).
  *
  * The optimize backlog gauges are computed lazily in `collect()`: no query
  * runs until something scrapes. A failed query logs a warning and leaves the
  * gauge at its previous value instead of failing the whole scrape.
  */
 @Injectable()
-export class MetricsService {
-  private readonly logger = new Logger(MetricsService.name);
-  readonly registry = new Registry();
-  readonly httpRequestDuration: Histogram<'method' | 'route' | 'status'>;
+export class FileharborMetrics {
+  private readonly logger = new Logger(FileharborMetrics.name);
   readonly videoProcessingFailures: Counter<'stage'>;
 
-  constructor(private readonly prisma: PrismaService) {
-    // Kept from the previous @willsoto/nestjs-prometheus setup, so existing
-    // dashboards and queries filtering on `app="fileharbor"` still match.
-    this.registry.setDefaultLabels({ app: 'fileharbor' });
-    collectDefaultMetrics({ register: this.registry });
-
-    this.httpRequestDuration = new Histogram({
-      name: 'http_request_duration_seconds',
-      help: 'HTTP request duration in seconds',
-      labelNames: ['method', 'route', 'status'],
-      buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
-      registers: [this.registry],
-    });
-
+  constructor(
+    private readonly metrics: MetricsService,
+    private readonly prisma: PrismaService,
+  ) {
     // Video uploads swallow ffmpeg/ffprobe failures and still return 2xx, so
     // HTTP metrics stay green while every video lands without a thumbnail or
     // with duration/width/height = 0. This counter is the only signal.
@@ -74,7 +56,7 @@ export class MetricsService {
       name: 'fileharbor_video_processing_failures_total',
       help: 'Video uploads whose thumbnail or metadata extraction failed',
       labelNames: ['stage'],
-      registers: [this.registry],
+      registers: [this.metrics.registry],
     });
     // Pre-initialized so increase() sees the very first failure.
     for (const stage of ['thumbnail', 'metadata']) {
@@ -98,7 +80,7 @@ export class MetricsService {
       name,
       help,
       labelNames: ['kind'],
-      registers: [this.registry],
+      registers: [this.metrics.registry],
       collect: async () => {
         try {
           const values = await Promise.all(MEDIA_KINDS.map(read));

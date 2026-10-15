@@ -15,7 +15,7 @@ import {
 } from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
-import { MetricsService } from '@/modules/metrics/metrics.service';
+import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -41,7 +41,7 @@ export class VideoService {
     private webhook: WebhookService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
-    private metrics: MetricsService,
+    private metrics: FileharborMetrics,
   ) {
     this.thumbnailQuality = parseInt(
       this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80',
