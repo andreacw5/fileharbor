@@ -4489,9 +4489,17 @@
   },
   "info": {
     "title": "FileHarbor 2.0",
-    "description": "",
+    "description": "Multi-tenant image management system API",
     "version": "3.2.0",
-    "contact": {}
+    "contact": {
+      "name": "Andrea Tombolato",
+      "url": "https://heyatom.dev",
+      "email": "hey@heyatom.dev"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/heyatomdev/fileharbor/blob/main/README.md"
+    }
   },
   "tags": [],
   "servers": [],

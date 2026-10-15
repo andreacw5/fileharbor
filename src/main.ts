@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
 import { json } from 'express';
-import { APP_VERSION } from '@/common/version';
+import { setupSwagger } from '@heyatom/nest-common';
+import { SWAGGER_OPTIONS } from '@/common/openapi';
 import { parseCorsOrigin } from '@/utils/cors.utils';
 
 async function bootstrap() {
@@ -53,41 +53,17 @@ async function bootstrap() {
         exclude: ['health/live', 'health/ready'],
       });
     }
-    const isProduction = config.get<string>('NODE_ENV') === 'production';
-
-    // /docs enumerates the whole API surface, admin routes included:
-    // development only, as in Bastion, Herald, Beacon and Gatherly.
-    if (!isProduction) {
-      const swaggerConfig = new DocumentBuilder()
-        .setTitle('FileHarbor 2.0')
-        .setDescription('Multi-tenant image management system API')
-        .setVersion(APP_VERSION)
-        .addApiKey(
-          { type: 'apiKey', name: 'X-API-Key', in: 'header' },
-          'api-key',
-        )
-        .addBearerAuth()
-        .setLicense(
-          'MIT',
-          'https://github.com/heyatomdev/fileharbor/blob/main/README.md',
-        )
-        .setContact(
-          'Andrea Tombolato',
-          'https://heyatom.dev',
-          'hey@heyatom.dev',
-        )
-        .build();
-
-      const document = SwaggerModule.createDocument(app, swaggerConfig);
-      SwaggerModule.setup('/docs', app, document);
-    }
+    // /docs enumerates the whole API surface, admin routes included. Resolved once
+    // in validateConfig: explicit ENABLE_SWAGGER, else development/test only.
+    const swagger = config.get<string>('ENABLE_SWAGGER') === 'true';
+    if (swagger) setupSwagger(app, SWAGGER_OPTIONS);
 
     const port = process.env.PORT || 8081;
     await app.listen(port);
 
     const logger = new Logger('Bootstrap');
     logger.log(`FileHarbor started successfully!`);
-    if (!isProduction) {
+    if (swagger) {
       logger.log(`API Documentation: http://localhost:${port}/docs`);
     }
     logger.log(

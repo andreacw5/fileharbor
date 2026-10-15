@@ -21,7 +21,7 @@ import { CreatorModule } from '@/modules/creator/creator.module';
 import { TagModule } from '@/modules/tag/tag.module';
 import { HealthModule } from '@/modules/health/health.module';
 import config from '../../configs/config.schema';
-import { configValidationSchema } from '@/configs/config.validation';
+import { validateConfig } from '@/configs/config.validation';
 import { MetricsModule } from '@heyatom/nest-common/metrics';
 import { RouteHelperModule } from '@/utils/route.utils';
 import {
@@ -36,7 +36,7 @@ import {
       load: [config],
       isGlobal: true,
       cache: true,
-      validationSchema: configValidationSchema,
+      validate: validateConfig,
     }),
 
     // nest-common pino setup (api.md §7): server-generated request id, also sent

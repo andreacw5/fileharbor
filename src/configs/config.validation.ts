@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { swaggerEnabled } from '@heyatom/nest-common';
 import { parseCorsOrigin } from '@/utils/cors.utils';
 
 export const configValidationSchema = Joi.object({
@@ -10,6 +11,9 @@ export const configValidationSchema = Joi.object({
   // Server
   PORT: Joi.number().positive().default(3000),
   API_PREFIX: Joi.string().allow('').default(''),
+  // Swagger UI on /docs. Unset → on only when NODE_ENV is explicitly
+  // development/test; resolved in validateConfig() from the raw NODE_ENV.
+  ENABLE_SWAGGER: Joi.string().valid('true', 'false').empty(''),
   BASE_URL: Joi.string().uri().default('http://localhost:3000'),
   // Prometheus scrape port — internal network only, never published or proxied.
   METRICS_PORT: Joi.number().port().default(9091),
@@ -88,3 +92,27 @@ export const configValidationSchema = Joi.object({
   BASTION_TENANT_SLUG: Joi.string().allow('').default(''),
   BASTION_JWKS_TTL_MS: Joi.number().default(300000),
 });
+
+/**
+ * `ConfigModule` `validate`: the Joi schema, plus `ENABLE_SWAGGER` resolved once
+ * (api.md §4). It reads the **raw** `NODE_ENV`: the schema defaults it to
+ * `development`, which would turn Swagger on wherever `NODE_ENV` is unset.
+ */
+export function validateConfig(
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const { error, value } = configValidationSchema.validate(raw, {
+    allowUnknown: true,
+    abortEarly: false,
+  });
+  if (error) throw new Error(`Config validation error: ${error.message}`);
+  return {
+    ...value,
+    ENABLE_SWAGGER: String(
+      swaggerEnabled({
+        ENABLE_SWAGGER: value.ENABLE_SWAGGER,
+        NODE_ENV: raw.NODE_ENV as string | undefined,
+      }),
+    ),
+  };
+}
