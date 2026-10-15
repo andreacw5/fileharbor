@@ -5,7 +5,6 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
-import { HttpExceptionFilter } from '@/filters/http-exception.filter';
 import { json } from 'express';
 import { APP_VERSION } from '@/common/version';
 import { parseCorsOrigin } from '@/utils/cors.utils';
@@ -43,9 +42,6 @@ async function bootstrap() {
         'Authorization',
       ],
     });
-
-    // Use global exception filter
-    app.useGlobalFilters(new HttpExceptionFilter());
 
     app.use(json({ limit: '5mb' }));
 

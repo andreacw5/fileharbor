@@ -4,7 +4,8 @@ import {
   NestModule,
   RequestMethod,
 } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { AllExceptionsFilter } from '@heyatom/nest-common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -151,6 +152,10 @@ function sanitizeLoggedUrl(url: string): string {
     // Registered globally rather than per controller so a new admin route cannot
     // silently skip auditing: a handler with no `@Audit()` is a no-op here.
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    // api.md §3: answers every exception (HTTP, Prisma P2002/P2003/P2025, anything
+    // else as 500) with { statusCode, code, message, errors?, requestId }. Logs only
+    // 5xx/401/403/429, so scanner 404s stay out of the logs and still get a reply.
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
 export class AppModule implements NestModule {

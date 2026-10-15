@@ -80,7 +80,8 @@ export const OPTIMIZE_GIVEN_UP_WHERE = {
  */
 export class RenderBusyException extends ServiceUnavailableException {
   constructor() {
-    super('Image renderer busy, retry');
+    // AllExceptionsFilter turns `retryAfterSeconds` into the Retry-After header.
+    super({ message: 'Image renderer busy, retry', retryAfterSeconds: 1 });
   }
 }
 
