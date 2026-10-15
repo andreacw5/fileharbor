@@ -5,7 +5,7 @@ import {
   resolveAllowedClients,
   assertClientAccess,
 } from '@/modules/admin/helpers/admin-access.helper';
-import { paginate, PaginatedResult } from '@/common/pagination';
+import { paginate, PaginatedResult } from '@heyatom/nest-common';
 import { TagListItemDto, TagPageParams } from './dto/tag-response.dto';
 
 @Injectable()
