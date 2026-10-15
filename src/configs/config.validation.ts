@@ -15,6 +15,17 @@ export const configValidationSchema = Joi.object({
   // development/test; resolved in validateConfig() from the raw NODE_ENV.
   ENABLE_SWAGGER: Joi.string().valid('true', 'false').empty(''),
   BASE_URL: Joi.string().uri().default('http://localhost:3000'),
+  // X-Forwarded-For hops trusted for req.ip, which the throttler keys on:
+  // 0 = the socket peer, 1 = behind one nginx. Required in production: a
+  // forgotten 0 behind nginx would put every client in the proxy's bucket.
+  TRUST_PROXY_HOPS: Joi.number()
+    .integer()
+    .min(0)
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.required(),
+      otherwise: Joi.optional().default(0),
+    }),
   // Prometheus scrape port — internal network only, never published or proxied.
   METRICS_PORT: Joi.number().port().default(9091),
   // `*` or a comma-separated list of origins. Required in production: a

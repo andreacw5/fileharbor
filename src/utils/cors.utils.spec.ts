@@ -37,7 +37,11 @@ describe('CORS_ORIGIN validation', () => {
   });
 
   it('still requires a value in production', () => {
-    const { error } = validate({ NODE_ENV: 'production', CORS_ORIGIN: '' });
+    const { error } = validate({
+      NODE_ENV: 'production',
+      TRUST_PROXY_HOPS: '1',
+      CORS_ORIGIN: '',
+    });
     expect(error?.message).toMatch(/CORS_ORIGIN/);
   });
 

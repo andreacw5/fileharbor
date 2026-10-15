@@ -1,11 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
-import { json } from 'express';
-import { setupSwagger } from '@heyatom/nest-common';
+import type { NextFunction, Request, Response } from 'express';
+import { setupHttpApp, setupSwagger } from '@heyatom/nest-common';
 import { SWAGGER_OPTIONS } from '@/common/openapi';
 import { parseCorsOrigin } from '@/utils/cors.utils';
 
@@ -14,36 +14,51 @@ async function bootstrap() {
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
       bufferLogs: true,
     });
-    // One proxy hop (nginx): req.ip is the client, so the throttler keys on it
-    // rather than on the proxy's address.
-    app.set('trust proxy', 1);
     app.useLogger(app.get(PinoLogger));
 
-    // Global validation pipe
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-
+    // Defaults live in config.validation.ts — single source of truth.
     const config = app.get(ConfigService);
+    const port = config.getOrThrow<number>('PORT');
 
-    // Enable CORS. CORS_ORIGIN is validated at boot (required in production).
-    const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
-    app.enableCors({
-      origin: parseCorsOrigin(corsOrigin),
-      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-      allowedHeaders: [
-        'Content-Type',
-        'X-API-Key',
-        'X-User-Id',
-        'Authorization',
-      ],
+    // CORS_ORIGIN: `*` or an origin list, validated at boot (required in production).
+    const corsOrigin = parseCorsOrigin(
+      config.getOrThrow<string>('CORS_ORIGIN'),
+    );
+    const corsAllowedHeaders = ['X-API-Key', 'X-User-Id'];
+    if (corsOrigin === '*') {
+      // TODO(nest-common): setupHttpApp only takes an allowlist. Registered first,
+      // this middleware answers preflights and sets `Access-Control-Allow-Origin: *`;
+      // the package's own CORS middleware, given no origins, then adds nothing but
+      // Vary, Allow-Credentials and the exposed headers. Drop once `*` is supported.
+      app.enableCors({
+        origin: '*',
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: [
+          'Content-Type',
+          'Authorization',
+          ...corsAllowedHeaders,
+        ],
+        exposedHeaders: ['X-Request-Id'],
+      });
+    }
+
+    // Shutdown hooks, trust proxy, helmet, CORS allowlist, JSON body limit,
+    // global ValidationPipe (whitelist, forbidNonWhitelisted, transform).
+    setupHttpApp(app, {
+      trustProxyHops: config.getOrThrow<number>('TRUST_PROXY_HOPS'),
+      corsOrigins: corsOrigin === '*' ? [] : corsOrigin,
+      corsAllowedHeaders,
+      jsonBodyLimit: '5mb',
     });
 
-    app.use(json({ limit: '5mb' }));
+    // TODO(nest-common): helmet's default `Cross-Origin-Resource-Policy: same-origin`
+    // makes browsers refuse cross-origin <img>/<video> loads, and serving media to
+    // other sites is this service's job. setupHttpApp takes no helmet options, so
+    // the header is overridden after it.
+    app.use((_req: Request, res: Response, next: NextFunction) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      next();
+    });
 
     // Same value RouteHelperService builds URLs from: served routes and returned
     // URLs always agree. Probes stay at /health/* whatever the prefix.
@@ -58,7 +73,6 @@ async function bootstrap() {
     const swagger = config.get<string>('ENABLE_SWAGGER') === 'true';
     if (swagger) setupSwagger(app, SWAGGER_OPTIONS);
 
-    const port = process.env.PORT || 8081;
     await app.listen(port);
 
     const logger = new Logger('Bootstrap');
@@ -66,9 +80,7 @@ async function bootstrap() {
     if (swagger) {
       logger.log(`API Documentation: http://localhost:${port}/docs`);
     }
-    logger.log(
-      `Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`,
-    );
+    logger.log(`Current BASE_URL is set to: ${config.get<string>('BASE_URL')}`);
   } catch (error) {
     Logger.error('Failed to start the application', 'Bootstrap');
 
