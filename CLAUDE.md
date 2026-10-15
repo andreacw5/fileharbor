@@ -2,18 +2,19 @@
 
 ## Tech Stack
 
-- **Framework:** NestJS 10 (TypeScript, ES2021, CommonJS)
+- **Framework:** NestJS 11 (TypeScript, ES2021, CommonJS)
 - **Database:** PostgreSQL + Prisma ORM (client generated into `node_modules/.prisma/client`)
 - **Image Processing:** Sharp
 - **Auth:** Bastion IdP RS256 JWT via JWKS (admin), API Keys (client)
 - **Package Manager:** pnpm (enforced — never use npm or yarn)
 - **Testing:** Jest
-- **API Docs:** Swagger/OpenAPI at `/docs`
+- **API Docs:** Swagger/OpenAPI at `/docs`, gated by `ENABLE_SWAGGER`
+- **Shared runtime:** `@heyatom/nest-common` (exception filter, logging, metrics, Swagger, bootstrap, tag pagination)
 - **Path alias:** `@/*` → `src/*`
 
 ## Architecture
 
-Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth via `X-API-Key` header validated by `ClientInterceptor`. Creators referenced by external ID (`X-User-Id`) — FileHarbor auto-creates internal `Creator` records on first use.
+Multi-tenant NestJS 11 image management API. All data scoped by `clientId`. Auth via `X-API-Key` header validated by `ClientInterceptor`. Creators referenced by external ID (`X-User-Id`) — FileHarbor auto-creates internal `Creator` records on first use.
 
 **Modules** (`src/modules/`):
 | Module | Role |
@@ -368,7 +369,7 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
-  (`RenderBusyException`, header set by `HttpExceptionFilter`). A view is counted only after the file is served. Uploads and the optimize jobs
+  (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header in `AllExceptionsFilter`). A view is counted only after the file is served. Uploads and the optimize jobs
   don't use it.
 
 ## DB Entities
@@ -388,7 +389,23 @@ Always add indexes on frequently queried fields.
 throw new NotFoundException('Image not found');
 throw new ForbiddenException('Access denied');
 throw new BadRequestException('Invalid file format');
+throw new ConflictException({ code: 'SLUG_TAKEN', message: '…' }); // domain code
 ```
+
+One global filter, `ShareTokenSafeExceptionsFilter` (`common/share-tokens.ts`, `APP_FILTER`): nest-common's
+`AllExceptionsFilter` with the URL sanitized while it logs (the package logs the raw path, which would leak
+`/albums/shared/:token`; `TODO(nest-common)`). Every exception gets a response (api.md §3):
+
+```json
+{ "statusCode": 404, "code": "NOT_FOUND", "message": "Image not found", "requestId": "…" }
+```
+
+- `errors: string[]` only on validation failures (`code: VALIDATION_FAILED`, `message: "Validation failed"`).
+- Prisma `P2002`/`P2003` → 409, `P2025` → 404; anything else non-HTTP → 500 `INTERNAL_ERROR`, details in the log only.
+- A number in `retryAfterSeconds` on the exception body becomes the `Retry-After` header.
+- Logs only 5xx (`error`) and 401/403/429 (`warn`): scanner 404s (`/wp-admin`, `.env`, …) stay quiet but are answered.
+- `GET /images/:id` 404/403 on a file request never reaches the filter: the controller serves the placeholder
+  (`X-FileHarbor-Fallback`). No `TransformInterceptor` (no `{ data }` envelope) until phase 3.
 
 ## Config Access
 
@@ -425,15 +442,18 @@ pnpm run test:cov         # jest coverage
 cp .env.example .env      # first-time setup
 ```
 
-Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localhost:9091/metrics` (see Metrics)
+Swagger UI: `http://localhost:3000/docs` (when `ENABLE_SWAGGER` resolves to true: explicit value, else only
+`NODE_ENV=development|test`; resolved in `validateConfig()` from the raw `NODE_ENV`) — Prometheus metrics: `http://localhost:9091/metrics` (see Metrics)
 
 ## Metrics
 
-`src/modules/metrics/` — `@prometheus-io/client` directly, own `Registry` with default label `app="fileharbor"`.
+`MetricsModule` from `@heyatom/nest-common/metrics` (global, `AppModule`): own `Registry` with default label
+`app="fileharbor"`, default metrics, the HTTP histogram and the server. fileharbor's domain metrics live in
+`src/modules/metrics/fileharbor-metrics.service.ts` (`FileharborMetrics`), registered on `MetricsService.registry`.
 
-- `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404.
+- `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404. One render is shared for 10s.
 - Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
-- `MetricsMiddleware` (all routes, `AppModule.configure`) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`. `/health/*` is not instrumented.
+- `MetricsMiddleware` (all routes, applied by the package module) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`, requests the client abandons `status="499"`. `/health/*` is not instrumented.
 - `fileharbor_video_processing_failures_total{stage}` (counter, `stage` = `thumbnail` | `metadata`, both pre-initialized to 0): incremented by `VideoService.uploadVideo` when ffmpeg thumbnail or ffprobe metadata extraction fails. The upload still returns 2xx (no thumbnail, duration/width/height stored as null), so HTTP metrics stay green — a missing `ffmpeg-static`/`ffprobe-static` binary or the 30s timeout only shows here. Alert: `increase(fileharbor_video_processing_failures_total[1h]) > 0`.
 - Optimize backlog gauges (label `kind` = `image` | `avatar`, both always present), lazy `collect()` — no query until scraped; a DB error logs `warn` and keeps the previous value. Aggregates only (`count` / `_min`), same predicates as the optimize jobs (`OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE`, `storage.service.ts`):
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
@@ -454,12 +474,27 @@ Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localho
 from `ffmpeg-static`/`ffprobe-static` are missing or not executable. It never blocks startup: only video
 thumbnails/metadata need them.
 
-## CORS
+## Bootstrap, logging, CORS
+
+`main.ts` calls nest-common's `setupHttpApp`: `enableShutdownHooks`, `trust proxy` = `TRUST_PROXY_HOPS`
+(default 0, **required in production**: behind nginx it is 1, or every client shares the throttler bucket of
+the proxy), helmet, CORS, 5mb JSON limit, the global `ValidationPipe`. Helmet's
+`Cross-Origin-Resource-Policy: same-origin` is overridden to `cross-origin` right after it: other sites embed
+our images and videos (`TODO(nest-common)`: no helmet options). `PORT` comes from the validated config only
+(default 3000).
+
+Logging is nest-common's `loggerParams`: the request id is always server-generated and returned as
+`X-Request-Id` (errors included, also in the body); a well-formed inbound `X-Request-Id` is logged as
+`clientRequestId`, never adopted or echoed. The `req` serializer passes the URL through `sanitizeLoggedUrl`
+(`common/share-tokens.ts`): `?token=` and `/shared/:token` never reach the logs.
 
 `CORS_ORIGIN` (`*` or a comma-separated origin list) is Joi-validated and read through `ConfigService` in
 `main.ts`. **Required when `NODE_ENV=production`** — boot fails without it rather than defaulting to `*`;
 elsewhere it defaults to `*` (an empty value counts as unset). `parseCorsOrigin` (`utils/cors.utils.ts`) parses it
 for both Joi and `main.ts`: empty entries dropped, trailing `/` stripped, `*` mixed into a list rejected at boot.
+A list goes to `setupHttpApp` (credentials allowed, `X-API-Key`/`X-User-Id` accepted, `X-Request-Id` exposed);
+`*` is not supported by the package, so `main.ts` registers a plain `enableCors({ origin: '*' })` before it
+(`TODO(nest-common)`).
 
 ## graphify
 
