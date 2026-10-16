@@ -349,6 +349,14 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 `setGlobalPrefix` in `main.ts` (`/health/*` excluded) **and** every returned `url`/`fullPath` via `RouteHelperService`
 (`src/utils/route.utils.ts`). Never concatenate a prefix by hand.
 
+`path()` gives the relative `url`/`thumbnailUrl`/`shareUrl`/album token `url` (`/{prefix}/...`);
+`fullUrl()` = `BASE_URL + path()` gives `fullPath`. Webhook links use `BASE_URL` directly.
+
+**Prod (behind nginx)**: nginx serves `https://fileharbor.heyatom.dev/v2/...` and strips `/v2` before
+proxying, so `API_PREFIX` stays **empty** and the public prefix lives in `BASE_URL=https://fileharbor.heyatom.dev/v2`.
+Result: routes unprefixed, `fullPath` public (`.../v2/images/<id>`), relative fields bare (`/images/<id>`, no `/v2`).
+Setting `API_PREFIX=v2` there would make the app serve `/v2/...` while nginx forwards `/images/...` → 404.
+
 ## Image Processing
 
 Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always WebP. Operations:

@@ -14,15 +14,20 @@ l'unico consumer reale dell'API client (Gatherly e Beacon salvano URL, Meridian 
 I commit su `develop` non sono ancora pushati. Due cambiano il comportamento al boot in base all'env di
 prod (`services/fileharbor/config/fileharbor.env` nel repo `server-backup`, gitignored):
 
-- [ ] **`API_PREFIX`** — da `edf5424` il valore guida `setGlobalPrefix`. Prima era ignorato per le route.
-  L'`.env.example` di prod contiene `API_PREFIX=v2`: se c'è anche nell'env reale, tutte le route passano
-  sotto `/v2/*` e si rompono Meridian (`fileharbor-proxy.ts`, prefix `/admin`), Articuno, kaishdbd/wood19aw
-  (`/api` → root via nginx) e i link pubblici già distribuiti. `/health/*` è escluso dal prefisso, quindi
-  i probe restano verdi mentre l'API risponde 404.
-  → Togliere `API_PREFIX` dall'env di prod (o lasciarlo vuoto). Aggiornare anche `fileharbor.env.example`.
-- [ ] **`CORS_ORIGIN`** — da `50ae9c9` è obbligatorio con `NODE_ENV=production`, e il Dockerfile lo
-  imposta sempre. Senza, il container va in crash-loop.
-  → Aggiungere `CORS_ORIGIN=<origini>` (o `*`) all'env di prod.
+- [ ] **Env di prod per 3.3.0** (`fileharbor.env` + `fileharbor.env.example` in `server-backup`):
+  - `API_PREFIX=` (vuoto) — da `edf5424` guida `setGlobalPrefix`. nginx toglie già `/v2`
+    (`^/v2(.*)$ → $1`): con `v2` l'app servirebbe `/v2/*` e tutto risponderebbe 404, mentre `/health/*`
+    (escluso dal prefisso) resta verde.
+  - `BASE_URL=https://fileharbor.heyatom.dev/v2` — il prefisso pubblico sta qui. `fullPath` resta uguale a
+    oggi; i link dei webhook diventano corretti (oggi senza `/v2`); i campi relativi (`url`,
+    `thumbnailUrl`, `shareUrl`, `url` del token album) perdono `/v2` (`/images/<id>`).
+  - `TRUST_PROXY_HOPS=1` — obbligatorio con `NODE_ENV=production` (un nginx davanti).
+  - `CORS_ORIGIN=<origini>` (o `*`) — da `50ae9c9` obbligatorio con `NODE_ENV=production`, e il
+    Dockerfile lo imposta sempre. Senza, il container va in crash-loop.
+  - `ADMIN_SECRET` — non più letto: si può togliere.
+- [ ] **Migrazioni (a mano, backup del DB prima)** — `20260625203420_mixed_albms` (contiene la data
+  migration `album_images` → `album_items`: la prima versione perdeva le righe, vedi
+  `scripts/recover-album-items.sql`), `20261008104503_index_cleanup`, `20261014120000_video_size_bigint`.
 - [ ] **Spazio disco** — `/health/ready` va giù sotto `HEALTH_DISK_MIN_FREE_MB` (default 1024). Verificare
   lo spazio libero sul volume di prod prima del deploy (vedi anche 1.3).
 - [ ] **Cache varianti** — dopo il deploy, svuotare le cartelle `storage/*/images/*/variants/` (sono solo
