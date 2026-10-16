@@ -21,9 +21,9 @@ export class ImageCleanupJob {
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
-    // Original should be high quality to preserve image fidelity
+    // Re-encode quality for the optimize job; uploads keep ORIGINAL_QUALITY
     this.originalQuality = parseInt(
-      this.config.get('ORIGINAL_QUALITY') || '100',
+      this.config.get('OPTIMIZE_QUALITY') || '85',
     );
     // Thumbnail can use lower quality to reduce file size
     this.thumbnailQuality = parseInt(
@@ -37,38 +37,40 @@ export class ImageCleanupJob {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async optimizeImages() {
-    this.logger.debug('Starting image optimization job...');
+    await this.prisma.runExclusive('image.optimize', async () => {
+      this.logger.debug('Starting image optimization job...');
 
-    try {
-      // Get unoptimized images
-      const images = await this.imageService.getUnoptimizedImages();
-      this.logger.log(`Found ${images.length} images to optimize`);
+      try {
+        // Get unoptimized images
+        const images = await this.imageService.getUnoptimizedImages();
+        this.logger.log(`Found ${images.length} images to optimize`);
 
-      for (const image of images) {
-        try {
-          await this.optimizeImage(image);
-          await this.imageService.markAsOptimized(image.id);
-          this.logger.log(`Optimized image: ${image.id}`);
-        } catch (error) {
-          this.logger.error(
-            `Failed to optimize image ${image.id}:`,
-            error.message,
-          );
-          const gaveUp = await this.imageService.recordOptimizeFailure(
-            image.id,
-          );
-          if (gaveUp) {
-            this.logger.warn(
-              `Giving up on image ${image.id} after ${MAX_OPTIMIZE_ATTEMPTS} failed optimization attempts`,
+        for (const image of images) {
+          try {
+            await this.optimizeImage(image);
+            await this.imageService.markAsOptimized(image.id);
+            this.logger.log(`Optimized image: ${image.id}`);
+          } catch (error) {
+            this.logger.error(
+              `Failed to optimize image ${image.id}:`,
+              error.message,
             );
+            const gaveUp = await this.imageService.recordOptimizeFailure(
+              image.id,
+            );
+            if (gaveUp) {
+              this.logger.warn(
+                `Giving up on image ${image.id} after ${MAX_OPTIMIZE_ATTEMPTS} failed optimization attempts`,
+              );
+            }
           }
         }
-      }
 
-      this.logger.log('Image optimization job completed');
-    } catch (error) {
-      this.logger.error('Image optimization job failed:', error.message);
-    }
+        this.logger.log('Image optimization job completed');
+      } catch (error) {
+        this.logger.error('Image optimization job failed:', error.message);
+      }
+    });
   }
 
   /**
@@ -76,18 +78,20 @@ export class ImageCleanupJob {
    */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async cleanExpiredShareLinks() {
-    this.logger.debug('Starting expired share links cleanup job...');
+    await this.prisma.runExclusive('image.share_links_cleanup', async () => {
+      this.logger.debug('Starting expired share links cleanup job...');
 
-    try {
-      const deletedCount = await this.imageService.deleteExpiredShareLinks();
-      this.logger.log(`Deleted ${deletedCount} expired share links`);
-      this.logger.log('Expired share links cleanup job completed');
-    } catch (error) {
-      this.logger.error(
-        'Expired share links cleanup job failed:',
-        error.message,
-      );
-    }
+      try {
+        const deletedCount = await this.imageService.deleteExpiredShareLinks();
+        this.logger.log(`Deleted ${deletedCount} expired share links`);
+        this.logger.log('Expired share links cleanup job completed');
+      } catch (error) {
+        this.logger.error(
+          'Expired share links cleanup job failed:',
+          error.message,
+        );
+      }
+    });
   }
 
   /**
@@ -97,6 +101,7 @@ export class ImageCleanupJob {
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
       where: { id: image.clientId },
+      select: { domain: true },
     });
     const domain = client?.domain || image.clientId;
 
@@ -119,6 +124,7 @@ export class ImageCleanupJob {
 
     // Save back
     await this.storage.saveFile(originalPath, optimizedBuffer);
+    await this.storage.clearImageVariants(domain, imageId);
 
     // Re-create thumbnail with optimization
     const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');

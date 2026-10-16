@@ -32,6 +32,7 @@ import { ClientService } from '@/modules/client/client.service';
 import { plainToInstance } from 'class-transformer';
 import {
   assertClientAccess,
+  assertTenantSlugAllowed,
   resolveAllowedClients,
 } from '../helpers/admin-access.helper';
 
@@ -107,6 +108,7 @@ export class ClientsAdminController {
         'A client with no bastionTenantSlug would not be visible to you — set one',
       );
     }
+    assertTenantSlugAllowed(adminUser, tenantSlug);
 
     const created = await this.clientService.createClient({
       name: dto.name,
@@ -158,8 +160,10 @@ export class ClientsAdminController {
       data.currentTinifyUsage = dto.currentTinifyUsage;
     if (dto.currentTinifyLimit !== undefined)
       data.currentTinifyLimit = dto.currentTinifyLimit;
-    if ('bastionTenantSlug' in dto)
+    if ('bastionTenantSlug' in dto) {
+      assertTenantSlugAllowed(adminUser, dto.bastionTenantSlug);
       data.bastionTenantSlug = dto.bastionTenantSlug ?? null;
+    }
 
     const updated = await this.clientService.updateClientWithStats(id, data);
     this.logger.log(`[Admin] Client updated: ${id}`);

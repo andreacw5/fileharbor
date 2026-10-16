@@ -11,7 +11,7 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import { TagPageParams, TagsResponseDto } from './dto/tag-response.dto';
-import { PaginatedResult } from '@/common/pagination';
+import { PaginatedResult } from '@heyatom/nest-common';
 import { TagListItemDto } from './dto/tag-response.dto';
 
 @ApiTags('Admin - Tags')

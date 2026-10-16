@@ -41,7 +41,8 @@ export class ShareLinkResponseDto {
 
   @ApiProperty({
     description: 'Full URL to access the shared image',
-    example: '/v2/images/shared/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    example:
+      '/images/b2ce77c1-3836-4e28-807f-51f929e12423?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   @Expose()
   shareUrl: string;

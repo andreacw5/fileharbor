@@ -3,13 +3,13 @@ import {
   IsBoolean,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
   IsInt,
   Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { DISCORD_WEBHOOK_URL } from '@/modules/webhook/webhook.service';
 
 export class AdminUpdateClientDto {
   @ApiPropertyOptional({ description: 'Client display name' })
@@ -31,10 +31,13 @@ export class AdminUpdateClientDto {
   webhookEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Discord webhook URL (set to null to remove)',
+    description:
+      'Discord webhook URL, https://discord.com/api/webhooks/<id>/<token> (set to null to remove)',
   })
   @IsOptional()
-  @IsUrl()
+  @Matches(DISCORD_WEBHOOK_URL, {
+    message: 'webhookUrl must be a Discord webhook URL',
+  })
   webhookUrl?: string | null;
 
   @ApiPropertyOptional({

@@ -22,7 +22,7 @@ export class AlbumTokenResponseDto {
 
   @ApiProperty({
     description: 'URL to access the album with the token',
-    example: '/v2/albums/shared/abc123-xyz789-token',
+    example: '/albums/shared/abc123-xyz789-token',
   })
   url: string;
 }

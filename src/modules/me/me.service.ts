@@ -57,7 +57,10 @@ export class MeService {
     }
 
     try {
-      const avatar = await this.avatarService.getAvatarByExternalId(sub);
+      const avatar = await this.avatarService.getAvatarByExternalId(
+        client.id,
+        sub,
+      );
       return {
         enabled: true,
         avatar: this.avatarService.getAvatarMetadata(avatar, sub),

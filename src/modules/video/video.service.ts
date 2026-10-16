@@ -15,8 +15,8 @@ import {
 } from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
-import { MetricsService } from '@/modules/metrics/metrics.service';
-import { v4 as uuidv4 } from 'uuid';
+import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
+import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import {
   VideoResponseDto,
@@ -41,7 +41,7 @@ export class VideoService {
     private webhook: WebhookService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
-    private metrics: MetricsService,
+    private metrics: FileharborMetrics,
   ) {
     this.thumbnailQuality = parseInt(
       this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80',
@@ -57,7 +57,7 @@ export class VideoService {
     isPrivate?: boolean,
     albumId?: string,
   ): Promise<VideoResponseDto> {
-    const videoId = uuidv4();
+    const videoId = randomUUID();
     this.logger.debug(
       `[uploadVideo] Start - ID: ${videoId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}`,
     );
@@ -165,7 +165,7 @@ export class VideoService {
         .sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
           videoId: video.id,
           originalName: video.originalName,
-          size: video.size,
+          size: Number(video.size),
           creatorId: creator.externalId,
         })
         .catch((err) =>
@@ -232,9 +232,11 @@ export class VideoService {
     });
     const domain = client?.domain || clientId;
 
-    this.prisma.video
-      .update({ where: { id: videoId }, data: { views: { increment: 1 } } })
-      .catch(() => {});
+    // Raw SQL on purpose: Prisma would bump updatedAt on every view
+    this.prisma.$executeRaw`
+      UPDATE videos SET views = views + 1 WHERE id = ${videoId}`.catch((e) =>
+      this.logger.warn(`[getVideoStreamPath] View not counted: ${e.message}`),
+    );
 
     return {
       storagePath: video.storagePath,
@@ -303,9 +305,17 @@ export class VideoService {
     });
     const domain = client?.domain || clientId;
 
-    const videoDir = this.storage.getVideoPath(domain, videoId);
-    await this.storage.deleteDirectory(videoDir);
+    // Row first: a failed file delete leaves a stray dir for the orphan
+    // sweep, never a row pointing at missing files.
     await this.prisma.video.delete({ where: { id: videoId } });
+    const videoDir = this.storage.getVideoPath(domain, videoId);
+    try {
+      await this.storage.deleteDirectory(videoDir);
+    } catch (err) {
+      this.logger.warn(
+        `[deleteVideo] Files left for the orphan sweep - ID: ${videoId}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     this.webhook
       .sendWebhook(clientId, WebhookEvent.VIDEO_DELETED, {

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -28,8 +29,9 @@ export class AddAlbumItemDto {
 }
 
 export class AddAlbumItemsDto {
-  @ApiProperty({ type: [AddAlbumItemDto] })
+  @ApiProperty({ type: [AddAlbumItemDto], maxItems: 100 })
   @IsArray()
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => AddAlbumItemDto)
   items: AddAlbumItemDto[];

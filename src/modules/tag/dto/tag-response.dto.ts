@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
-import { PageParams } from '@/common/pagination';
+import { PageParams } from '@heyatom/nest-common';
 
 export class TagTagClientDto {
   @ApiProperty() id: string;

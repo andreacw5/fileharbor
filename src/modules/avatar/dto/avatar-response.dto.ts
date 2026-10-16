@@ -68,21 +68,21 @@ export class AvatarResponseDto {
 
   @ApiProperty({
     description: 'URL to access the avatar',
-    example: '/v2/avatars/creator-123',
+    example: '/avatars/creator-123',
   })
   @Expose()
   url: string;
 
   @ApiPropertyOptional({
     description: 'URL to access the avatar thumbnail',
-    example: '/v2/avatars/creator-123?thumb=true',
+    example: '/avatars/creator-123?thumb=true',
   })
   @Expose()
   thumbnailUrl?: string;
 
   @ApiProperty({
     description: 'Full URL to access the avatar (baseUrl + url)',
-    example: 'http://localhost:3000/v2/avatars/creator-123',
+    example: 'http://localhost:3000/avatars/creator-123',
   })
   @Expose()
   fullPath: string;

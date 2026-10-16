@@ -15,11 +15,11 @@ import {
   WebhookService,
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
 import { CreatorService } from '@/modules/creator/creator.service';
-import { RouteHelperService } from '@/utils/route.utils';
+import { RouteHelperService, clientRef } from '@/utils/route.utils';
 
 @Injectable()
 export class AvatarService {
@@ -72,6 +72,15 @@ export class AvatarService {
         throw new BadRequestException('externalId is required');
       }
 
+      // Validates the real format: must run before the old avatar is deleted
+      this.logger.debug(
+        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
+      );
+      const metadata = await this.storage.getImageMetadata(file.buffer);
+      this.logger.debug(
+        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
+      );
+
       // Get client to retrieve domain
       const client = await this.prisma.client.findUnique({
         where: { id: clientId },
@@ -113,26 +122,20 @@ export class AvatarService {
         await this.storage.deleteDirectory(oldAvatarPath);
       }
 
-      const avatarId = existingAvatar?.id || uuidv4();
+      const avatarId = existingAvatar?.id || randomUUID();
       const avatarPath = this.storage.getAvatarPath(domain, creatorId);
-
-      // Get metadata
-      this.logger.debug(
-        `[uploadAvatar] Extracting metadata - Client: ${clientId}`,
-      );
-      const metadata = await this.storage.getImageMetadata(file.buffer);
-      this.logger.debug(
-        `[uploadAvatar] Metadata extracted - Client: ${clientId}, Dimensions: ${metadata.width}x${metadata.height}`,
-      );
 
       // Convert to WebP for original (high quality)
       this.logger.debug(
-        `[uploadAvatar] Converting to WebP - Client: ${clientId}, Quality: ${this.originalQuality}`,
+        `[uploadAvatar] Encoding WebP + thumbnail - Client: ${clientId}, Quality: ${this.originalQuality}`,
       );
-      const webpBuffer = await this.storage.convertToWebP(
-        file.buffer,
-        this.originalQuality,
-      );
+      const { original: webpBuffer, thumb: thumbBuffer } =
+        await this.storage.encodeWebpWithThumbnail(
+          file.buffer,
+          this.originalQuality,
+          this.thumbnailSize,
+          this.thumbnailQuality,
+        );
 
       // Save original avatar (renamed to original.webp for consistency)
       this.logger.debug(
@@ -145,15 +148,6 @@ export class AvatarService {
       );
       await this.storage.saveFile(originalPath, webpBuffer);
 
-      // Create and save thumbnail (lower quality for smaller size)
-      this.logger.debug(
-        `[uploadAvatar] Creating thumbnail - Client: ${clientId}, Size: ${this.thumbnailSize}, Quality: ${this.thumbnailQuality}`,
-      );
-      const thumbBuffer = await this.storage.createThumbnail(
-        webpBuffer,
-        this.thumbnailSize,
-        this.thumbnailQuality,
-      );
       const thumbnailPath = this.storage.getAvatarFilePath(
         domain,
         creatorId,
@@ -218,7 +212,7 @@ export class AvatarService {
       this.logger.log(
         `[uploadAvatar] Success - Client: ${clientId}, Creator: ${externalId}, Size: ${webpBuffer.length} bytes`,
       );
-      return this.formatAvatarResponse(avatar, externalId);
+      return this.formatAvatarResponse(avatar, externalId, domain);
     } catch (error) {
       this.logger.error(
         `[uploadAvatar] Failed - Client: ${clientId}, Creator: ${externalId}, Error: ${error.message}`,
@@ -231,33 +225,13 @@ export class AvatarService {
    * Get avatar file by external creator ID (used by public endpoint)
    */
   async getAvatarFile(
+    clientId: string | undefined,
     externalId: string,
     thumbnail: boolean = false,
     format: 'webp' | 'jpeg' | 'png' = 'webp',
   ): Promise<{ buffer: Buffer; mimeType: string }> {
-    // Find creator by externalId across all clients
-    // (public endpoint doesn't have clientId context)
-    const creator = await this.prisma.creator.findFirst({
-      where: { externalId },
-    });
-
-    if (!creator) {
-      throw new NotFoundException('Creator not found');
-    }
-
-    const avatar = await this.prisma.avatar.findFirst({
-      where: { creatorId: creator.id },
-    });
-
-    if (!avatar) {
-      throw new NotFoundException('Avatar not found');
-    }
-
-    // Get client to retrieve domain
-    const client = await this.prisma.client.findUnique({
-      where: { id: avatar.clientId },
-    });
-    const domain = client?.domain || avatar.clientId;
+    const { creator, avatar } = await this.findAvatar(clientId, externalId);
+    const domain = clientRef(avatar.client);
 
     // Get the appropriate variant path
     const variant = thumbnail ? 'thumb' : 'original';
@@ -334,14 +308,8 @@ export class AvatarService {
       });
       const domain = client?.domain || clientId;
 
-      // Delete files
-      this.logger.debug(
-        `[deleteAvatar] Deleting files - Client: ${clientId}, Creator: ${creator.id}`,
-      );
-      const avatarPath = this.storage.getAvatarPath(domain, creator.id);
-      await this.storage.deleteDirectory(avatarPath);
-
-      // Delete from database
+      // Row first: a failed file delete leaves a stray dir for the orphan
+      // sweep, never a row pointing at missing files.
       this.logger.debug(
         `[deleteAvatar] Deleting from database - Client: ${clientId}, Creator: ${creator.id}`,
       );
@@ -353,6 +321,18 @@ export class AvatarService {
           },
         },
       });
+
+      this.logger.debug(
+        `[deleteAvatar] Deleting files - Client: ${clientId}, Creator: ${creator.id}`,
+      );
+      const avatarPath = this.storage.getAvatarPath(domain, creator.id);
+      try {
+        await this.storage.deleteDirectory(avatarPath);
+      } catch (error) {
+        this.logger.warn(
+          `[deleteAvatar] Files left for the orphan sweep - Creator: ${creator.id}: ${error.message}`,
+        );
+      }
 
       // Send webhook notification (non-blocking)
       this.webhook
@@ -482,10 +462,53 @@ export class AvatarService {
   /**
    * Get avatar by external creator ID (for info endpoint)
    */
-  async getAvatarByExternalId(externalId: string) {
-    const creator = await this.prisma.creator.findFirst({
-      where: { externalId },
+  async getAvatarByExternalId(
+    clientId: string | undefined,
+    externalId: string,
+  ) {
+    return (await this.findAvatar(clientId, externalId)).avatar;
+  }
+
+  /**
+   * Resolves the `:clientRef` of GET /avatars/:clientRef/:externalUserId — a
+   * client's domain or id, as in its storage dir. A ref naming more than one
+   * client (a domain equal to another client's id) resolves to none.
+   */
+  async resolveClientRef(ref: string): Promise<string> {
+    const matches = await this.prisma.client.findMany({
+      where: { OR: [{ domain: ref }, { id: ref }] },
+      select: { id: true },
+      take: 2,
     });
+    if (matches.length !== 1) {
+      throw new NotFoundException('Client not found');
+    }
+    return matches[0].id;
+  }
+
+  /**
+   * External ids are only unique within a client: resolve the creator through
+   * clientId_externalId whenever the client is known.
+   */
+  private async findAvatar(clientId: string | undefined, externalId: string) {
+    let creator: { id: string } | null;
+    if (clientId) {
+      creator = await this.prisma.creator.findUnique({
+        where: { clientId_externalId: { clientId, externalId } },
+        select: { id: true },
+      });
+    } else {
+      // Deprecated GET /avatars/:externalUserId with no API key: no client
+      // context. Serve only an unambiguous id — when several clients have a
+      // creator with it, refuse rather than pick one (another tenant could
+      // otherwise plant an avatar for this one's users).
+      const matches = await this.prisma.creator.findMany({
+        where: { externalId },
+        select: { id: true },
+        take: 2,
+      });
+      creator = matches.length === 1 ? matches[0] : null;
+    }
 
     if (!creator) {
       throw new NotFoundException('Creator not found');
@@ -493,20 +516,25 @@ export class AvatarService {
 
     const avatar = await this.prisma.avatar.findFirst({
       where: { creatorId: creator.id },
+      include: { client: { select: { id: true, domain: true } } },
     });
 
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
 
-    return avatar;
+    return { creator, avatar };
   }
 
   /**
    * Get avatar metadata for info endpoint
    */
   getAvatarMetadata(avatar: any, externalId: string): AvatarResponseDto {
-    return this.formatAvatarResponse(avatar, externalId);
+    return this.formatAvatarResponse(
+      avatar,
+      externalId,
+      clientRef(avatar.client),
+    );
   }
 
   /**
@@ -515,9 +543,10 @@ export class AvatarService {
   private formatAvatarResponse(
     avatar: any,
     externalId: string,
+    ref: string,
   ): AvatarResponseDto {
-    const url = this.route.path('avatars', externalId);
-    const thumbnailUrl = this.route.path('avatars', externalId) + '?thumb=true';
+    const url = this.route.path('avatars', ref, externalId);
+    const thumbnailUrl = `${url}?thumb=true`;
 
     return plainToInstance(
       AvatarResponseDto,
@@ -525,7 +554,7 @@ export class AvatarService {
         ...avatar,
         url,
         thumbnailUrl,
-        fullPath: this.route.fullUrl('avatars', externalId),
+        fullPath: this.route.fullUrl('avatars', ref, externalId),
       },
       { excludeExtraneousValues: true },
     );

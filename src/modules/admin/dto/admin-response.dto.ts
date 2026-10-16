@@ -9,7 +9,14 @@ export class AdminClientResponseDto {
   @ApiPropertyOptional() @Expose() domain?: string;
   @ApiProperty() @Expose() active: boolean;
   @ApiProperty() @Expose() webhookEnabled: boolean;
-  @ApiPropertyOptional() @Expose() webhookUrl?: string;
+  @ApiPropertyOptional({
+    description: 'Discord webhook URL, token masked',
+    example: 'https://discord.com/api/webhooks/123456/****',
+  })
+  @Expose()
+  // The last path segment is the webhook's secret token.
+  @Transform(({ value }) => value?.replace(/\/[^/?]+(\?.*)?$/, '/****'))
+  webhookUrl?: string;
   @ApiProperty({
     description: 'Whether Tinify compression is enabled for this client',
   })
@@ -270,25 +277,6 @@ export class AdminAvatarResponseDto {
   creator?: AdminImageCreatorDto;
 }
 
-export class AdminAlbumImageEntryDto {
-  @ApiProperty() @Expose() imageId: string;
-  @ApiProperty() @Expose() order: number;
-}
-
-export class AdminAddImagesToAlbumResponseDto {
-  @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
-  @ApiProperty({
-    description: 'Images added with their order',
-    type: [AdminAlbumImageEntryDto],
-  })
-  @Expose()
-  @Type(() => AdminAlbumImageEntryDto)
-  images: AdminAlbumImageEntryDto[];
-  @ApiProperty({ description: 'Number of images processed' })
-  @Expose()
-  count: number;
-}
-
 export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty({ description: 'UUID of the album' }) @Expose() albumId: string;
   @ApiProperty({ description: 'Number of images removed' })
@@ -390,24 +378,16 @@ export class AdminCreatorBookmarkResponseDto {
   creator: AdminBookmarkedCreatorDto;
 }
 
-export class AdminCreatorBookmarkListResponseDto {
-  @ApiProperty({ type: [AdminCreatorBookmarkResponseDto] })
-  @Expose()
-  @Type(() => AdminCreatorBookmarkResponseDto)
-  data: AdminCreatorBookmarkResponseDto[];
-
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  @Expose()
-  @Type(() => AdminPaginationResponseDto)
-  pagination: AdminPaginationResponseDto;
-}
-
 export class AdminVideoResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() clientId: string;
   @ApiProperty() @Expose() originalName: string;
   @ApiProperty() @Expose() mimeType: string;
-  @ApiProperty() @Expose() size: number;
+  // BigInt in the DB: JSON.stringify throws on a bigint (exact up to 8 PiB)
+  @ApiProperty()
+  @Expose()
+  @Transform(({ value }) => (typeof value === 'bigint' ? Number(value) : value))
+  size: number;
   @ApiPropertyOptional() @Expose() duration?: number;
   @ApiPropertyOptional() @Expose() width?: number;
   @ApiPropertyOptional() @Expose() height?: number;

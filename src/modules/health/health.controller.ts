@@ -5,16 +5,20 @@ import {
   HealthCheckService,
   PrismaHealthIndicator,
 } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma/prisma.service';
-import { Public } from '@/modules/client/decorators/public.decorator';
+import { Public } from '@heyatom/bastion-client/nest';
+import { StorageHealthIndicator } from './storage-health.indicator';
 
 @ApiTags('health')
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
     private readonly prismaIndicator: PrismaHealthIndicator,
     private readonly prisma: PrismaService,
+    private readonly storageIndicator: StorageHealthIndicator,
   ) {}
 
   @Get('live')
@@ -35,7 +39,7 @@ export class HealthController {
   @ApiOperation({
     summary: 'Readiness probe',
     description:
-      'Checks database connectivity. Returns 200 when the service is ready to accept traffic, 503 otherwise.',
+      'Checks database connectivity and the storage volume (writable, free space above HEALTH_DISK_MIN_FREE_MB). Returns 200 when the service is ready to accept traffic, 503 otherwise.',
   })
   @ApiOkResponse({
     description: 'Service is ready — all health indicators passed',
@@ -43,6 +47,7 @@ export class HealthController {
   ready() {
     return this.health.check([
       () => this.prismaIndicator.pingCheck('database', this.prisma),
+      () => this.storageIndicator.check('storage'),
     ]);
   }
 }

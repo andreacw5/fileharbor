@@ -13,20 +13,22 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
   const clients = [
     { id: 'client-nodomain', domain: null },
     { id: 'client-domain', domain: 'example.com' },
+    // Two clients claiming one dir: an id equal to another client's domain.
+    { id: 'shared.example', domain: null },
+    { id: 'client-squatter', domain: 'shared.example' },
   ];
   const images = [
     { clientId: 'client-nodomain', storagePath: '' }, // set in beforeEach
     { clientId: 'client-domain', storagePath: '' },
   ];
+  const videos = [{ clientId: 'client-domain', id: 'vid-kept' }];
 
   const prisma = {
     client: {
-      findFirst: jest.fn(async ({ where }) => {
+      findMany: jest.fn(async ({ where }) => {
         const [byDomain, byId] = where.OR;
-        return (
-          clients.find(
-            (c) => c.domain === byDomain.domain || c.id === byId.id,
-          ) ?? null
+        return clients.filter(
+          (c) => c.domain === byDomain.domain || c.id === byId.id,
         );
       }),
     },
@@ -35,7 +37,13 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
         images.filter((i) => i.clientId === where.clientId),
       ),
     },
-    avatar: { findFirst: jest.fn().mockResolvedValue(null) },
+    avatar: { findMany: jest.fn().mockResolvedValue([]) },
+    video: {
+      findMany: jest.fn(async ({ where }) =>
+        videos.filter((v) => v.clientId === where.clientId),
+      ),
+    },
+    runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
   };
 
   const exists = (p: string) =>
@@ -48,7 +56,18 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     const imageDir = storage.getImagePath(dir, imageId);
     await fs.mkdir(imageDir, { recursive: true });
     await fs.writeFile(path.join(imageDir, 'original.webp'), 'x');
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await fs.utimes(imageDir, twoHoursAgo, twoHoursAgo);
     return imageDir;
+  };
+
+  const makeVideoDir = async (dir: string, videoId: string, ageMs: number) => {
+    const videoDir = storage.getVideoPath(dir, videoId);
+    await fs.mkdir(videoDir, { recursive: true });
+    await fs.writeFile(path.join(videoDir, 'original.mp4'), 'x');
+    const at = new Date(Date.now() - ageMs);
+    await fs.utimes(videoDir, at, at);
+    return videoDir;
   };
 
   beforeEach(async () => {
@@ -80,5 +99,60 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
 
     expect(await exists(unknown)).toBe(true);
+  });
+
+  it('leaves an orphan younger than an hour alone (upload still in flight)', async () => {
+    const fresh = await makeImageDir('client-nodomain', 'img-fresh');
+    const now = new Date();
+    await fs.utimes(fresh, now, now);
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(fresh)).toBe(true);
+  });
+
+  it('leaves a storage dir that maps to more than one client untouched', async () => {
+    const ambiguous = await makeImageDir('shared.example', 'img');
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(ambiguous)).toBe(true);
+  });
+
+  it('keeps referenced videos and deletes orphans older than an hour', async () => {
+    const hours = 2 * 60 * 60 * 1000;
+    const kept = await makeVideoDir('example.com', 'vid-kept', hours);
+    const orphan = await makeVideoDir('example.com', 'vid-orphan', hours);
+    const fresh = await makeVideoDir('example.com', 'vid-fresh', 0);
+    const otherClient = await makeVideoDir(
+      'client-nodomain',
+      'vid-kept',
+      hours,
+    );
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(kept)).toBe(true);
+    expect(await exists(orphan)).toBe(false);
+    expect(await exists(fresh)).toBe(true);
+    // A video id known only under another client is still an orphan here.
+    expect(await exists(otherClient)).toBe(false);
+  });
+
+  it('keeps sweeping a domain after one dir fails to delete', async () => {
+    const first = await makeImageDir('client-nodomain', 'img-a');
+    const second = await makeImageDir('client-nodomain', 'img-b');
+    const deleteDirectory = jest
+      .spyOn(storage, 'deleteDirectory')
+      .mockRejectedValueOnce(new Error('EACCES'));
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(deleteDirectory).toHaveBeenCalledTimes(2);
+    // Exactly one of the two survived the injected failure.
+    expect([await exists(first), await exists(second)].sort()).toEqual([
+      false,
+      true,
+    ]);
   });
 });

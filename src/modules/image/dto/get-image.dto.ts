@@ -2,6 +2,8 @@ import {
   IsString,
   IsOptional,
   IsNumber,
+  IsInt,
+  IsIn,
   Min,
   Max,
   IsBoolean,
@@ -55,26 +57,30 @@ export class GetImageDto {
 
   @ApiPropertyOptional({
     description:
-      'Target width in pixels (maintains aspect ratio if height not specified)',
+      'Target width in pixels (maintains aspect ratio if height not specified). Rounded up to the next step of 16, 32, 48, 64, 96, 128, 160, 192, 256, 320, 384, 480, 640, 768, 960, 1080, 1280, 1440, 1600, 1920, 2560, 3200, 3840, 4096',
     example: 800,
     minimum: 1,
+    maximum: 4096,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(4096)
   width?: number;
 
   @ApiPropertyOptional({
     description:
-      'Target height in pixels (maintains aspect ratio if width not specified)',
+      'Target height in pixels (maintains aspect ratio if width not specified). Rounded up to the same steps as width',
     example: 600,
     minimum: 1,
+    maximum: 4096,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(4096)
   height?: number;
 
   @ApiPropertyOptional({
@@ -83,11 +89,12 @@ export class GetImageDto {
     example: 'webp',
   })
   @IsOptional()
-  @IsString()
+  @IsIn(['webp', 'jpeg', 'png'])
   format?: 'webp' | 'jpeg' | 'png';
 
   @ApiPropertyOptional({
-    description: 'Image quality (1-100)',
+    description:
+      'Image quality (1-100), rounded to the nearest of 40, 60, 75, 85, 100',
     minimum: 1,
     maximum: 100,
     example: 85,

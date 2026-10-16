@@ -1,77 +1,74 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './modules/app/app.module';
-import { HttpExceptionFilter } from '@/filters/http-exception.filter';
-import { json } from 'express';
-import cookieParser from 'cookie-parser';
-import { APP_VERSION } from '@/common/version';
+import { setupHttpApp, setupSwagger } from '@heyatom/nest-common';
+import { SWAGGER_OPTIONS } from '@/common/openapi';
+import { parseCorsOrigin } from '@/utils/cors.utils';
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create(AppModule, { bufferLogs: true });
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+      bufferLogs: true,
+    });
     app.useLogger(app.get(PinoLogger));
 
-    // Global validation pipe
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    // Defaults live in config.validation.ts — single source of truth.
+    const config = app.get(ConfigService);
+    const port = config.getOrThrow<number>('PORT');
 
-    // Enable CORS
-    app.enableCors({
-      origin: process.env.CORS_ORIGIN || '*',
-      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-      allowedHeaders: [
-        'Content-Type',
-        'X-API-Key',
-        'X-User-Id',
-        'Authorization',
-      ],
-      credentials: true,
+    // CORS_ORIGIN: `*` or an origin list, validated at boot (required in production).
+    const corsOrigin = parseCorsOrigin(
+      config.getOrThrow<string>('CORS_ORIGIN'),
+    );
+    // CDN: other sites embed our images and videos, so CORP must be cross-origin.
+    // Over plain http (LAN IP) `upgrade-insecure-requests` would break /docs.
+    const production = config.get<string>('NODE_ENV') === 'production';
+
+    // Shutdown hooks, trust proxy, helmet, CORS, JSON body limit,
+    // global ValidationPipe (whitelist, forbidNonWhitelisted, transform).
+    setupHttpApp(app, {
+      trustProxyHops: config.getOrThrow<number>('TRUST_PROXY_HOPS'),
+      corsOrigins: corsOrigin,
+      corsAllowedHeaders: ['X-API-Key', 'X-User-Id'],
+      jsonBodyLimit: '5mb',
+      helmet: {
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+        ...(production
+          ? {}
+          : {
+              contentSecurityPolicy: {
+                directives: { upgradeInsecureRequests: null },
+              },
+            }),
+      },
     });
 
-    // Use global exception filter
-    app.useGlobalFilters(new HttpExceptionFilter());
+    // Same value RouteHelperService builds URLs from: served routes and returned
+    // URLs always agree. Probes stay at /health/* whatever the prefix.
+    const apiPrefix = config.get<string>('apiPrefix') ?? '';
+    if (apiPrefix) {
+      app.setGlobalPrefix(apiPrefix, {
+        exclude: ['health/live', 'health/ready'],
+      });
+    }
+    // /docs enumerates the whole API surface, admin routes included. Resolved once
+    // in validateConfig: explicit ENABLE_SWAGGER, else development/test only.
+    const swagger = config.get<string>('ENABLE_SWAGGER') === 'true';
+    if (swagger) setupSwagger(app, SWAGGER_OPTIONS);
 
-    app.use(json({ limit: '5mb' }));
-    app.use(cookieParser());
-
-    const apiPrefix = process.env.API_PREFIX ?? 'v2';
-
-    // Swagger documentation
-    const config = new DocumentBuilder()
-      .setTitle('FileHarbor 2.0')
-      .setDescription('Multi-tenant image management system API')
-      .setVersion(APP_VERSION)
-      .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
-      .addBearerAuth()
-      .setBasePath(apiPrefix ? `/${apiPrefix}` : '/')
-      .setLicense(
-        'MIT',
-        'https://github.com/heyatomdev/fileharbor/blob/main/README.md',
-      )
-      .setContact('Andrea Tombolato', 'https://heyatom.dev', 'hey@heyatom.dev')
-      .build();
-
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('/docs', app, document);
-
-    const port = process.env.PORT || 8081;
     await app.listen(port);
 
     const logger = new Logger('Bootstrap');
-    logger.log(`🚀 FileHarbor started successfully!`);
-    logger.log(`📚 API Documentation: http://localhost:${port}/docs`);
-    logger.log(
-      `Current BASE_URL is set to: ${process.env.BASE_URL || 'Not Set'}`,
-    );
+    logger.log(`FileHarbor started successfully!`);
+    if (swagger) {
+      logger.log(`API Documentation: http://localhost:${port}/docs`);
+    }
+    logger.log(`Current BASE_URL is set to: ${config.get<string>('BASE_URL')}`);
   } catch (error) {
-    Logger.error('❌ Failed to start the application', 'Bootstrap');
+    Logger.error('Failed to start the application', 'Bootstrap');
 
     if (error.message.includes('Database connection failed')) {
       Logger.error('Database connection issue detected', 'Bootstrap');
@@ -96,11 +93,11 @@ async function bootstrap() {
 
 bootstrap()
   .then(() => {
-    Logger.log('🎉 App running now!', 'Bootstrap');
+    Logger.log('App running now!', 'Bootstrap');
   })
   .catch((error) => {
-    Logger.error('💥 Critical error during application startup:', 'Bootstrap');
+    Logger.error('Critical error during application startup:', 'Bootstrap');
     Logger.error(error.message, 'Bootstrap');
-    Logger.error('🔄 Please fix the issues above and try again', 'Bootstrap');
+    Logger.error('Please fix the issues above and try again', 'Bootstrap');
     process.exit(1);
   });

@@ -14,26 +14,28 @@ export class TinifyResetJob {
    */
   @Cron('0 0 1 * *')
   async resetTinifyUsageCounters() {
-    this.logger.log('Starting monthly Tinify usage counter reset job...');
+    await this.prisma.runExclusive('tinify.reset', async () => {
+      this.logger.log('Starting monthly Tinify usage counter reset job...');
 
-    try {
-      const result = await this.prisma.client.updateMany({
-        where: {
-          tinifyActive: true,
-        },
-        data: {
-          currentTinifyUsage: 0,
-        },
-      });
+      try {
+        const result = await this.prisma.client.updateMany({
+          where: {
+            tinifyActive: true,
+          },
+          data: {
+            currentTinifyUsage: 0,
+          },
+        });
 
-      this.logger.log(
-        `Tinify usage counter reset completed - ${result.count} clients updated`,
-      );
-    } catch (error) {
-      this.logger.error(
-        'Tinify usage counter reset job failed:',
-        error.message,
-      );
-    }
+        this.logger.log(
+          `Tinify usage counter reset completed - ${result.count} clients updated`,
+        );
+      } catch (error) {
+        this.logger.error(
+          'Tinify usage counter reset job failed:',
+          error.message,
+        );
+      }
+    });
   }
 }

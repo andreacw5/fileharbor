@@ -1,6 +1,3 @@
-IntelliJ IDEA
-PhpStorm
-WebStorm
 # compiled output
 /dist
 /node_modules
@@ -45,5 +42,4 @@ storage/*
 !/storage/defaults.fileharbor/
 !/storage/defaults.fileharbor/**
 
-/generated/prisma
 graphify-out/

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ClientService } from './client.service';
+import { maskApiKey } from '@/modules/admin/helpers/mask-api-key.helper';
 
 @Injectable()
 export class ClientInitService implements OnModuleInit {
@@ -40,7 +41,9 @@ export class ClientInitService implements OnModuleInit {
         this.logger.log(
           `Created default client: ${defaultClient.name} (ID: ${defaultClient.id})`,
         );
-        this.logger.log(`API Key: ${defaultClient.apiKey}`);
+        // Never the key itself: logs outlive the secret. Read it from the
+        // clients table.
+        this.logger.log(`API Key: ${maskApiKey(defaultClient.apiKey)}`);
 
         // Get the default creators that were auto-created by ClientService
         const defaultCreators = await this.prisma.creator.findMany({
@@ -83,7 +86,7 @@ export class ClientInitService implements OnModuleInit {
           for (const client of clients) {
             this.logger.log(`\n--- Client: ${client.name} ---`);
             this.logger.log(`  ID: ${client.id}`);
-            this.logger.log(`  API Key: ${client.apiKey}`);
+            this.logger.log(`  API Key: ${maskApiKey(client.apiKey)}`);
             this.logger.log(`  Domain: ${client.domain || 'N/A'}`);
             this.logger.log(`  Active: ${client.active}`);
             this.logger.log(`  Images: ${client._count.images}`);

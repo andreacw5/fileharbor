@@ -5,6 +5,14 @@ import { firstValueFrom, catchError, of } from 'rxjs';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { formatFileSize } from '@/modules/webhook/helpers/file-size.helper';
 
+/**
+ * Webhooks only ever post to Discord. Pinning the URL shape keeps a client's
+ * webhook from being pointed at internal hosts (SSRF). Checked on write (DTO)
+ * and again before every send, for rows stored before the check existed.
+ */
+export const DISCORD_WEBHOOK_URL =
+  /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+(?:\?[\w=&-]*)?$/;
+
 export interface WebhookPayload {
   event: string;
   clientId: string;
@@ -64,6 +72,13 @@ export class WebhookService {
         return;
       }
 
+      if (!DISCORD_WEBHOOK_URL.test(client.webhookUrl)) {
+        this.logger.warn(
+          `[sendWebhook] Skipped: webhook URL of client ${clientId} is not a Discord webhook`,
+        );
+        return;
+      }
+
       // Build webhook payload
       const payload: WebhookPayload = {
         event,
@@ -105,15 +120,19 @@ export class WebhookService {
 
     try {
       await firstValueFrom(
-        this.httpService.post(webhookUrl, message).pipe(
-          catchError((error) => {
-            this.logger.error(
-              `[sendDiscordWebhook] Failed to post to Discord webhook:`,
-              error instanceof Error ? error.message : error,
-            );
-            return of(null);
-          }),
-        ),
+        // The host is pinned to Discord (DISCORD_WEBHOOK_URL), so no SSRF guard;
+        // a redirect is never followed, so the pinned host is the only one hit.
+        this.httpService
+          .post(webhookUrl, message, { maxRedirects: 0, timeout: 10_000 })
+          .pipe(
+            catchError((error) => {
+              this.logger.error(
+                `[sendDiscordWebhook] Failed to post to Discord webhook:`,
+                error instanceof Error ? error.message : error,
+              );
+              return of(null);
+            }),
+          ),
       );
     } catch (error) {
       this.logger.error(
@@ -141,7 +160,7 @@ export class WebhookService {
       footer: {
         text: 'FileHarbor Monitoring',
         icon_url:
-          'https://fileharbor.heyatom.dev/v2/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
+          'https://fileharbor.heyatom.dev/images/d8f4aaa6-1c0a-4aed-8aab-c57659e6f701',
       },
     };
 

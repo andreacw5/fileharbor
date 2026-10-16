@@ -28,14 +28,19 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { ImageService } from './image.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  IMAGE_UPLOAD_LIMITS,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import {
   ClientId,
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@/modules/client/decorators/public.decorator';
+import { Public } from '@heyatom/bastion-client/nest';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadImageDto,
   GetImageDto,
@@ -48,6 +53,8 @@ import {
   ListImagesResponseDto,
 } from './dto';
 import { Readable } from 'node:stream';
+import { contentDisposition } from '@/utils/content-disposition';
+import { snapQuality, snapSize } from './image-variants';
 
 @ApiTags('Images')
 @ApiSecurity('api-key')
@@ -59,6 +66,7 @@ export class ImageController {
   constructor(
     private imageService: ImageService,
     private storageService: StorageService,
+    private config: ConfigService,
   ) {}
 
   @Post()
@@ -93,7 +101,9 @@ export class ImageController {
   })
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { ...IMAGE_UPLOAD_LIMITS, files: 1 } }),
+  )
   async uploadImage(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,
@@ -177,6 +187,8 @@ export class ImageController {
   }
 
   @Public()
+  // Media delivery: one page can embed dozens of these.
+  @SkipThrottle()
   @Get(':imageId')
   @ApiOperation({
     summary: 'Get image',
@@ -207,7 +219,7 @@ export class ImageController {
     @Req() req?: import('express').Request,
   ) {
     const clientId = req['clientId'];
-    const creatorId = req['creatorId'];
+    const creatorId = req['externalCreatorId'];
     const requestType = query.info
       ? 'metadata'
       : query.download
@@ -231,7 +243,11 @@ export class ImageController {
           imageId = image.id;
         } catch {
           // Fallback to normal access with token validation
-          image = await this.imageService.getImageById(imageId);
+          image = await this.imageService.getImageById(
+            imageId,
+            undefined,
+            !!query.info,
+          );
           await this.imageService.validateImageAccess(
             image,
             imageId,
@@ -241,7 +257,11 @@ export class ImageController {
           );
         }
       } else {
-        image = await this.imageService.getImageById(imageId);
+        image = await this.imageService.getImageById(
+          imageId,
+          undefined,
+          !!query.info,
+        );
         await this.imageService.validateImageAccess(
           image,
           imageId,
@@ -257,40 +277,83 @@ export class ImageController {
         return metadata;
       }
 
-      // Update counters (fire and forget for performance) - create promises without await
-      const counterPromise = query.download
-        ? this.imageService.incrementDownloads(imageId, image.clientId)
-        : this.imageService.incrementViews(imageId);
-
-      // Get image file
-      const filePromise = this.imageService.getImageFile(
-        imageId,
-        query.thumb ? undefined : query.width,
-        query.thumb ? undefined : query.height,
-        query.format || 'webp',
-        query.quality || 85,
-        query.thumb,
-      );
-
-      // Wait for both file and counter update
-      const [{ buffer, mimeType }] = await Promise.all([
-        filePromise,
-        counterPromise,
-      ]);
+      // Counters: views are buffered in memory, downloads are one UPDATE.
+      // Counted only once the bytes are served (or a 304 confirms them), so a
+      // 503 from a full render queue is not a view.
+      const countHit = () =>
+        query.download
+          ? this.imageService.incrementDownloads(imageId, image.clientId)
+          : this.imageService.incrementViews(imageId);
 
       // Set response headers
+      // Private bytes and token-gated responses must never land in a shared
+      // cache (CDN, proxy): the next requester would get them without a check.
+      const restricted = image.isPrivate || !!query.token;
+      const variant = query.thumb
+        ? 'thumb'
+        : [
+            // Snapped like getImageFile does: URLs that render the same
+            // variant share one ETag.
+            snapSize(query.width) ?? '',
+            snapSize(query.height) ?? '',
+            query.format || 'webp',
+            snapQuality(query.quality),
+          ].join('-');
+      // updatedAt moves when the file is rewritten (optimize job, Tinify), never on
+      // a view or download (those counters skip it), so revalidation stays cheap.
+      const etag = `"${imageId}-${variant}-${image.updatedAt.getTime()}"`;
       const headers: Record<string, string> = {
-        'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        ETag: `"${imageId}${query.thumb ? '-thumb' : ''}"`,
+        'Cache-Control': restricted
+          ? 'private, no-store'
+          : 'public, max-age=31536000, immutable',
+        ETag: etag,
       };
 
       if (query.download) {
-        headers['Content-Disposition'] =
-          `attachment; filename="${image.originalName}"`;
+        headers['Content-Disposition'] = contentDisposition(image.originalName);
       }
 
+      // Access was checked above, so a matching ETag can skip the file entirely
+      const ifNoneMatch = req?.headers['if-none-match'];
+      if (
+        ifNoneMatch &&
+        ifNoneMatch
+          .split(',')
+          .some(
+            (t) => t.trim().replace(/^W\//, '') === etag || t.trim() === '*',
+          )
+      ) {
+        await countHit();
+        res.status(304).set(headers);
+        return;
+      }
+
+      // Behind nginx, hand files already on disk to it instead of streaming
+      // them from Node (see IMAGE_X_ACCEL_REDIRECT)
+      const xAccel = this.config.get<boolean>('image.xAccelRedirect');
+      const { buffer, mimeType, filePath } =
+        await this.imageService.getImageFile(image, {
+          width: query.thumb ? undefined : query.width,
+          height: query.thumb ? undefined : query.height,
+          format: query.format || 'webp',
+          quality: query.quality,
+          thumb: query.thumb,
+          skipDiskRead: xAccel,
+        });
+      await countHit();
+      headers['Content-Type'] = mimeType;
       res.set(headers);
+
+      if (!buffer) {
+        res.set(
+          'X-Accel-Redirect',
+          `/internal-images/${this.storageService.toStorageRelative(filePath!)}`,
+        );
+        this.logger.log(
+          `[GetImage] ${requestType} | ${imageId} | ${mimeType} | x-accel | client:${clientId || 'public'}`,
+        );
+        return;
+      }
 
       this.logger.log(
         `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,
@@ -322,7 +385,11 @@ export class ImageController {
 
           res.set({
             'Content-Type': mimeType,
-            'Cache-Control': 'public, max-age=3600',
+            // A denial depends on who asks: don't let a cache replay it to the owner.
+            'Cache-Control':
+              defaultType === 'permission_denied'
+                ? 'private, no-store'
+                : 'public, max-age=3600',
             'X-FileHarbor-Fallback': defaultType,
           });
 

@@ -6,25 +6,55 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
-import { GlobalStatsResponseDto } from './dto/global-stats-response.dto';
 import { randomBytes } from 'crypto';
+
+// Every X-API-Key request validates its key: cache hits for a short while so a
+// burst of requests costs one query. Only valid clients are cached (a bogus key
+// can't grow the map), and any client update clears it on this instance; other
+// replicas catch up within the TTL.
+const CLIENT_CACHE_TTL_MS = 30_000;
+
+const AUTH_CLIENT_SELECT = {
+  id: true,
+  name: true,
+  domain: true,
+  active: true,
+} satisfies Prisma.ClientSelect;
+
+export type AuthClient = Prisma.ClientGetPayload<{
+  select: typeof AUTH_CLIENT_SELECT;
+}>;
 
 @Injectable()
 export class ClientService {
+  private readonly clientCache = new Map<
+    string,
+    { client: AuthClient; expiresAt: number }
+  >();
+
   constructor(private prisma: PrismaService) {}
 
   /**
    * Validate client by API key
    */
-  async validateClient(apiKey: string) {
+  async validateClient(apiKey: string): Promise<AuthClient> {
+    const cached = this.clientCache.get(apiKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.client;
+
     const client = await this.prisma.client.findUnique({
       where: { apiKey },
+      select: AUTH_CLIENT_SELECT,
     });
 
     if (!client || !client.active) {
+      this.clientCache.delete(apiKey);
       throw new UnauthorizedException('Invalid or inactive client');
     }
 
+    this.clientCache.set(apiKey, {
+      client,
+      expiresAt: Date.now() + CLIENT_CACHE_TTL_MS,
+    });
     return client;
   }
 
@@ -67,21 +97,7 @@ export class ClientService {
   }
 
   /**
-   * Get creator by external ID
-   */
-  async getCreatorByExternalId(clientId: string, externalId: string) {
-    return this.prisma.creator.findUnique({
-      where: {
-        clientId_externalId: {
-          clientId,
-          externalId,
-        },
-      },
-    });
-  }
-
-  /**
-   * Create a new client and seed its default 'administrator' and 'system' creators
+   * Create a new client and seed its default 'system' creator
    */
   async createClient(data: {
     name: string;
@@ -108,31 +124,14 @@ export class ClientService {
       this.mapUniqueConstraintViolation(error);
     }
 
-    // Check if creators exist for this client
-    const creatorCount = await this.prisma.creator.count({
-      where: { clientId: client.id },
+    // System creator for images without explicit creatorId
+    await this.prisma.creator.create({
+      data: {
+        clientId: client.id,
+        externalId: 'system',
+        username: 'system',
+      },
     });
-
-    // If no creators, create default creators
-    if (creatorCount === 0) {
-      // Create administrator creator
-      await this.prisma.creator.create({
-        data: {
-          clientId: client.id,
-          externalId: 'administrator',
-          username: 'administrator',
-        },
-      });
-
-      // Create system creator for images without explicit creatorId
-      await this.prisma.creator.create({
-        data: {
-          clientId: client.id,
-          externalId: 'system',
-          username: 'system',
-        },
-      });
-    }
 
     return client;
   }
@@ -186,14 +185,11 @@ export class ClientService {
    * Get aggregated statistics for a client
    */
   async getStats(clientId: string): Promise<ClientStatsResponseDto> {
-    const [totalImages, totalAlbums, totalStorage, uploadedLast7Days] =
+    const [totalImages, totalAlbums, storage, uploadedLast7Days] =
       await Promise.all([
         this.prisma.image.count({ where: { clientId } }),
         this.prisma.album.count({ where: { clientId } }),
-        this.prisma.image.aggregate({
-          where: { clientId },
-          _sum: { size: true },
-        }),
+        this.storageByClient([clientId]),
         this.prisma.image.count({
           where: {
             clientId,
@@ -205,7 +201,7 @@ export class ClientService {
     return {
       totalImages,
       totalAlbums,
-      totalStorage: totalStorage._sum.size || 0,
+      totalStorage: storage.get(clientId) ?? 0,
       uploadedLast7Days,
     };
   }
@@ -235,15 +231,7 @@ export class ClientService {
       },
     });
 
-    const storagePerClient = await this.prisma.image.groupBy({
-      by: ['clientId'],
-      where: allowed !== null ? { clientId: { in: allowed } } : undefined,
-      _sum: { size: true },
-    });
-
-    const storageMap = new Map(
-      storagePerClient.map((s) => [s.clientId, s._sum.size || 0]),
-    );
+    const storageMap = await this.storageByClient(allowed);
 
     return clients.map((c) => ({
       ...c,
@@ -252,7 +240,7 @@ export class ClientService {
       totalAlbums: c._count.albums,
       totalVideos: c._count.videos,
       totalCreators: c._count.creators,
-      totalStorage: storageMap.get(c.id) || 0,
+      totalStorage: storageMap.get(c.id) ?? 0,
     }));
   }
 
@@ -278,10 +266,7 @@ export class ClientService {
 
     if (!client) return null;
 
-    const storageAgg = await this.prisma.image.aggregate({
-      where: { clientId },
-      _sum: { size: true },
-    });
+    const storage = await this.storageByClient([clientId]);
 
     return {
       ...client,
@@ -290,7 +275,7 @@ export class ClientService {
       totalAlbums: client._count.albums,
       totalVideos: client._count.videos,
       totalCreators: client._count.creators,
-      totalStorage: storageAgg._sum.size || 0,
+      totalStorage: storage.get(clientId) ?? 0,
     };
   }
 
@@ -312,11 +297,9 @@ export class ClientService {
     } catch (error) {
       this.mapUniqueConstraintViolation(error);
     }
+    this.clientCache.clear();
 
-    const storageAgg = await this.prisma.image.aggregate({
-      where: { clientId },
-      _sum: { size: true },
-    });
+    const storage = await this.storageByClient([clientId]);
 
     return {
       ...updated,
@@ -324,22 +307,48 @@ export class ClientService {
       totalAvatars: updated._count.avatars,
       totalAlbums: updated._count.albums,
       totalVideos: updated._count.videos,
-      totalStorage: storageAgg._sum.size || 0,
+      totalStorage: storage.get(clientId) ?? 0,
     };
   }
 
   /**
-   * Get aggregated statistics across ALL clients (admin use only)
+   * Bytes on disk per client: images, videos and avatars, like the admin stats.
+   * Video sizes are BigInt; a Number is exact up to 8 PiB.
    */
-  async getGlobalStats(): Promise<GlobalStatsResponseDto> {
-    const [totalImages, totalStorage] = await Promise.all([
-      this.prisma.image.count(),
-      this.prisma.image.aggregate({ _sum: { size: true } }),
+  private async storageByClient(
+    clientIds: string[],
+  ): Promise<Map<string, number>> {
+    const where = { clientId: { in: clientIds } };
+    const groups = await Promise.all([
+      this.prisma.image.groupBy({
+        by: ['clientId'],
+        where,
+        _sum: { size: true },
+      }),
+      this.prisma.video.groupBy({
+        by: ['clientId'],
+        where,
+        _sum: { size: true },
+      }),
+      this.prisma.avatar.groupBy({
+        by: ['clientId'],
+        where,
+        _sum: { size: true },
+      }),
     ]);
 
-    return {
-      totalImages,
-      totalStorage: totalStorage._sum.size || 0,
-    };
+    const totals = new Map<string, number>();
+    for (const rows of groups) {
+      for (const row of rows as {
+        clientId: string;
+        _sum: { size: number | bigint | null };
+      }[]) {
+        totals.set(
+          row.clientId,
+          (totals.get(row.clientId) ?? 0) + Number(row._sum.size ?? 0),
+        );
+      }
+    }
+    return totals;
   }
 }

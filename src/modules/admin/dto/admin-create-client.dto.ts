@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsNotEmpty,
+  IsNotIn,
   IsOptional,
   IsString,
   Matches,
@@ -22,9 +23,23 @@ export class AdminCreateClientDto {
     nullable: true,
   })
   @IsOptional()
-  @Transform(({ value }) => (value === '' ? null : value))
+  @Transform(({ value }) =>
+    value === ''
+      ? null
+      : typeof value === 'string'
+        ? value.toLowerCase()
+        : value,
+  )
   @IsString()
-  @MaxLength(255)
+  @MaxLength(253)
+  // The domain names the client's storage dir, next to dirs named by client id
+  // and the shared defaults dir: a dotted hostname can be neither a UUID nor
+  // anything with path characters.
+  @Matches(
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/,
+    { message: 'domain must be a lowercase hostname such as cdn.example.com' },
+  )
+  @IsNotIn(['defaults.fileharbor'], { message: 'domain is reserved' })
   domain?: string | null;
 
   @ApiPropertyOptional({

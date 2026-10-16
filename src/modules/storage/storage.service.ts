@@ -1,15 +1,37 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import sharp from 'sharp';
+
+// Decoded-pixel cap for every sharp call: a small compressed file can declare
+// enormous dimensions (decompression bomb). 100 MP fits a 48 MP phone photo
+// with room to spare, at ~400 MB of RGBA per pipeline.
+const MAX_INPUT_PIXELS = 100_000_000;
+
+/** Formats accepted on upload, as reported by sharp from the bytes themselves. */
+export const SUPPORTED_IMAGE_FORMATS = ['jpeg', 'png', 'webp', 'gif'];
+
+// Multer limits for image/avatar uploads. Read from process.env at load time,
+// like MAX_VIDEO_SIZE: interceptor options are fixed when the decorator runs.
+export const IMAGE_UPLOAD_LIMITS = {
+  fileSize: parseInt(process.env.MAX_FILE_SIZE ?? '', 10) || 10485760,
+  files: 20,
+};
+
+function openImage(input: Buffer) {
+  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS });
+}
 import * as os from 'os';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import fluentFfmpeg from 'fluent-ffmpeg';
+import { Semaphore } from '@/utils/semaphore';
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -52,14 +74,32 @@ export const OPTIMIZE_GIVEN_UP_WHERE = {
   optimizeAttempts: { gte: MAX_OPTIMIZE_ATTEMPTS },
 };
 
+/**
+ * 503 from a full render queue. The queue drains in well under a second, so
+ * `HttpExceptionFilter` adds `Retry-After: 1` for it.
+ */
+export class RenderBusyException extends ServiceUnavailableException {
+  constructor() {
+    // AllExceptionsFilter turns `retryAfterSeconds` into the Retry-After header.
+    super({ message: 'Image renderer busy, retry', retryAfterSeconds: 1 });
+  }
+}
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly storagePath: string;
+  // Caps concurrent on-demand renders (public, unthrottled GETs): each one
+  // decodes a full original, so unbounded they would saturate CPU and memory.
+  private readonly renderLimiter: Semaphore;
 
   constructor(private configService: ConfigService) {
     this.storagePath =
       this.configService.get<string>('STORAGE_PATH') || './storage';
+    this.renderLimiter = new Semaphore(
+      this.configService.get<number>('RENDER_CONCURRENCY') || 2,
+      this.configService.get<number>('RENDER_QUEUE_LIMIT') ?? 20,
+    );
   }
 
   /**
@@ -70,7 +110,13 @@ export class StorageService {
     const normalizedTarget = path.resolve(targetPath);
     const normalizedStorage = path.resolve(this.storagePath);
 
-    if (!normalizedTarget.startsWith(normalizedStorage)) {
+    // A prefix check would let `storage-evil/` pass for `storage/`.
+    const relative = path.relative(normalizedStorage, normalizedTarget);
+    if (
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
       this.logger.error(
         `[validatePath] Path traversal attempt detected: ${targetPath}`,
       );
@@ -166,6 +212,36 @@ export class StorageService {
   }
 
   /**
+   * Directory holding on-demand resizes of an image (`{imageDir}/variants/`).
+   * Anything that rewrites the original must clear it.
+   */
+  getImageVariantsPath(domain: string, imageId: string): string {
+    return path.join(this.getImagePath(domain, imageId), 'variants');
+  }
+
+  async clearImageVariants(domain: string, imageId: string): Promise<void> {
+    await this.deleteDirectory(this.getImageVariantsPath(domain, imageId));
+  }
+
+  /** Number of entries in a directory, 0 when it doesn't exist. */
+  async countEntries(dirPath: string): Promise<number> {
+    this.validatePath(dirPath);
+    return fs.readdir(dirPath).then(
+      (entries) => entries.length,
+      () => 0,
+    );
+  }
+
+  /** Path relative to the storage root, for nginx's internal location. */
+  toStorageRelative(filePath: string): string {
+    this.validatePath(filePath);
+    return path
+      .relative(path.resolve(this.storagePath), path.resolve(filePath))
+      .split(path.sep)
+      .join('/');
+  }
+
+  /**
    * Get storage path for avatar
    */
   getAvatarPath(domain: string, creatorId: string): string {
@@ -196,7 +272,16 @@ export class StorageService {
       this.validatePath(filePath);
       const dir = path.dirname(filePath);
       await this.ensureDirectory(dir);
-      await fs.writeFile(filePath, buffer);
+      // Write beside the target, then rename: a reader (or a crash) never sees a
+      // half-written file, which matters when a job overwrites a live original.
+      const tmp = `${filePath}.${randomUUID()}.tmp`;
+      try {
+        await fs.writeFile(tmp, buffer);
+        await fs.rename(tmp, filePath);
+      } catch (error) {
+        await fs.rm(tmp, { force: true });
+        throw error;
+      }
     } catch (error) {
       this.logger.error(
         `[saveFile] Failed to save file: ${filePath}`,
@@ -295,6 +380,14 @@ export class StorageService {
     return this.listDirectories(avatarsPath);
   }
 
+  /**
+   * Get all video IDs for a client domain
+   */
+  async getClientVideoIds(domain: string): Promise<string[]> {
+    const videosPath = path.join(this.getClientPath(domain), 'videos');
+    return this.listDirectories(videosPath);
+  }
+
   getVideoPath(domain: string, videoId: string): string {
     const sanitizedVideoId = this.sanitizePathComponent(videoId);
     return path.join(this.getClientPath(domain), 'videos', sanitizedVideoId);
@@ -309,17 +402,18 @@ export class StorageService {
     return `${this.getVideoPath(domain, videoId)}/${variant}.${ext}`;
   }
 
-  async getClientVideoIds(domain: string): Promise<string[]> {
-    const videosPath = path.join(this.getClientPath(domain), 'videos');
-    return this.listDirectories(videosPath);
-  }
-
   async copyFromTemp(srcPath: string, destPath: string): Promise<void> {
     try {
       this.validatePath(destPath);
       const dir = path.dirname(destPath);
       await this.ensureDirectory(dir);
-      await fs.copyFile(srcPath, destPath);
+      // A rename is free on the same filesystem (a copy of a 500 MB video is not);
+      // the upload temp dir is often a different mount, so fall back to copying.
+      // Either way the caller still unlinks srcPath.
+      await fs.rename(srcPath, destPath).catch((err) => {
+        if (err?.code !== 'EXDEV') throw err;
+        return fs.copyFile(srcPath, destPath);
+      });
     } catch (error) {
       this.logger.error(
         `[copyFromTemp] Failed: ${destPath}`,
@@ -336,7 +430,7 @@ export class StorageService {
     outputPath: string,
     quality: number = 80,
   ): Promise<void> {
-    const tmpJpeg = path.join(os.tmpdir(), `${uuidv4()}.jpg`);
+    const tmpJpeg = path.join(os.tmpdir(), `${randomUUID()}.jpg`);
     const FFMPEG_TIMEOUT_MS = 30_000;
 
     try {
@@ -361,7 +455,9 @@ export class StorageService {
       ]);
 
       const jpegBuffer = await fs.readFile(tmpJpeg);
-      const webpBuffer = await sharp(jpegBuffer).webp({ quality }).toBuffer();
+      const webpBuffer = await openImage(jpegBuffer)
+        .webp({ quality })
+        .toBuffer();
       await this.saveFile(outputPath, webpBuffer);
     } catch (error) {
       this.logger.error(
@@ -401,7 +497,7 @@ export class StorageService {
     quality: number = 85,
   ): Promise<Buffer> {
     try {
-      return await sharp(inputBuffer).webp({ quality }).toBuffer();
+      return await openImage(inputBuffer).webp({ quality }).toBuffer();
     } catch (error) {
       this.logger.error(
         `[convertToWebP] Failed to convert image to WebP`,
@@ -409,6 +505,41 @@ export class StorageService {
       );
       throw new InternalServerErrorException(
         `Failed to convert image to WebP: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Upload encode: the WebP original and its thumbnail from one decoder, both
+   * from the source bytes (the thumbnail no longer re-decodes the encoded original).
+   */
+  async encodeWebpWithThumbnail(
+    input: Buffer,
+    quality: number,
+    thumbSize: number,
+    thumbQuality: number,
+  ): Promise<{ original: Buffer; thumb: Buffer }> {
+    try {
+      const image = openImage(input);
+      const [original, thumb] = await Promise.all([
+        image.clone().webp({ quality }).toBuffer(),
+        image
+          .clone()
+          .resize(thumbSize, thumbSize, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .webp({ quality: thumbQuality, effort: 6 })
+          .toBuffer(),
+      ]);
+      return { original, thumb };
+    } catch (error) {
+      this.logger.error(
+        `[encodeWebpWithThumbnail] Failed to encode image`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to encode image: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
@@ -435,7 +566,7 @@ export class StorageService {
         maintainAspectRatio = true,
       } = options;
 
-      let pipeline = sharp(inputBuffer);
+      let pipeline = openImage(inputBuffer);
 
       // Apply resizing with more flexible options
       pipeline = pipeline.resize(width, height, {
@@ -493,23 +624,27 @@ export class StorageService {
     format: string;
     size: number;
   }> {
-    try {
-      const metadata = await sharp(buffer).metadata();
-      return {
-        width: metadata.width || 0,
-        height: metadata.height || 0,
-        format: metadata.format || 'unknown',
-        size: buffer.length,
-      };
-    } catch (error) {
-      this.logger.error(
-        `[getImageMetadata] Failed to get image metadata`,
-        error instanceof Error ? error.stack : error,
-      );
-      throw new InternalServerErrorException(
-        `Failed to get image metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    const metadata = await openImage(buffer)
+      .metadata()
+      // Also rejects dimensions over MAX_INPUT_PIXELS, from the header alone.
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `[getImageMetadata] Unreadable image: ${error instanceof Error ? error.message : error}`,
+        );
+        throw new BadRequestException('Invalid or corrupted image file');
+      });
+    // The client-supplied MIME type proves nothing: check what the bytes are.
+    if (!SUPPORTED_IMAGE_FORMATS.includes(metadata.format ?? '')) {
+      throw new BadRequestException(
+        `Unsupported image format: ${metadata.format ?? 'unknown'}`,
       );
     }
+    return {
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      format: metadata.format,
+      size: buffer.length,
+    };
   }
 
   /**
@@ -519,12 +654,10 @@ export class StorageService {
    */
   async optimizeImage(buffer: Buffer, quality: number = 90): Promise<Buffer> {
     try {
-      const metadata = await sharp(buffer).metadata();
+      const metadata = await openImage(buffer).metadata();
 
       // Prepare the image pipeline
-      let pipeline = sharp(buffer, {
-        limitInputPixels: 268402689, // ~16384x16384 max resolution for safety
-      });
+      let pipeline = openImage(buffer);
 
       // Auto-rotate based on EXIF orientation
       pipeline = pipeline.rotate();
@@ -551,7 +684,9 @@ export class StorageService {
       return await pipeline
         .webp({
           quality,
-          effort: 6, // Higher effort = better compression (0-6, default 4)
+          // Only the hourly optimize jobs call this: 4 (sharp's default) encodes
+          // several times faster than 6 for a few percent larger files
+          effort: 4,
           lossless: false,
           nearLossless: false,
           smartSubsample: true, // Better chroma subsampling
@@ -570,7 +705,10 @@ export class StorageService {
   }
 
   /**
-   * Resize image on-demand
+   * Render a resized/re-encoded copy for a request (image variants, avatar
+   * format conversion). Runs behind `renderLimiter`: past RENDER_CONCURRENCY
+   * renders callers wait, past RENDER_QUEUE_LIMIT waiters they get a 503.
+   * Waiters already hold their source buffer, hence the small queue.
    */
   async resizeImage(
     buffer: Buffer,
@@ -579,8 +717,26 @@ export class StorageService {
     format: 'webp' | 'jpeg' | 'png' = 'webp',
     quality: number = 85,
   ): Promise<Buffer> {
+    return this.renderLimiter.run(
+      () => this.render(buffer, width, height, format, quality),
+      () => {
+        this.logger.warn(
+          `[resizeImage] Render queue full (${this.renderLimiter.pending} waiting)`,
+        );
+        return new RenderBusyException();
+      },
+    );
+  }
+
+  private async render(
+    buffer: Buffer,
+    width: number | undefined,
+    height: number | undefined,
+    format: 'webp' | 'jpeg' | 'png',
+    quality: number,
+  ): Promise<Buffer> {
     try {
-      let pipeline = sharp(buffer);
+      let pipeline = openImage(buffer);
 
       if (width || height) {
         pipeline = pipeline.resize(width, height, {

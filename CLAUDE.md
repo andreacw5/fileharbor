@@ -2,18 +2,19 @@
 
 ## Tech Stack
 
-- **Framework:** NestJS 10 (TypeScript, ES2021, CommonJS)
-- **Database:** PostgreSQL + Prisma ORM (client at `generated/prisma/`)
+- **Framework:** NestJS 11 (TypeScript, ES2021, CommonJS)
+- **Database:** PostgreSQL + Prisma ORM (client generated into `node_modules/.prisma/client`)
 - **Image Processing:** Sharp
 - **Auth:** Bastion IdP RS256 JWT via JWKS (admin), API Keys (client)
 - **Package Manager:** pnpm (enforced — never use npm or yarn)
 - **Testing:** Jest
-- **API Docs:** Swagger/OpenAPI at `/docs`
+- **API Docs:** Swagger/OpenAPI at `/docs`, gated by `ENABLE_SWAGGER`
+- **Shared runtime:** `@heyatom/nest-common` (exception filter, logging, metrics, Swagger, bootstrap, tag pagination)
 - **Path alias:** `@/*` → `src/*`
 
 ## Architecture
 
-Multi-tenant NestJS 10 image management API. All data scoped by `clientId`. Auth via `X-API-Key` header validated by `ClientInterceptor`. Creators referenced by external ID (`X-User-Id`) — FileHarbor auto-creates internal `Creator` records on first use.
+Multi-tenant NestJS 11 image management API. All data scoped by `clientId`. Auth via `X-API-Key` header validated by `ClientInterceptor`. Creators referenced by external ID (`X-User-Id`) — FileHarbor auto-creates internal `Creator` records on first use.
 
 **Modules** (`src/modules/`):
 | Module | Role |
@@ -41,7 +42,7 @@ import { ClientId, CreatorExternalId } from '@/modules/client/decorators/client.
 // CreatorExternalId reads request.externalCreatorId (the X-User-Id header, or its query/body fallback)
 ```
 
-Mark public endpoints with `@Public()` from `src/modules/client/decorators/public.decorator.ts`. On public endpoints the interceptor still populates `clientId` if a valid key is supplied.
+Mark public endpoints with `@Public()` from `@heyatom/bastion-client/nest`. On public endpoints the interceptor still populates `clientId` if a valid key is supplied.
 
 ## Creator Identity Pattern
 
@@ -86,15 +87,21 @@ No `job` module: each cron lives next to the module it serves (`ScheduleModule.f
 | `AvatarCleanupJob.optimizeAvatars` | hourly | same for avatars |
 | `ImageCleanupJob.cleanExpiredShareLinks` | 04:00 | deletes expired image share links |
 | `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
-| `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar dirs with no DB row |
+| `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar/video dirs with no DB row (older than 1h) |
 | `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
 
-`VideoCleanupJob.cleanOrphanedVideos` is the only one disabled (`@Cron` commented out).
+Deletes remove the DB row first, then the files; a failed file delete only logs a `warn` and
+leaves the dir to this sweep (a row pointing at missing files would be worse than a stray dir).
 
 Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
 `MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
 `optimizeAttempts = 0` to retry. Storage dirs map back to clients by `domain` **or** `id`
 (`client.domain || clientId`); a dir matching neither is left alone.
+
+Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
+`ORIGINAL_QUALITY` (default 100, uploads only). Every `@Cron` job runs inside
+`PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
+replicas a job runs on one of them; the others log a skip.
 
 ## Admin Module
 
@@ -108,8 +115,8 @@ Three parts:
   Gatherly and Articuno. `bastion.module.ts` imports the package's `BastionModule.forRootAsync(...)`
   (global) from the camelCase config keys. **From the package**: `BastionJwksService` (RS256 against
   the JWKS, `kid`-indexed cache), `BastionAuditService` (service-client token + `POST /events`),
-  `AuditInterceptor`, `@Audit()`, and the Bastion payload types (`UserJwtPayload`,
-  `ServiceClientJwtPayload`, re-exported from `bastion.types.ts`). **Local**: `BastionTokenVerifier`
+  `AuditInterceptor`, `@Audit()`, `@Public()`, and `UserJwtPayload` (re-exported from
+  `bastion.types.ts`). **Local**: `BastionTokenVerifier`
   (multi-app acceptance), the two guards, `console-permissions.ts`, `@RequirePermission`,
   `@CurrentAdminUser`, `@CurrentUser`, and `AdminJwtPayload`/`BastionUserPayload`. No controller —
   sign-in, refresh, password and profile all belong to Bastion, and the console (Meridian) talks to
@@ -117,7 +124,7 @@ Three parts:
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
-  scoped totals, a 7-day trend and a per-day chart. `totalStorage` sums image bytes only.
+  scoped totals, a 7-day trend and a per-day chart. `totalStorage` / `newStorage` sum image, video and avatar bytes.
 
 ### Guard
 
@@ -338,7 +345,17 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 
 ## API Versioning
 
-Prefix set via `API_PREFIX` env var (default: `v2`). Example: `POST /v2/images/upload`.
+`API_PREFIX` (default empty → `POST /images`) is the single source of truth: `config.schema.ts` `apiPrefix` drives
+`setGlobalPrefix` in `main.ts` (`/health/*` excluded) **and** every returned `url`/`fullPath` via `RouteHelperService`
+(`src/utils/route.utils.ts`). Never concatenate a prefix by hand.
+
+`path()` gives the relative `url`/`thumbnailUrl`/`shareUrl`/album token `url` (`/{prefix}/...`);
+`fullUrl()` = `BASE_URL + path()` gives `fullPath`. Webhook links use `BASE_URL` directly.
+
+**Prod (behind nginx)**: nginx serves `https://fileharbor.heyatom.dev/v2/...` and strips `/v2` before
+proxying, so `API_PREFIX` stays **empty** and the public prefix lives in `BASE_URL=https://fileharbor.heyatom.dev/v2`.
+Result: routes unprefixed, `fullPath` public (`.../v2/images/<id>`), relative fields bare (`/images/<id>`, no `/v2`).
+Setting `API_PREFIX=v2` there would make the app serve `/v2/...` while nginx forwards `/images/...` → 404.
 
 ## Image Processing
 
@@ -347,6 +364,21 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - On-demand resize via query params
 - EXIF removal
 - Quality set from env vars
+
+### On-demand variants — bounded by design
+
+`GET /images/:id` is public and `@SkipThrottle()`, so its transforms are bounded instead of rate-limited:
+
+- **Snapped, never rejected** (`image/image-variants.ts`): width/height round **up** to the next of
+  `VARIANT_SIZES` (16 … 4096), quality to the nearest of `VARIANT_QUALITIES` (40/60/75/85/100). Old URLs
+  keep working; close values share one cached file and one ETag (the controller snaps too).
+- **Cache**: at most `MAX_CACHED_VARIANTS` (20) files under `{imageDir}/variants/`; past that a variant is
+  rendered but not stored.
+- **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
+  which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
+  at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
+  (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. Uploads and the optimize jobs
+  don't use it.
 
 ## DB Entities
 
@@ -365,7 +397,22 @@ Always add indexes on frequently queried fields.
 throw new NotFoundException('Image not found');
 throw new ForbiddenException('Access denied');
 throw new BadRequestException('Invalid file format');
+throw new ConflictException({ code: 'SLUG_TAKEN', message: '…' }); // domain code
 ```
+
+One global filter, nest-common's `AllExceptionsFilter` (`APP_FILTER`); it logs the route pattern, so
+`/albums/shared/:token` never reaches the logs. Every exception gets a response (api.md §3):
+
+```json
+{ "statusCode": 404, "code": "NOT_FOUND", "message": "Image not found", "requestId": "…" }
+```
+
+- `errors: string[]` only on validation failures (`code: VALIDATION_FAILED`, `message: "Validation failed"`).
+- Prisma `P2002`/`P2003` → 409, `P2025` → 404; anything else non-HTTP → 500 `INTERNAL_ERROR`, details in the log only.
+- A number in `retryAfterSeconds` on the exception body becomes the `Retry-After` header.
+- Logs only 5xx (`error`) and 401/403/429 (`warn`): scanner 404s (`/wp-admin`, `.env`, …) stay quiet but are answered.
+- `GET /images/:id` 404/403 on a file request never reaches the filter: the controller serves the placeholder
+  (`X-FileHarbor-Fallback`). No `TransformInterceptor` (no `{ data }` envelope) until phase 3.
 
 ## Config Access
 
@@ -392,32 +439,68 @@ pnpm install              # pnpm only (enforced via preinstall)
 pnpm run start:dev        # hot-reload dev server on :3000
 pnpm run build && pnpm run start:prod
 pnpm run test             # Jest unit tests (rootDir: src/)
-pnpm run test:e2e         # jest --config ./test/jest-e2e.json
 pnpm run prisma:migrate   # generate + apply migration
-pnpm run prisma:generate  # regenerate Prisma client to generated/prisma/
+pnpm run prisma:generate  # regenerate Prisma client
 pnpm run prisma:studio    # DB GUI
 pnpm run lint             # eslint --fix
 pnpm run format           # prettier
 pnpm run test:watch       # jest watch
 pnpm run test:cov         # jest coverage
-pnpm run prisma:seed      # seed DB (optional)
 cp .env.example .env      # first-time setup
 ```
 
-Swagger UI: `http://localhost:3000/docs` — Prometheus metrics: `http://localhost:9091/metrics` (see Metrics)
+Swagger UI: `http://localhost:3000/docs` (when `ENABLE_SWAGGER` resolves to true: explicit value, else only
+`NODE_ENV=development|test`; resolved in `validateConfig()` from the raw `NODE_ENV`) — Prometheus metrics: `http://localhost:9091/metrics` (see Metrics)
 
 ## Metrics
 
-`src/modules/metrics/` — `@prometheus-io/client` directly, own `Registry` with default label `app="fileharbor"`.
+`MetricsModule` from `@heyatom/nest-common/metrics` (global, `AppModule`): own `Registry` with default label
+`app="fileharbor"`, default metrics, the HTTP histogram and the server. fileharbor's domain metrics live in
+`src/modules/metrics/fileharbor-metrics.service.ts` (`FileharborMetrics`), registered on `MetricsService.registry`.
 
-- `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404.
+- `MetricsServer` serves `GET /metrics` on its own `node:http` server on `METRICS_PORT` (default `9091`), outside Nest: no route on the API port, no guards/throttler/CORS. Anything else → 404. One render is shared for 10s.
 - Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
-- `MetricsMiddleware` (all routes, `AppModule.configure`) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`. `/health/*` is not instrumented.
+- `MetricsMiddleware` (all routes, applied by the package module) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`, requests the client abandons `status="499"`. `/health/*` is not instrumented.
 - `fileharbor_video_processing_failures_total{stage}` (counter, `stage` = `thumbnail` | `metadata`, both pre-initialized to 0): incremented by `VideoService.uploadVideo` when ffmpeg thumbnail or ffprobe metadata extraction fails. The upload still returns 2xx (no thumbnail, duration/width/height stored as null), so HTTP metrics stay green — a missing `ffmpeg-static`/`ffprobe-static` binary or the 30s timeout only shows here. Alert: `increase(fileharbor_video_processing_failures_total[1h]) > 0`.
 - Optimize backlog gauges (label `kind` = `image` | `avatar`, both always present), lazy `collect()` — no query until scraped; a DB error logs `warn` and keeps the previous value. Aggregates only (`count` / `_min`), same predicates as the optimize jobs (`OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE`, `storage.service.ts`):
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
   - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).
   - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via manual `optimizeAttempts = 0`, deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
+- Alert rules for all of the above live in `monitoring/alerts.yml` (load it via `rule_files`). Change a metric or threshold → change it there too.
+
+## Health
+
+`/health/live` always 200. `/health/ready` (public, `@SkipThrottle`, outside `API_PREFIX`) checks:
+
+- `database` — Prisma ping.
+- `storage` (`health/storage-health.indicator.ts`) — `STORAGE_PATH` writable and at least
+  `HEALTH_DISK_MIN_FREE_MB` (default 1024) free (`fs.statfs`, `bavail`). The response carries `freeMb` /
+  `minFreeMb` and an errno code, never the path.
+
+`MediaToolsCheck` (`health/media-tools.check.ts`) logs a `warn` at boot when the ffmpeg/ffprobe binaries
+from `ffmpeg-static`/`ffprobe-static` are missing or not executable. It never blocks startup: only video
+thumbnails/metadata need them.
+
+## Bootstrap, logging, CORS
+
+`main.ts` calls nest-common's `setupHttpApp`: `enableShutdownHooks`, `trust proxy` = `TRUST_PROXY_HOPS`
+(default 0, **required in production**: behind nginx it is 1, or every client shares the throttler bucket of
+the proxy), helmet, CORS, 5mb JSON limit, the global `ValidationPipe`. Helmet gets
+`Cross-Origin-Resource-Policy: cross-origin` (`helmet` option): other sites embed our images and videos.
+Outside production `upgrade-insecure-requests` is dropped from the CSP so `/docs` loads over plain http. `PORT` comes from the validated config only
+(default 3000).
+
+Logging is nest-common's `loggerParams`: the request id is always server-generated and returned as
+`X-Request-Id` (errors included, also in the body); a well-formed inbound `X-Request-Id` is logged as
+`clientRequestId`, never adopted or echoed. The `req` serializer passes the URL through `sanitizeLoggedUrl`
+(`common/share-tokens.ts`): `?token=` and `/shared/:token` never reach the logs.
+
+`CORS_ORIGIN` (`*` or a comma-separated origin list) is Joi-validated and read through `ConfigService` in
+`main.ts`. **Required when `NODE_ENV=production`** — boot fails without it rather than defaulting to `*`;
+elsewhere it defaults to `*` (an empty value counts as unset). `parseCorsOrigin` (`utils/cors.utils.ts`) parses it
+for both Joi and `main.ts`: empty entries dropped, trailing `/` stripped, `*` mixed into a list rejected at boot.
+Either goes to `setupHttpApp` as `corsOrigins` (`X-API-Key`/`X-User-Id` accepted, `X-Request-Id` exposed);
+a list allows credentials, `*` does not (browsers refuse the combination).
 
 ## graphify
 
@@ -430,6 +513,10 @@ Knowledge graph at `graphify-out/` with god nodes, community structure, and cros
 
 ## Docs
 
-- `../docs/FILEHARBOR_INTEGRATION.md` — integration guide per altri servizi (fonte di verità)
-- `../docs/BASTION_INTEGRATION.md` — Bastion JWT/JWKS guide
-- `../docs/CODING_STANDARDS.md` — NestJS conventions condivise
+- [`docs/BACKLOG.md`](docs/BACKLOG.md) — lavoro da fare senza piano, bloccanti pre-deploy
+- [`docs/external-album-api.md`](docs/external-album-api.md) — API album lato client (route, payload, errori, problemi noti)
+- [`../docs/integrations/fileharbor.md`](../docs/integrations/fileharbor.md) — integration guide per altri servizi (fonte di verità)
+- [`../docs/integrations/bastion.md`](../docs/integrations/bastion.md) — Bastion JWT/JWKS guide (importata sotto)
+- [`../docs/standards/coding.md`](../docs/standards/coding.md) — NestJS conventions condivise
+
+@../docs/integrations/bastion.md

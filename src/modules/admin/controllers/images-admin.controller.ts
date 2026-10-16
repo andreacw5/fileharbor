@@ -54,6 +54,8 @@ import {
   normalizeTagNames,
 } from '@/modules/tag/tag.utils';
 import { RouteHelperService } from '@/utils/route.utils';
+import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
+import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Admin - Images')
 @Controller('admin/images')
@@ -109,7 +111,11 @@ export class ImagesAdminController {
     status: 403,
     description: 'Admin has no access to the given client',
   })
-  @UseInterceptors(FilesInterceptor('files'))
+  @UseInterceptors(
+    FilesInterceptor('files', IMAGE_UPLOAD_LIMITS.files, {
+      limits: IMAGE_UPLOAD_LIMITS,
+    }),
+  )
   @Audit('fh_image.uploaded', {
     metadata: (r: ImageResponseDto[], req: AuditRequest) => ({
       clientId: (req.body as { clientId?: string })?.clientId,
@@ -361,14 +367,9 @@ export class ImagesAdminController {
     const image = await this.imageService.getImageById(id);
     assertClientAccess(adminUser, image.clientId);
 
-    const { buffer, mimeType } = await this.imageService.getImageFile(
-      id,
-      undefined,
-      undefined,
-      'webp',
-      85,
-      !!thumb,
-    );
+    const { buffer, mimeType } = await this.imageService.getImageFile(image, {
+      thumb: !!thumb,
+    });
 
     // Fire-and-forget download counter increment
     this.imageService
@@ -381,13 +382,13 @@ export class ImagesAdminController {
 
     res.set({
       'Content-Type': mimeType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': buffer.length.toString(),
+      'Content-Disposition': contentDisposition(filename),
+      'Content-Length': buffer!.length.toString(),
     });
 
-    return new StreamableFile(Readable.from(buffer), {
+    return new StreamableFile(Readable.from(buffer!), {
       type: mimeType,
-      length: buffer.length,
+      length: buffer!.length,
     });
   }
 
