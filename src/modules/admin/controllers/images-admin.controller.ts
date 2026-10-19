@@ -392,6 +392,54 @@ export class ImagesAdminController {
     });
   }
 
+  @Get(':id/file')
+  @ApiOperation({
+    summary: 'Serve image file inline (admin)',
+    description:
+      'Image bytes for the console, private images included. Admin JWT replaces the API key. Counts neither a view nor a download, and never answers with the permission-denied placeholder: no access is a 403.',
+  })
+  @ApiQuery({
+    name: 'thumb',
+    required: false,
+    type: Boolean,
+    description: 'Serve thumbnail instead of original',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Image file, inline, `Cache-Control: private, max-age=300`',
+  })
+  @ApiResponse({ status: 404, description: 'Image not found' })
+  @ApiResponse({
+    status: 403,
+    description: 'Admin has no access to the given client',
+  })
+  async getImageFile(
+    @Param('id') id: string,
+    @Query('thumb') thumb: boolean,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<StreamableFile> {
+    const image = await this.imageService.getImageById(id, undefined, false);
+    assertClientAccess(adminUser, image.clientId);
+
+    const { buffer, mimeType } = await this.imageService.getImageFile(image, {
+      thumb: !!thumb,
+    });
+
+    // private: an admin-only response must never land in a shared cache
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Length': buffer!.length.toString(),
+      'Cache-Control': 'private, max-age=300',
+      'X-Content-Type-Options': 'nosniff',
+    });
+
+    return new StreamableFile(Readable.from(buffer!), {
+      type: mimeType,
+      length: buffer!.length,
+    });
+  }
+
   @Post(':id/tinify-compress')
   @ApiOperation({
     summary: 'Compress image with Tinify (TinyPNG)',
