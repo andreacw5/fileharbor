@@ -2431,6 +2431,19 @@
             }
           },
           {
+            "name": "isPrivate",
+            "required": false,
+            "in": "query",
+            "description": "Only private (true) or only public (false) files",
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "name": "sortBy",
             "required": false,
             "in": "query",
@@ -4049,6 +4062,19 @@
             "required": false,
             "in": "query",
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isPrivate",
+            "required": false,
+            "in": "query",
+            "description": "Only private (true) or only public (false) files",
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
               "type": "string"
             }
           },
