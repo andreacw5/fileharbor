@@ -180,6 +180,18 @@ export class AdminDeleteResponseDto {
   @ApiProperty() @Expose() message: string;
 }
 
+export class AdminBulkDeleteFailureDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() message: string;
+}
+
+export class AdminBulkDeleteResponseDto {
+  @ApiProperty({ type: [String] }) @Expose() deleted: string[];
+  @ApiProperty({ type: [AdminBulkDeleteFailureDto] })
+  @Expose()
+  failed: AdminBulkDeleteFailureDto[];
+}
+
 export class AdminImageCreatorDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() externalId: string;

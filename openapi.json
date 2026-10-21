@@ -2431,6 +2431,19 @@
             }
           },
           {
+            "name": "isPrivate",
+            "required": false,
+            "in": "query",
+            "description": "Only private (true) or only public (false) files",
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "name": "sortBy",
             "required": false,
             "in": "query",
@@ -2623,6 +2636,44 @@
         ]
       }
     },
+    "/admin/images/bulk-delete": {
+      "post": {
+        "description": "Up to 100 ids. Each image is deleted on its own: one that is missing or on a client the admin cannot see lands in `failed` (both read as \"Image not found\", so the answer leaks nothing) and the rest go ahead.",
+        "operationId": "ImagesAdminController_bulkDeleteImages",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBulkDeleteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBulkDeleteResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete many images in one request (admin)",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
     "/admin/images/{id}/download": {
       "get": {
         "description": "Download the original image file for any image. Admin JWT replaces the API key. Increments the download counter.",
@@ -2775,6 +2826,15 @@
             "name": "creatorId",
             "required": false,
             "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Creator's externalId or username, contains, case-insensitive",
             "schema": {
               "type": "string"
             }
@@ -4053,6 +4113,19 @@
             }
           },
           {
+            "name": "isPrivate",
+            "required": false,
+            "in": "query",
+            "description": "Only private (true) or only public (false) files",
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "name": "sortBy",
             "required": false,
             "in": "query",
@@ -4535,7 +4608,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "3.4.0",
+    "version": "3.5.0",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
@@ -6406,6 +6479,59 @@
             "description": "Image description (set to null to remove)"
           }
         }
+      },
+      "AdminBulkDeleteDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "maxItems": 100,
+            "description": "Ids of the images to delete",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "AdminBulkDeleteFailureDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "message"
+        ]
+      },
+      "AdminBulkDeleteResponseDto": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminBulkDeleteFailureDto"
+            }
+          }
+        },
+        "required": [
+          "deleted",
+          "failed"
+        ]
       },
       "AdminDeleteResponseDto": {
         "type": "object",

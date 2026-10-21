@@ -78,6 +78,94 @@ describe('StorageService.getImageMetadata', () => {
   });
 });
 
+describe('StorageService animated images', () => {
+  const storage = new StorageService({
+    get: () => undefined,
+  } as unknown as ConfigService);
+
+  // 2-frame 40x30 GIF
+  const animatedGif = async () => {
+    const frame = (background: string) =>
+      sharp({ create: { width: 40, height: 30, channels: 4, background } })
+        .png()
+        .toBuffer();
+    const frames = await Promise.all([frame('#f00'), frame('#0f0')]);
+    return sharp(frames, { join: { animated: true } })
+      .gif({ delay: [100, 100] })
+      .toBuffer();
+  };
+  const describeOutput = (buf: Buffer) =>
+    sharp(buf, { animated: true }).metadata();
+
+  it('reports one frame as the height', async () => {
+    await expect(
+      storage.getImageMetadata(await animatedGif()),
+    ).resolves.toMatchObject({ width: 40, height: 30, format: 'gif' });
+  });
+
+  it('keeps every frame in the WebP original and thumbnail', async () => {
+    const { original, thumb } = await storage.encodeWebpWithThumbnail(
+      await animatedGif(),
+      90,
+      20,
+      80,
+    );
+
+    await expect(describeOutput(original)).resolves.toMatchObject({
+      format: 'webp',
+      pages: 2,
+      width: 40,
+      pageHeight: 30,
+    });
+    await expect(describeOutput(thumb)).resolves.toMatchObject({
+      pages: 2,
+      width: 20,
+      pageHeight: 15,
+    });
+    expect(await storage.isAnimated(original)).toBe(true);
+  });
+
+  it('stays animated through optimize and a WebP variant', async () => {
+    const { original } = await storage.encodeWebpWithThumbnail(
+      await animatedGif(),
+      90,
+      20,
+      80,
+    );
+
+    const optimized = await storage.optimizeImage(original, 85);
+    expect((await describeOutput(optimized)).pages).toBe(2);
+
+    const variant = await storage.resizeImage(optimized, 16);
+    expect(await describeOutput(variant)).toMatchObject({
+      pages: 2,
+      width: 16,
+    });
+  });
+
+  it('renders JPEG/PNG from the first frame only', async () => {
+    const png = await storage.resizeImage(
+      await animatedGif(),
+      undefined,
+      undefined,
+      'png',
+    );
+    await expect(sharp(png).metadata()).resolves.toMatchObject({
+      width: 40,
+      height: 30,
+    });
+  });
+
+  it('does not flag a still image as animated', async () => {
+    const jpeg = await sharp({
+      create: { width: 4, height: 3, channels: 3, background: '#fff' },
+    })
+      .jpeg()
+      .toBuffer();
+    expect(await storage.isAnimated(jpeg)).toBe(false);
+  });
+});
+
 describe('StorageService.validatePath', () => {
   const storage = new StorageService({
     get: () => '/srv/storage',

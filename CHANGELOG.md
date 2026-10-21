@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.5.0] – 2026-10-22
+
+### Added
+- **`POST /admin/images/bulk-delete`** — up to 100 ids in one request, answers
+  `{ deleted, failed }`. Missing and out-of-scope ids both read as "Image not found". The console
+  used to loop single `DELETE`s and hit the throttler (`429`).
+- **`search` on `GET /admin/avatars`** — case-insensitive contains-match on the creator's username
+  or `externalId`. `creatorId` stays an exact external id match and combines with it.
+
+### Changed
+- **Animated GIF/WebP uploads stay animated.** sharp read only the first frame, so they were stored
+  as a static WebP. Original, thumb, WebP variants and the optimize jobs now keep every frame;
+  JPEG/PNG renders take the first frame, `getImageMetadata` reports one frame's height, and
+  `MAX_INPUT_PIXELS` counts all frames together.
+- Tinify refuses animated originals: it would overwrite them with a single frame.
+
+---
+
 ## [3.4.0] – 2026-10-21
 
 ### Added
