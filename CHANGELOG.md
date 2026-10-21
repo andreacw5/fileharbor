@@ -23,33 +23,170 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [3.2.0] – 2026-10-06
+## [3.3.0] – 2026-10-16
+
+### Added
+- **`GET /avatars/:clientRef/:externalUserId`** — `clientRef` is the client's domain or id. Every
+  avatar URL FileHarbor returns now uses this form.
+- **Bounded on-demand image variants.** On `GET /images/:id`, width/height snap up to a fixed grid
+  (16 … 4096) and quality to 40/60/75/85/100. At most 20 cached variants per image, and renders go
+  through a semaphore (`RENDER_CONCURRENCY`, `RENDER_QUEUE_LIMIT`). When it is full the response is
+  `503` with `Retry-After: 1`.
+- **`/health/ready` storage check**: `STORAGE_PATH` writable with `HEALTH_DISK_MIN_FREE_MB` free.
+  At boot, a `warn` is logged when the ffmpeg/ffprobe binaries are missing.
+- **`monitoring/alerts.yml`** with the Prometheus alert rules for the metrics.
+- **Global `ThrottlerGuard`**: it was configured but never enforced. Health probes and public media
+  delivery skip it.
+- **`ENABLE_SWAGGER`** gates `/docs`. Default on only for an explicit `NODE_ENV=development|test`.
+- **`X-Request-Id`** response header on every request, errors included. A well-formed inbound
+  `X-Request-Id` is logged as `clientRequestId`.
+- `IMAGE_X_ACCEL_REDIRECT` (opt-in): on-disk image files handed to nginx.
+- CI workflow (lint, build, tests) and a committed `openapi.json`, checked against
+  `pnpm openapi:dump`.
 
 ### Changed
-- **Prometheus metrics moved off the API port.** `GET /metrics` is no longer served on `PORT`;
-  it listens on `METRICS_PORT` (default `9091`), internal network only — update the scrape target
-  to `fileharbor:9091`. `@willsoto/nestjs-prometheus` replaced by `@prometheus-io/client`; the
-  `app="fileharbor"` label is kept. Adds `http_request_duration_seconds`.
+- **Error body** (nest-common `AllExceptionsFilter`): `{ statusCode, code, message, errors?,
+  requestId }`; `timestamp` and `path` are gone. Prisma `P2002`/`P2003` → 409, `P2025` → 404.
+  Scanner 404s now get a response instead of hanging.
+- **Bootstrap through nest-common `setupHttpApp`**: helmet (`Cross-Origin-Resource-Policy:
+  cross-origin`), shutdown hooks. `trust proxy` now comes from `TRUST_PROXY_HOPS` (default 0, set to
+  1 behind nginx) instead of a hardcoded value. Metrics, logging and tag pagination come from the
+  package too.
+- **`CORS_ORIGIN`** is Joi-validated and required in production. It accepts a comma-separated list
+  and rejects `*` mixed into a list.
+- **`API_PREFIX`** drives both the served routes and every returned URL (default empty). Returned
+  URLs no longer carry a hardcoded `/v2`.
+- **`GET /avatars/:externalUserId` is deprecated** (`Deprecation: true`). Without an API key it
+  serves only an id that exactly one client has.
+- `webhookUrl` must be a Discord webhook URL, checked on write and before each send. Redirects are
+  not followed, and the token is masked in admin responses.
+- `POST /admin/clients` requires a lowercase dotted hostname as `domain`.
+- Without `fullAccess`, `bastionTenantSlug` can only be the caller's own tenant or `null` (`403`).
+- Optimize jobs re-encode at `OPTIMIZE_QUALITY` (default 85, webp effort 4). Uploads keep
+  `ORIGINAL_QUALITY`.
+- Every `@Cron` job runs under a Postgres advisory lock, so with replicas it runs once.
+- Deletes remove the DB row first, then the files. The nightly sweep also cleans orphaned video dirs.
+- Performance: `GET /images/:id` loads the image once, buffers view counts and answers
+  `If-None-Match` with a `304`. API keys are cached for 30s, album item writes are batched, and
+  admin stats are aggregated in SQL.
+- `@heyatom/nest-common` 0.3.0, `@heyatom/bastion-client` 0.8.0. Dropped bcrypt, cookie-parser,
+  uuid and jose.
+
+### Removed
+- `GET /client/admin/stats` (`X-Admin-Secret`) and `ADMIN_SECRET`: replaced by `GET /admin/stats`.
+- `VideoCleanupJob`, which never ran.
+
+### Fixed
+- **Security**:
+  - Private and token-gated images were sent `public, immutable`. They now get
+    `private, no-store`.
+  - Avatar lookups weren't scoped by client.
+  - Resize dimensions are bounded and the output format is whitelisted. Upload size and decoded
+    pixels (100 MP) are capped, and the real image format is checked.
+  - API keys and share tokens are kept out of the logs.
+  - `validatePath` let a sibling directory pass.
+  - `Content-Disposition` filenames are sanitized.
+  - Storage dirs that map to two clients are skipped by the sweep.
+- Owners could not read their own private images.
+- `shareUrl` pointed at a 404 (`/images/shared/<token>`).
+- Body-parser errors (`413` and similar) came back as `500`.
+- Video streams sent `Cache-Control: public`. They are now `private`.
+- A missing video file answered `500`, and an open-ended range was capped at 1 MB.
+- Per-client and admin `totalStorage` left out video and avatar bytes.
+- A failing dir stopped the orphan sweep for the rest of its domain.
+- Migration `20260625203420_mixed_albms` dropped `album_images` without copying the rows.
+  `scripts/recover-album-items.sql` restores them from a backup.
+
+### Migration
+`20261008104503_index_cleanup` and `20261014120000_video_size_bigint` (`Video.size` becomes BigInt).
+
+New env vars: `TRUST_PROXY_HOPS` (required in production behind nginx), `CORS_ORIGIN` (required in
+production), `ENABLE_SWAGGER`, `API_PREFIX` (keep it empty behind nginx: the public prefix goes in
+`BASE_URL`), `OPTIMIZE_QUALITY`, `RENDER_CONCURRENCY`, `RENDER_QUEUE_LIMIT`,
+`HEALTH_DISK_MIN_FREE_MB`, `DATABASE_POOL_MAX`.
+
+---
+
+## [3.2.0] – 2026-10-06
 
 ### Added
 - **Optimize backlog gauges.** `fileharbor_unoptimized_media{kind}`,
   `fileharbor_unoptimized_oldest_age_seconds{kind}` and `fileharbor_optimize_given_up{kind}`
-  (`kind` = `image` | `avatar`), computed on scrape with the optimize jobs' own predicate, so rows
-  the job gave up on move to `given_up` (needs manual attention) instead of keeping the backlog
-  alert firing.
+  (`kind` = `image` | `avatar`). They are computed on scrape with the optimize jobs' own predicate,
+  so rows the job gave up on move to `given_up` (needs manual attention) instead of keeping the
+  backlog alert firing.
+- **`fileharbor_video_processing_failures_total{stage}`**: ffmpeg thumbnail and ffprobe metadata
+  failures. The upload still returns 2xx.
+- **Avatars as PNG/JPEG via `?format=`** (Satori can't decode WebP). The default WebP path is
+  unchanged.
+- `pnpm openapi:dump` writes the OpenAPI document, which `@heyatom/client` uses for type generation.
+- Swagger response types for admin lists and album items, and the `PATCH /admin/videos/:id` body.
+
+### Changed
+- **Prometheus metrics moved off the API port.** `GET /metrics` is no longer served on `PORT`.
+  It listens on `METRICS_PORT` (default `9091`), on the internal network only, so update the scrape
+  target to `fileharbor:9091`. `@willsoto/nestjs-prometheus` is replaced by `@prometheus-io/client`,
+  and the `app="fileharbor"` label is kept. Adds `http_request_duration_seconds`.
+- **Logging switched to pino** (same setup as Bastion): pretty output in development, JSON in
+  production. Share tokens and auth headers are kept out of the logs. `LOG_LEVEL` takes pino levels.
+- sharp 0.35, TypeScript `module=node20`.
 
 ### Fixed
 - **Optimize queue could freeze.** The hourly image/avatar optimize jobs took 50 unoptimized rows
   in no particular order and never recorded failures, so 50 broken files (missing original,
   corrupt, sharp error) filled every batch forever. Rows are now taken oldest first, and each
-  failure increments the new `optimizeAttempts` column; after 3 the row is skipped (reset to `0`
-  to retry). Migration `20261006120000_optimize_attempts`.
+  failure increments the new `optimizeAttempts` column. After 3 the row is skipped (reset to `0`
+  to retry).
 - **Re-uploaded avatar inherited the old one's failed attempts.** Replacing an avatar now resets
-  `optimizeAttempts` to `0`, so a new file isn't skipped because the previous one was broken.
+  `optimizeAttempts` to `0`, so a new file isn't skipped because the previous one was broken. The
+  backlog age for avatars uses `updatedAt`, so a re-upload doesn't read as days old.
 - **Orphaned files of domainless clients were never cleaned.** The nightly storage cleanup mapped
-  storage dirs to clients by `domain` only, but a client without a domain stores under its id; it
+  storage dirs to clients by `domain` only, but a client without a domain stores under its id. It
   now matches either. Known images are loaded once per client instead of one unindexable
   `endsWith` query per directory.
+
+### Migration
+`20261006120000_optimize_attempts`.
+
+---
+
+## [3.1.1] – 2026-09-23
+
+### Changed
+- Admin and self-service auth built on `@heyatom/bastion-client` (^0.3.1). The token issuer is now
+  checked (`iss === 'bastion'`), and the JWKS TTL default drops from 1h to 5 min.
+  `AdminJwtPayload`/`BastionUserPayload` `email`, `username` and `image` are `string | null`.
+
+### Fixed
+- Docker build: pnpm 10.14.0 with `--frozen-lockfile`, so dependencies are no longer re-resolved at
+  build time.
+
+---
+
+## [3.1.0] – 2026-09-16
+
+### Changed
+- **`User` renamed to `Creator`** (breaking for the admin API and webhooks):
+  - `users` → `creators`, `externalUserId` → `externalId`, `userId` → `creatorId` on images,
+    videos, avatars and albums.
+  - `/v2/users` → `/v2/creators` and `admin/users` → `admin/creators`, with no alias.
+  - `ImageResponse.user` → `creator`, `AvatarResponse.userId` → `creatorId`, `?userId=` →
+    `?creatorId=`, webhook `data.userId` → `data.creatorId`.
+  - `totalUsers`/`newUsers` → `totalCreators`/`newCreators` in `GET admin/stats` and in the client
+    responses.
+  - Audit events `fh_user.*` → `fh_creator.*`.
+  - `X-User-Id`, the `externalUserId` avatar field and `/v2/avatars/:externalUserId` are unchanged.
+- **Bastion auth moved to `src/modules/bastion/`.** JWKS is verified with `jose`, with a cache
+  keyed on `kid`, so a key rotation no longer rejects tokens for up to an hour. `AdminJwtGuard` →
+  `BastionUserGuard`, `@AdminUser` → `@CurrentAdminUser`.
+
+### Added
+- **Console writes audited to Bastion** with `@Audit()` (`fh_` event names) and
+  `admin.access_denied` from the guard. Writes are fire-and-forget, and without
+  `BASTION_CLIENT_API_KEY` they are skipped.
+
+### Migration
+`20260916110000_rename_user_to_creator`: renames only, no data copied.
 
 ---
 
