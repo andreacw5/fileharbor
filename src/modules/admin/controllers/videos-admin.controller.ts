@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -36,6 +37,7 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
+import { parseBooleanQuery } from '../helpers/admin-query.helper';
 import {
   buildVideoTagCreateInput,
   extractVideoTagNames,
@@ -135,6 +137,12 @@ export class VideosAdminController {
   @ApiQuery({ name: 'name', required: false })
   @ApiQuery({ name: 'tags', required: false, isArray: true })
   @ApiQuery({
+    name: 'isPrivate',
+    required: false,
+    enum: ['true', 'false'],
+    description: 'Only private (true) or only public (false) files',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
@@ -150,6 +158,7 @@ export class VideosAdminController {
     @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
+    @Query('isPrivate') isPrivate?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
@@ -185,6 +194,8 @@ export class VideosAdminController {
     if (albumId)
       where.albumItems = { some: { albumId, resourceType: 'VIDEO' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
+    const privacy = parseBooleanQuery('isPrivate', isPrivate);
+    if (privacy !== undefined) where.isPrivate = privacy;
     if (tagsArray && tagsArray.length > 0) {
       where.videoTags = {
         some: { tag: { name: { in: normalizeTagNames(tagsArray) } } },
@@ -317,6 +328,8 @@ export class VideosAdminController {
     );
   }
 
+  // Media for the console: a grid embeds dozens at once, like the public delivery.
+  @SkipThrottle()
   @Get(':id/thumb')
   @ApiOperation({ summary: 'Get video thumbnail (admin, JWT auth)' })
   async getThumb(
@@ -345,6 +358,8 @@ export class VideosAdminController {
     res.end(buffer);
   }
 
+  // Media for the console: a grid embeds dozens at once, like the public delivery.
+  @SkipThrottle()
   @Get(':id/stream')
   @ApiOperation({ summary: 'Stream video (admin, JWT auth, Range support)' })
   @ApiQuery({ name: 'download', required: false, type: Boolean })

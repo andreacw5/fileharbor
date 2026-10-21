@@ -1082,7 +1082,8 @@ export class ImageService implements OnModuleDestroy {
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        creator: { select: { externalId: true, username: true } },
+        // `id` too: the console links the creator to its record by it.
+        creator: { select: { id: true, externalId: true, username: true } },
         albumItems: {
           where: { resourceType: 'IMAGE' },
           include: {
@@ -1132,7 +1133,7 @@ export class ImageService implements OnModuleDestroy {
       include: {
         imageTags: { include: { tag: { select: { name: true } } } },
         client: { select: { id: true, name: true, domain: true } },
-        creator: { select: { externalId: true, username: true } },
+        creator: { select: { id: true, externalId: true, username: true } },
       },
     });
   }
