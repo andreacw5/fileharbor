@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [3.4.0] – 2026-10-21
+
 ### Added
 - **`isPrivate=true|false` on `GET /admin/images` and `GET /admin/videos`** — privacy filter
   applied to the query, so pagination and totals follow it. Meridian used to filter one page
@@ -16,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - **`GET /admin/images/:id` and `PATCH /admin/images/:id` return `creator.id`.** The DTO declared it,
   the query never selected it, so the console could not link an image to its creator.
+- **No throttling on `GET /admin/images/:id/file`, video thumb and video stream.** A Meridian grid
+  embeds dozens of them from one IP, and the 10/min default answered `429` past the first tiles.
 
 ---
 
