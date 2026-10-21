@@ -2668,6 +2668,51 @@
         ]
       }
     },
+    "/admin/images/{id}/file": {
+      "get": {
+        "description": "Image bytes for the console, private images included. Admin JWT replaces the API key. Counts neither a view nor a download, and never answers with the permission-denied placeholder: no access is a 403.",
+        "operationId": "ImagesAdminController_getImageFile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "thumb",
+            "required": false,
+            "in": "query",
+            "description": "Serve thumbnail instead of original",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image file, inline, `Cache-Control: private, max-age=300`"
+          },
+          "403": {
+            "description": "Admin has no access to the given client"
+          },
+          "404": {
+            "description": "Image not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Serve image file inline (admin)",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
     "/admin/images/{id}/tinify-compress": {
       "post": {
         "description": "Sends the existing image to Tinify API for additional compression, replaces the original, and regenerates the thumbnail. Returns compression statistics along with the updated image. Requires the client to have Tinify enabled (tinifyActive=true) and a valid API key configured. The compression limit is configurable per client (default: 500/month for free tier).",
@@ -4490,7 +4535,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "3.3.0",
+    "version": "3.3.1",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
