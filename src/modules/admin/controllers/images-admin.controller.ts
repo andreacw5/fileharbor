@@ -49,6 +49,7 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
+import { parseBooleanQuery } from '../helpers/admin-query.helper';
 import {
   buildImageTagCreateInput,
   extractTagNames,
@@ -168,6 +169,12 @@ export class ImagesAdminController {
     description: 'Filter by tags',
   })
   @ApiQuery({
+    name: 'isPrivate',
+    required: false,
+    enum: ['true', 'false'],
+    description: 'Only private (true) or only public (false) files',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
@@ -189,6 +196,7 @@ export class ImagesAdminController {
     @Query('albumId') albumId?: string,
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
+    @Query('isPrivate') isPrivate?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
@@ -225,6 +233,8 @@ export class ImagesAdminController {
     if (albumId)
       where.albumItems = { some: { albumId, resourceType: 'IMAGE' } };
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
+    const privacy = parseBooleanQuery('isPrivate', isPrivate);
+    if (privacy !== undefined) where.isPrivate = privacy;
     if (tagsArray && tagsArray.length > 0) {
       where.imageTags = {
         some: { tag: { name: { in: normalizeTagNames(tagsArray) } } },

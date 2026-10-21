@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **`isPrivate=true|false` on `GET /admin/images` and `GET /admin/videos`** — privacy filter
+  applied to the query, so pagination and totals follow it. Meridian used to filter one page
+  client-side. Any other value is a `400`.
+
 ---
 
 ## [3.3.1] – 2026-10-21

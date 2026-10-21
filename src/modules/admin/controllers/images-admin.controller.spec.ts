@@ -90,3 +90,50 @@ describe('ImagesAdminController.getImageFile', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('ImagesAdminController.listImages', () => {
+  const imageService = { findAdminImages: jest.fn().mockResolvedValue({}) };
+  const controller = new ImagesAdminController(
+    imageService as unknown as ImageService,
+    {} as RouteHelperService,
+  );
+  const admin = { allowedClientIds: ['client-1'] } as AdminJwtPayload;
+  const list = (isPrivate?: string) =>
+    controller.listImages(
+      admin,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      isPrivate,
+    );
+  const where = () => imageService.findAdminImages.mock.calls[0][0];
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('filters on privacy across the whole result, not one page', async () => {
+    await list('true');
+    expect(where()).toEqual({
+      clientId: { in: ['client-1'] },
+      isPrivate: true,
+    });
+  });
+
+  it('filters on public files', async () => {
+    await list('false');
+    expect(where().isPrivate).toBe(false);
+  });
+
+  it('leaves privacy alone when the flag is absent', async () => {
+    await list();
+    expect(where()).not.toHaveProperty('isPrivate');
+  });
+
+  it('rejects a malformed flag before querying', async () => {
+    await expect(list('yes')).rejects.toThrow(
+      'isPrivate must be true or false',
+    );
+    expect(imageService.findAdminImages).not.toHaveBeenCalled();
+  });
+});
