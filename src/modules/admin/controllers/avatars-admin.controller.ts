@@ -47,6 +47,11 @@ export class AvatarsAdminController {
   @ApiOperation({ summary: 'List avatars (scoped to accessible clients)' })
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'creatorId', required: false })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: "Creator's externalId or username, contains, case-insensitive",
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminAvatarListResponseDto })
@@ -54,6 +59,7 @@ export class AvatarsAdminController {
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query('clientId') clientId?: string,
     @Query('creatorId') creatorId?: string,
+    @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
@@ -62,7 +68,20 @@ export class AvatarsAdminController {
     const skip = (pageNum - 1) * take;
 
     const where: any = buildClientWhere(adminUser, clientId);
-    if (creatorId) where.creator = { externalId: creatorId };
+    // The console lists avatars by username, so the search box must match it
+    // too, not only the external id nobody sees.
+    const q = search?.trim();
+    if (creatorId || q) {
+      where.creator = {
+        ...(creatorId && { externalId: creatorId }),
+        ...(q && {
+          OR: [
+            { externalId: { contains: q, mode: 'insensitive' } },
+            { username: { contains: q, mode: 'insensitive' } },
+          ],
+        }),
+      };
+    }
 
     const { avatars, total } = await this.avatarService.findAdminAvatars(
       where,
