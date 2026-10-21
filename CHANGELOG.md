@@ -8,11 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [3.3.1] – 2026-10-21
+
 ### Added
 - **`GET /admin/images/:id/file?thumb=`** — image bytes inline for the console (Meridian), private
   images included. Same auth, scope and permission as `:id/download`, but counts neither a view nor
   a download, sends no `Content-Disposition`, and answers `Cache-Control: private, max-age=300` +
   `X-Content-Type-Options: nosniff`. No placeholder: no access is a `403`.
+
+### Changed
+- `@heyatom/bastion-client` 0.9.0.
+
+---
+
+## [3.2.0] – 2026-10-06
 
 ### Changed
 - **Prometheus metrics moved off the API port.** `GET /metrics` is no longer served on `PORT`;
