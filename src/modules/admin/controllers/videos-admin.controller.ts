@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -317,6 +318,8 @@ export class VideosAdminController {
     );
   }
 
+  // Media for the console: a grid embeds dozens at once, like the public delivery.
+  @SkipThrottle()
   @Get(':id/thumb')
   @ApiOperation({ summary: 'Get video thumbnail (admin, JWT auth)' })
   async getThumb(
@@ -345,6 +348,8 @@ export class VideosAdminController {
     res.end(buffer);
   }
 
+  // Media for the console: a grid embeds dozens at once, like the public delivery.
+  @SkipThrottle()
   @Get(':id/stream')
   @ApiOperation({ summary: 'Stream video (admin, JWT auth, Range support)' })
   @ApiQuery({ name: 'download', required: false, type: Boolean })

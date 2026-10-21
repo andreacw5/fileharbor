@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Post,
@@ -392,6 +393,8 @@ export class ImagesAdminController {
     });
   }
 
+  // Media for the console: a grid embeds dozens at once, like the public delivery.
+  @SkipThrottle()
   @Get(':id/file')
   @ApiOperation({
     summary: 'Serve image file inline (admin)',
