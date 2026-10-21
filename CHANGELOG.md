@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   applied to the query, so pagination and totals follow it. Meridian used to filter one page
   client-side. Any other value is a `400`.
 
+### Fixed
+- **`GET /admin/images/:id` and `PATCH /admin/images/:id` return `creator.id`.** The DTO declared it,
+  the query never selected it, so the console could not link an image to its creator.
+
 ---
 
 ## [3.3.1] – 2026-10-21
