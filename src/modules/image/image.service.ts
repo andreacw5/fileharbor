@@ -466,6 +466,15 @@ export class ImageService implements OnModuleDestroy {
   /**
    * Delete image
    */
+  /** `id → clientId` for the given images; ids that don't exist are absent. */
+  async findImageClients(ids: string[]): Promise<Map<string, string>> {
+    const rows = await this.prisma.image.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, clientId: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.clientId]));
+  }
+
   async deleteImage(
     imageId: string,
     clientId: string,

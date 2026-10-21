@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  HttpCode,
   StreamableFile,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -34,11 +35,13 @@ import { Audit, AuditRequest } from '@heyatom/bastion-client/nest';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminUpdateImageDto } from '../dto/admin-update-image.dto';
 import { AdminUploadImageDto } from '../dto/admin-upload-image.dto';
+import { AdminBulkDeleteDto } from '../dto/admin-bulk-delete.dto';
 import {
   ImageResponseDto,
   TinifyCompressionResponseDto,
 } from '@/modules/image/dto';
 import {
+  AdminBulkDeleteResponseDto,
   AdminDeleteResponseDto,
   AdminImageResponseDto,
   AdminImageListResponseDto,
@@ -322,6 +325,50 @@ export class ImagesAdminController {
       { ...updated, tags: extractTagNames(updated) },
       { excludeExtraneousValues: true },
     );
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(200)
+  @RequirePermission('fileharbor-media.moderate')
+  @ApiOperation({
+    summary: 'Delete many images in one request (admin)',
+    description:
+      'Up to 100 ids. Each image is deleted on its own: one that is missing or on a client the admin cannot see lands in `failed` (both read as "Image not found", so the answer leaks nothing) and the rest go ahead.',
+  })
+  @ApiResponse({ status: 200, type: AdminBulkDeleteResponseDto })
+  @Audit('fh_image.deleted', {
+    metadata: (r: AdminBulkDeleteResponseDto) => ({
+      count: r?.deleted?.length ?? 0,
+      imageIds: r?.deleted ?? [],
+    }),
+  })
+  async bulkDeleteImages(
+    @Body() dto: AdminBulkDeleteDto,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminBulkDeleteResponseDto> {
+    const clients = await this.imageService.findImageClients(dto.ids);
+    const deleted: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+
+    // Sequential: each delete touches disk and fires a webhook, no need to burst.
+    for (const id of dto.ids) {
+      const clientId = clients.get(id);
+      if (!clientId || !adminUser.allowedClientIds.includes(clientId)) {
+        failed.push({ id, message: 'Image not found' });
+        continue;
+      }
+      try {
+        await this.imageService.deleteImage(id, clientId);
+        deleted.push(id);
+      } catch (err) {
+        failed.push({
+          id,
+          message: err instanceof Error ? err.message : 'Delete failed',
+        });
+      }
+    }
+
+    return { deleted, failed };
   }
 
   @Delete(':id')

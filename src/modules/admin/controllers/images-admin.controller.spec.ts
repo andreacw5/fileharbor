@@ -137,3 +137,50 @@ describe('ImagesAdminController.listImages', () => {
     expect(imageService.findAdminImages).not.toHaveBeenCalled();
   });
 });
+
+describe('ImagesAdminController.bulkDeleteImages', () => {
+  const imageService = {
+    findImageClients: jest.fn(),
+    deleteImage: jest.fn(),
+  };
+  const controller = new ImagesAdminController(
+    imageService as unknown as ImageService,
+    {} as RouteHelperService,
+  );
+  const admin = { allowedClientIds: ['client-1'] } as AdminJwtPayload;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    imageService.findImageClients.mockResolvedValue(
+      new Map([
+        ['img-1', 'client-1'],
+        ['img-2', 'client-2'],
+        ['img-3', 'client-1'],
+      ]),
+    );
+    imageService.deleteImage.mockImplementation((id: string) =>
+      id === 'img-3'
+        ? Promise.reject(new Error('disk on fire'))
+        : Promise.resolve(undefined),
+    );
+  });
+
+  it('deletes what it can and reports the rest, without telling missing from forbidden', async () => {
+    const res = await controller.bulkDeleteImages(
+      { ids: ['img-1', 'img-2', 'img-3', 'img-4'] },
+      admin,
+    );
+
+    expect(imageService.findImageClients).toHaveBeenCalledTimes(1);
+    expect(imageService.deleteImage).toHaveBeenCalledTimes(2);
+    expect(imageService.deleteImage).toHaveBeenCalledWith('img-1', 'client-1');
+    expect(res).toEqual({
+      deleted: ['img-1'],
+      failed: [
+        { id: 'img-2', message: 'Image not found' },
+        { id: 'img-3', message: 'disk on fire' },
+        { id: 'img-4', message: 'Image not found' },
+      ],
+    });
+  });
+});
