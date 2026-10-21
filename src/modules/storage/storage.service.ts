@@ -25,8 +25,11 @@ export const IMAGE_UPLOAD_LIMITS = {
   files: 20,
 };
 
-function openImage(input: Buffer) {
-  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS });
+// Animated GIF/WebP keep every frame (WebP output stays animated). The pixel
+// cap then counts all frames together. JPEG/PNG outputs take the first frame
+// only: an animated input would otherwise come out as a strip of frames.
+function openImage(input: Buffer, animated = true) {
+  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated });
 }
 import * as os from 'os';
 import { randomUUID } from 'crypto';
@@ -566,7 +569,7 @@ export class StorageService {
         maintainAspectRatio = true,
       } = options;
 
-      let pipeline = openImage(inputBuffer);
+      let pipeline = openImage(inputBuffer, format === 'webp');
 
       // Apply resizing with more flexible options
       pipeline = pipeline.resize(width, height, {
@@ -641,10 +644,17 @@ export class StorageService {
     }
     return {
       width: metadata.width || 0,
-      height: metadata.height || 0,
+      // Opened animated, `height` spans every frame: one frame is `pageHeight`
+      height: metadata.pageHeight || metadata.height || 0,
       format: metadata.format,
       size: buffer.length,
     };
+  }
+
+  /** True for an animated GIF/WebP (more than one frame). */
+  async isAnimated(buffer: Buffer): Promise<boolean> {
+    const { pages } = await openImage(buffer).metadata();
+    return (pages ?? 1) > 1;
   }
 
   /**
@@ -736,7 +746,7 @@ export class StorageService {
     quality: number,
   ): Promise<Buffer> {
     try {
-      let pipeline = openImage(buffer);
+      let pipeline = openImage(buffer, format === 'webp');
 
       if (width || height) {
         pipeline = pipeline.resize(width, height, {

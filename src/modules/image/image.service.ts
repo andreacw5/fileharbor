@@ -1250,6 +1250,13 @@ export class ImageService implements OnModuleDestroy {
       const originalBuffer = await this.storage.readFile(originalPath);
       const originalSize = originalBuffer.length;
 
+      // Tinify would hand back a single frame and overwrite the original
+      if (await this.storage.isAnimated(originalBuffer)) {
+        throw new BadRequestException(
+          'Tinify compression is not supported for animated images',
+        );
+      }
+
       this.logger.debug(
         `[compressImageWithTinify] Original size: ${originalSize} bytes - ID: ${imageId}`,
       );

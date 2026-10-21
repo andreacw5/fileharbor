@@ -364,6 +364,9 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - On-demand resize via query params
 - EXIF removal
 - Quality set from env vars
+- Animated GIF/WebP stay animated (animated WebP original, thumb, variants, optimize). JPEG/PNG renders
+  take the first frame. `MAX_INPUT_PIXELS` counts all frames. Tinify refuses animated originals (`400`):
+  it would overwrite them with a single frame.
 
 ### On-demand variants — bounded by design
 
