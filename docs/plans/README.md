@@ -3,3 +3,8 @@
 | # | Piano | Stato |
 |---|---|---|
 | 01 | [Compressione Tinify automatica](01-tinify-auto-compress.md) | open |
+| 05 | [Metrica storage bytes per client](05-storage-bytes-metric.md) | open |
+| 06 | [Rigenera thumbnail e varianti](06-regenerate-renditions.md) | open |
+| 07 | [Riprova ottimizzazione dalla console](07-retry-optimize-admin.md) | open |
+| 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | open |
+| 09 | [`srcset` nelle risposte immagine](09-srcset.md) | open |

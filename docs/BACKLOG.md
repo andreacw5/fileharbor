@@ -52,6 +52,7 @@ prod (`services/fileharbor/config/fileharbor.env` nel repo `server-backup`, giti
 | 1.9 | Doc obsolete in Meridian: `FILEHARBOR_API_PREFIX=v2`, "setGlobalPrefix never called" | `../../meridian/CLAUDE.md:656,756`, `fileharbor-proxy.ts:21` | XS |
 | 1.10 | Race `deleteAvatar` / `uploadAvatar` contemporanei sullo stesso creator → riga con file mancanti (pre-esistente) | `avatar.service.ts` | S |
 | 1.11 ✅ | Sweep orfani: un errore su una dir interrompe il resto del dominio per quella notte (pre-esistente) | `storage.cleanup.job.ts` | XS |
+| 1.12 | Orientamento EXIF perso all'upload: `convertToWebP` non chiama `.rotate()` e Sharp scarta i metadati, quindi le foto JPEG da telefono restano ruotate male (l'optimize job ruota, ma l'EXIF è già sparito). Trovato pianificando 08, non riprodotto | `storage.service.ts:~503` | XS |
 
 ## 2. Feature — da fare più avanti
 
@@ -96,6 +97,10 @@ Le prime quattro servono ai siti Nuxt (portfolio, puma-arts, sgweb, Articuno) ch
 | 2b.10 | **Metadati EXIF utili conservati prima dello strip** (data scatto, fotocamera, obiettivo) in colonne/JSON su `Image`; GPS mai | Gallerie di portfolio e puma-arts ordinano per data di scatto, non di upload | S |
 | 2b.11 | **Metrica `fileharbor_storage_bytes{client}`** (gauge lazy come il backlog di ottimizzazione) + alert di crescita | Il disco locale è il vincolo vero (§1.3): sapere *chi* lo riempie prima che la readiness cada | XS |
 | 2b.12 | **Download ZIP di un album** (`GET /albums/:id/zip`, stream con `archiver`, stessi controlli di accesso/token) | Consegna a cliente di un set (puma-arts). Solo se arriva la richiesta: nuova dipendenza | M |
+
+Pianificate: 2b.1 → [piano 08](plans/08-image-placeholders.md) · 2b.2 → [09](plans/09-srcset.md) ·
+2b.7 → [07](plans/07-retry-optimize-admin.md) · 2b.8 → [06](plans/06-regenerate-renditions.md) ·
+2b.11 → [05](plans/05-storage-bytes-metric.md). Da implementare 08 e 09 uno dopo l'altro (stessi DTO), 05 prima di 04.
 
 Escluse di proposito: upload da URL lato server (SSRF; Almanac scarica già da sé), signed URL stateless
 (gli share link coprono il caso), gestione `AdminPrincipal` via API (scelta di sicurezza, vedi CLAUDE.md).
