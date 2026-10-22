@@ -318,7 +318,7 @@
         ]
       },
       "patch": {
-        "description": "Update tags, description, or other metadata. Only owner can update.",
+        "description": "Update tags, description or isPrivate. Only the owner (X-User-Id) can update.",
         "operationId": "ImageController_updateImage",
         "parameters": [
           {
@@ -4878,6 +4878,10 @@
             "type": "string",
             "description": "Image description",
             "example": "Beautiful sunset over the mountains"
+          },
+          "isPrivate": {
+            "type": "boolean",
+            "description": "Make the image private or public. Bytes already served public may stay in browser and shared caches until they expire."
           }
         }
       },

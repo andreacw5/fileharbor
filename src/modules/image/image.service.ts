@@ -631,18 +631,26 @@ export class ImageService implements OnModuleDestroy {
     creatorId: string,
     tags?: string[],
     description?: string,
+    isPrivate?: boolean,
   ) {
     this.logger.debug(
       `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Tags: ${tags?.length || 0}`,
     );
 
-    const image = await this.prisma.image.findFirst({
-      where: {
-        id: imageId,
-        clientId,
-        creatorId,
-      },
+    // creatorId is the external one (X-User-Id); image.creatorId is the internal Creator id.
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId: creatorId } },
+      select: { id: true },
     });
+    const image =
+      creator &&
+      (await this.prisma.image.findFirst({
+        where: {
+          id: imageId,
+          clientId,
+          creatorId: creator.id,
+        },
+      }));
 
     if (!image) {
       this.logger.warn(
@@ -657,6 +665,7 @@ export class ImageService implements OnModuleDestroy {
       where: { id: imageId },
       data: {
         ...(description !== undefined && { description }),
+        ...(isPrivate !== undefined && { isPrivate }),
         ...(imageTagsInput !== undefined && {
           imageTags: {
             deleteMany: {},

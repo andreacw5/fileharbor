@@ -760,6 +760,64 @@ describe('ImageService', () => {
   });
 
   describe('updateImageMetadata', () => {
+    beforeEach(() => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+    });
+
+    it('sets isPrivate for the owner, resolved from the external id', async () => {
+      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        isPrivate: true,
+        imageTags: [],
+      });
+
+      await service.updateImageMetadata(
+        mockImageId,
+        mockClientId,
+        mockExternalUserId,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
+        where: {
+          clientId_externalId: {
+            clientId: mockClientId,
+            externalId: mockExternalUserId,
+          },
+        },
+        select: { id: true },
+      });
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creatorId: mockCreator.id,
+        },
+      });
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isPrivate: true } }),
+      );
+    });
+
+    it('an unknown creator gets 404 and writes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateImageMetadata(
+          mockImageId,
+          mockClientId,
+          'someone-else',
+          undefined,
+          undefined,
+          true,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+    });
+
     it('should sync relational tags and description', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
       mockPrismaService.image.update.mockResolvedValue({
@@ -771,7 +829,7 @@ describe('ImageService', () => {
       const result = await service.updateImageMetadata(
         mockImageId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         ['nature', 'sunset'],
         'Updated description',
       );

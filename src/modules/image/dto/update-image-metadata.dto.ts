@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateImageMetadataDto {
@@ -19,4 +19,12 @@ export class UpdateImageMetadataDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Make the image private or public. Bytes already served public may stay in browser and shared caches until they expire.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPrivate?: boolean;
 }

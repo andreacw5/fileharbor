@@ -415,7 +415,7 @@ export class ImageController {
   @ApiOperation({
     summary: 'Update image metadata',
     description:
-      'Update tags, description, or other metadata. Only owner can update.',
+      'Update tags, description or isPrivate. Only the owner (X-User-Id) can update.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
   @ApiResponse({
@@ -449,6 +449,7 @@ export class ImageController {
         validCreatorExternalId,
         dto.tags,
         dto.description,
+        dto.isPrivate,
       );
 
       this.logger.log(
