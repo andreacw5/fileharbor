@@ -343,9 +343,16 @@ export class VideoService {
     description?: string,
     isPrivate?: boolean,
   ): Promise<VideoResponseDto> {
-    const video = await this.prisma.video.findFirst({
-      where: { id: videoId, clientId, creatorId },
+    // creatorId is the external one (X-User-Id); video.creatorId is the internal Creator id.
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId: creatorId } },
+      select: { id: true },
     });
+    const video =
+      creator &&
+      (await this.prisma.video.findFirst({
+        where: { id: videoId, clientId, creatorId: creator.id },
+      }));
     if (!video) throw new NotFoundException('Video not found');
 
     const videoTagsInput =

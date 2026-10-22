@@ -641,6 +641,51 @@ describe('VideoService', () => {
   });
 
   describe('updateVideoMetadata', () => {
+    beforeEach(() => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockVideo.creator);
+    });
+
+    it('resolves the owner from the external id', async () => {
+      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
+      mockPrismaService.video.update.mockResolvedValue(mockVideo);
+
+      await service.updateVideoMetadata(
+        mockVideoId,
+        mockClientId,
+        mockExternalUserId,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
+        where: {
+          clientId_externalId: {
+            clientId: mockClientId,
+            externalId: mockExternalUserId,
+          },
+        },
+        select: { id: true },
+      });
+      expect(mockPrismaService.video.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockVideoId,
+          clientId: mockClientId,
+          creatorId: mockVideo.creator.id,
+        },
+      });
+    });
+
+    it('an unknown X-User-Id gets 404 and writes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateVideoMetadata(mockVideoId, mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.video.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.video.update).not.toHaveBeenCalled();
+    });
+
     it('should update description and privacy', async () => {
       const updated = {
         ...mockVideo,
@@ -653,7 +698,7 @@ describe('VideoService', () => {
       const result = await service.updateVideoMetadata(
         mockVideoId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         undefined,
         'New desc',
         true,
@@ -677,7 +722,7 @@ describe('VideoService', () => {
         service.updateVideoMetadata(
           mockVideoId,
           mockClientId,
-          mockCreatorExternalId,
+          mockExternalUserId,
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -689,7 +734,7 @@ describe('VideoService', () => {
       await service.updateVideoMetadata(
         mockVideoId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         ['new-tag'],
       );
 
@@ -709,7 +754,7 @@ describe('VideoService', () => {
       await service.updateVideoMetadata(
         mockVideoId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         undefined,
         'desc',
       );

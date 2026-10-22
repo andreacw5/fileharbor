@@ -637,20 +637,7 @@ export class ImageService implements OnModuleDestroy {
       `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Tags: ${tags?.length || 0}`,
     );
 
-    // creatorId is the external one (X-User-Id); image.creatorId is the internal Creator id.
-    const creator = await this.prisma.creator.findUnique({
-      where: { clientId_externalId: { clientId, externalId: creatorId } },
-      select: { id: true },
-    });
-    const image =
-      creator &&
-      (await this.prisma.image.findFirst({
-        where: {
-          id: imageId,
-          clientId,
-          creatorId: creator.id,
-        },
-      }));
+    const image = await this.findOwnedImage(imageId, clientId, creatorId);
 
     if (!image) {
       this.logger.warn(
@@ -730,6 +717,34 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
+   * The internal Creator id behind an X-User-Id: `image.creatorId` holds the
+   * internal one, so an owner check never compares it with the external id.
+   */
+  private async ownerCreatorId(
+    clientId: string,
+    externalId: string,
+  ): Promise<string | null> {
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId } },
+      select: { id: true },
+    });
+    return creator?.id ?? null;
+  }
+
+  /** The image if X-User-Id owns it within the client, else null. */
+  private async findOwnedImage(
+    imageId: string,
+    clientId: string,
+    externalId: string,
+  ) {
+    const creatorId = await this.ownerCreatorId(clientId, externalId);
+    if (!creatorId) return null;
+    return this.prisma.image.findFirst({
+      where: { id: imageId, clientId, creatorId },
+    });
+  }
+
+  /**
    * Create share link for image
    */
   async createShareLink(
@@ -742,13 +757,7 @@ export class ImageService implements OnModuleDestroy {
       `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
 
-    const image = await this.prisma.image.findFirst({
-      where: {
-        id: imageId,
-        clientId,
-        creatorId,
-      },
-    });
+    const image = await this.findOwnedImage(imageId, clientId, creatorId);
 
     if (!image) {
       this.logger.warn(
@@ -781,13 +790,7 @@ export class ImageService implements OnModuleDestroy {
     clientId: string,
     creatorId: string,
   ): Promise<ShareLinkResponseDto[]> {
-    const image = await this.prisma.image.findFirst({
-      where: {
-        id: imageId,
-        clientId,
-        creatorId,
-      },
-    });
+    const image = await this.findOwnedImage(imageId, clientId, creatorId);
 
     if (!image) {
       throw new NotFoundException('Image not found');
@@ -827,7 +830,8 @@ export class ImageService implements OnModuleDestroy {
 
     if (
       shareLink.image.clientId !== clientId ||
-      shareLink.image.creatorId !== creatorId
+      shareLink.image.creatorId !==
+        (await this.ownerCreatorId(clientId, creatorId))
     ) {
       this.logger.warn(
         `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, Creator: ${creatorId}, ImageClient: ${shareLink.image.clientId}`,

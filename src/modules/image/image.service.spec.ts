@@ -119,6 +119,7 @@ describe('ImageService', () => {
       findUnique: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
+      findMany: jest.fn(),
     },
     album: {
       findFirst: jest.fn(),
@@ -659,6 +660,7 @@ describe('ImageService', () => {
 
   describe('createShareLink', () => {
     beforeEach(() => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
     });
 
@@ -676,7 +678,7 @@ describe('ImageService', () => {
       const result = await service.createShareLink(
         mockImageId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         expiresAt,
       );
 
@@ -688,17 +690,30 @@ describe('ImageService', () => {
         `/images/${mockImageId}?token=test-token-123`,
       );
       expect(mockPrismaService.imageShareLink.create).toHaveBeenCalled();
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creatorId: mockCreator.id,
+        },
+      });
+    });
+
+    it('an unknown X-User-Id gets 404 and creates nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createShareLink(mockImageId, mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.image.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.imageShareLink.create).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when image not found', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.createShareLink(
-          mockImageId,
-          mockClientId,
-          mockCreatorExternalId,
-        ),
+        service.createShareLink(mockImageId, mockClientId, mockExternalUserId),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -715,10 +730,81 @@ describe('ImageService', () => {
       const result = await service.createShareLink(
         mockImageId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
       );
 
       expect(result.expiresAt).toBeNull();
+    });
+  });
+
+  describe('getShareLinks', () => {
+    it('lists the links for the owner, resolved from the external id', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+      mockPrismaService.imageShareLink.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.getShareLinks(mockImageId, mockClientId, mockExternalUserId),
+      ).resolves.toEqual([]);
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creatorId: mockCreator.id,
+        },
+      });
+    });
+
+    it('an unknown X-User-Id gets 404', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getShareLinks(mockImageId, mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.imageShareLink.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteShareLink', () => {
+    beforeEach(() => {
+      mockPrismaService.imageShareLink.findUnique.mockResolvedValue({
+        id: 'share-123',
+        imageId: mockImageId,
+        image: mockImage,
+      });
+    });
+
+    it('deletes for the owner, resolved from the external id', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+
+      await service.deleteShareLink(
+        'share-123',
+        mockClientId,
+        mockExternalUserId,
+      );
+      expect(mockPrismaService.imageShareLink.delete).toHaveBeenCalledWith({
+        where: { id: 'share-123' },
+      });
+    });
+
+    it('another creator gets 404 and deletes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue({
+        id: 'other-creator',
+      });
+
+      await expect(
+        service.deleteShareLink('share-123', mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.imageShareLink.delete).not.toHaveBeenCalled();
+    });
+
+    it('an unknown X-User-Id gets 404 and deletes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.deleteShareLink('share-123', mockClientId, 'nobody'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.imageShareLink.delete).not.toHaveBeenCalled();
     });
   });
 
