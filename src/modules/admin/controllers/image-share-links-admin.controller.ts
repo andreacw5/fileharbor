@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -33,6 +34,9 @@ import {
 } from '../helpers/admin-access.helper';
 
 @ApiTags('Admin - Image Share Links')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/image-share-links')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()

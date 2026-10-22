@@ -63,6 +63,9 @@ import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
 import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Admin - Images')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/images')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()
@@ -450,8 +453,6 @@ export class ImagesAdminController {
     });
   }
 
-  // Media for the console: a grid embeds dozens at once, like the public delivery.
-  @SkipThrottle()
   @Get(':id/file')
   @ApiOperation({
     summary: 'Serve image file inline (admin)',

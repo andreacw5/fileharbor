@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -33,6 +34,9 @@ import {
 import { RouteHelperService, clientRef } from '@/utils/route.utils';
 
 @ApiTags('Admin - Avatars')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/avatars')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()

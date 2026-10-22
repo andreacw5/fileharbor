@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -13,6 +14,9 @@ import { RequirePermission } from '@/modules/bastion/decorators/require-permissi
 import { AdminStatsResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
 @ApiTags('Admin - Statistics')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/stats')
 export class StatisticsController {
   constructor(private readonly statisticsService: StatisticsService) {}

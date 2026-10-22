@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -29,6 +30,9 @@ import { CreateCreatorAdminDto } from '@/modules/admin/dto/create-creator-admin.
 import { AdminCreatorListResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
 @ApiTags('Admin - Creators')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/creators')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()
