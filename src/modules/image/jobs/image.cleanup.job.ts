@@ -47,8 +47,8 @@ export class ImageCleanupJob {
 
         for (const image of images) {
           try {
-            await this.optimizeImage(image);
-            await this.imageService.markAsOptimized(image.id);
+            const size = await this.optimizeImage(image);
+            await this.imageService.markAsOptimized(image.id, size);
             this.logger.log(`Optimized image: ${image.id}`);
           } catch (error) {
             this.logger.error(
@@ -95,9 +95,9 @@ export class ImageCleanupJob {
   }
 
   /**
-   * Optimize single image
+   * Optimize single image, returning the new size of the original
    */
-  private async optimizeImage(image: any) {
+  private async optimizeImage(image: any): Promise<number> {
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
       where: { id: image.clientId },
@@ -134,5 +134,7 @@ export class ImageCleanupJob {
       this.thumbnailQuality,
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
+
+    return optimizedBuffer.length;
   }
 }

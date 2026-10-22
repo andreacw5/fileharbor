@@ -449,12 +449,14 @@ export class AvatarService {
   /**
    * Mark avatar as optimized
    */
-  async markAsOptimized(avatarId: string) {
+  async markAsOptimized(avatarId: string, size: number) {
     return this.prisma.avatar.update({
       where: { id: avatarId },
       data: {
         isOptimized: true,
         optimizedAt: new Date(),
+        // The original was re-encoded: the upload-time size no longer holds
+        size,
       },
     });
   }

@@ -610,12 +610,14 @@ export class ImageService implements OnModuleDestroy {
   /**
    * Mark image as optimized
    */
-  async markAsOptimized(imageId: string) {
+  async markAsOptimized(imageId: string, size: number) {
     return this.prisma.image.update({
       where: { id: imageId },
       data: {
         isOptimized: true,
         optimizedAt: new Date(),
+        // The original was re-encoded: the upload-time size no longer holds
+        size,
       },
     });
   }

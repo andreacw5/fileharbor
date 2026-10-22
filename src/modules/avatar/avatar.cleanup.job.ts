@@ -47,8 +47,8 @@ export class AvatarCleanupJob {
 
         for (const avatar of avatars) {
           try {
-            await this.optimizeAvatar(avatar);
-            await this.avatarService.markAsOptimized(avatar.id);
+            const size = await this.optimizeAvatar(avatar);
+            await this.avatarService.markAsOptimized(avatar.id, size);
             this.logger.log(`Optimized avatar: ${avatar.id}`);
           } catch (error) {
             this.logger.error(
@@ -74,9 +74,9 @@ export class AvatarCleanupJob {
   }
 
   /**
-   * Optimize single avatar
+   * Optimize single avatar, returning the new size of the original
    */
-  private async optimizeAvatar(avatar: any) {
+  private async optimizeAvatar(avatar: any): Promise<number> {
     // Get client to retrieve domain
     const client = await this.prisma.client.findUnique({
       where: { id: avatar.clientId },
@@ -113,5 +113,7 @@ export class AvatarCleanupJob {
       this.thumbnailQuality,
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
+
+    return optimizedBuffer.length;
   }
 }

@@ -99,7 +99,10 @@ Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it
 (`client.domain || clientId`); a dir matching neither is left alone.
 
 Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
-`ORIGINAL_QUALITY` (default 100, uploads only). Every `@Cron` job runs inside
+`ORIGINAL_QUALITY` (default 100, uploads only), and write the new byte count to `size`
+(`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
+`src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
+`node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
 

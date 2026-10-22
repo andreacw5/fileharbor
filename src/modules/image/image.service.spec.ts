@@ -740,19 +740,20 @@ describe('ImageService', () => {
   });
 
   describe('markAsOptimized', () => {
-    it('should mark image as optimized', async () => {
+    it('should mark image as optimized and store the re-encoded size', async () => {
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
         isOptimized: true,
       });
 
-      await service.markAsOptimized(mockImageId);
+      await service.markAsOptimized(mockImageId, 1234);
 
       expect(mockPrismaService.image.update).toHaveBeenCalledWith({
         where: { id: mockImageId },
         data: {
           isOptimized: true,
           optimizedAt: expect.any(Date),
+          size: 1234,
         },
       });
     });

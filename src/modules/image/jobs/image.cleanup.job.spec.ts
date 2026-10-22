@@ -36,6 +36,10 @@ describe('ImageCleanupJob.optimizeImages', () => {
 
     expect(imageService.recordOptimizeFailure).toHaveBeenCalledWith('broken');
     expect(imageService.markAsOptimized).toHaveBeenCalledTimes(1);
-    expect(imageService.markAsOptimized).toHaveBeenCalledWith('ok');
+    // the size of the re-encoded buffer, not the upload-time one
+    expect(imageService.markAsOptimized).toHaveBeenCalledWith(
+      'ok',
+      Buffer.from('opt').length,
+    );
   });
 });
