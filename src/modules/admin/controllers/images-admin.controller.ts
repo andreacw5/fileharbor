@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  ForbiddenException,
   HttpCode,
   StreamableFile,
 } from '@nestjs/common';
@@ -53,6 +54,13 @@ import {
   buildClientWhere,
 } from '../helpers/admin-access.helper';
 import { parseBooleanQuery } from '../helpers/admin-query.helper';
+import {
+  AdminDuplicateGroupDto,
+  AdminDuplicateListQuery,
+} from '../dto/admin-duplicates.dto';
+import { ApiPaginatedResponse, PaginatedResult } from '@heyatom/nest-common';
+import { DHASH_PATTERN } from '@/modules/storage/storage.service';
+import { DuplicateGroup } from '@/modules/image/image.service';
 import {
   buildImageTagCreateInput,
   extractTagNames,
@@ -181,6 +189,11 @@ export class ImagesAdminController {
     description: 'Only private (true) or only public (false) files',
   })
   @ApiQuery({
+    name: 'dHash',
+    required: false,
+    description: 'Only images with this dHash (16 hex chars)',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
@@ -203,6 +216,7 @@ export class ImagesAdminController {
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
     @Query('isPrivate') isPrivate?: string,
+    @Query('dHash') dHash?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
@@ -241,6 +255,12 @@ export class ImagesAdminController {
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
     const privacy = parseBooleanQuery('isPrivate', isPrivate);
     if (privacy !== undefined) where.isPrivate = privacy;
+    if (dHash !== undefined && dHash !== '') {
+      if (!DHASH_PATTERN.test(dHash)) {
+        throw new BadRequestException('dHash must be 16 hex characters');
+      }
+      where.dHash = dHash;
+    }
     if (tagsArray && tagsArray.length > 0) {
       where.imageTags = {
         some: { tag: { name: { in: normalizeTagNames(tagsArray) } } },
@@ -252,6 +272,31 @@ export class ImagesAdminController {
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
       adminUser.actorId,
+    );
+  }
+
+  // Before @Get(':id'), or 'duplicates' would be taken for an id.
+  @Get('duplicates')
+  @ApiOperation({
+    summary:
+      'Groups of images with the same dHash (scoped to accessible clients)',
+    description:
+      'Key (clientId, dHash); dHash alone with crossClient=true, fullAccess only. Flat images (dHash 0) and unhashed ones are left out.',
+  })
+  @ApiPaginatedResponse(AdminDuplicateGroupDto)
+  @ApiResponse({ status: 403, description: 'crossClient without fullAccess' })
+  async listDuplicates(
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+    @Query() query: AdminDuplicateListQuery = new AdminDuplicateListQuery(),
+  ): Promise<PaginatedResult<DuplicateGroup>> {
+    if (query.crossClient && !adminUser.fullAccess) {
+      throw new ForbiddenException('crossClient requires full access');
+    }
+    if (query.clientId) assertClientAccess(adminUser, query.clientId);
+    return this.imageService.findDuplicateGroups(
+      query.clientId ? [query.clientId] : adminUser.allowedClientIds,
+      { creatorId: query.creatorId, crossClient: query.crossClient },
+      query,
     );
   }
 
@@ -273,6 +318,10 @@ export class ImagesAdminController {
 
     const albums = image.albumItems.map((ai) => ai.album);
     const activeShareLinks = image._count.shareLinks;
+    const duplicates = await this.imageService.countDuplicates(
+      image,
+      adminUser.allowedClientIds,
+    );
 
     return plainToInstance(
       AdminImageResponseDto,
@@ -282,6 +331,7 @@ export class ImagesAdminController {
         fullPath,
         albums,
         activeShareLinks,
+        duplicates,
       },
       { excludeExtraneousValues: true },
     );

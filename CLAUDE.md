@@ -102,7 +102,8 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 `ORIGINAL_QUALITY` (default 100, uploads only), and write the new byte count to `size`
 (`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
 `src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
-`node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). Every `@Cron` job runs inside
+`node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
+(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
 
@@ -126,6 +127,12 @@ Three parts:
   Bastion directly.
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
+- **Duplicates** (plan 03): `Image.dHash` is a 64-bit dHash of `original.webp` as 16 hex chars
+  (`StorageService.computeDHash`, set on upload, best-effort: a failure leaves it `null`). Text, not
+  `BigInt`, because raw image rows are spread into responses. `GET /admin/images/duplicates` groups by
+  `(clientId, dHash)` inside `allowedClientIds` (`crossClient=true` → `dHash` alone, `fullAccess` only),
+  `GET /admin/images?dHash=` lists one group, the show carries `dHash` + `duplicates`. The all-zero
+  hash (flat image) never counts as a duplicate. Never auto-delete: deleting is the bulk-delete.
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
   scoped totals, a 7-day trend and a per-day chart. `totalStorage` / `newStorage` sum image, video and avatar bytes.
 

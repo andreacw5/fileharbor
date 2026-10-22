@@ -227,6 +227,13 @@ export class AdminImageResponseDto {
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() @Type(() => Date) optimizedAt?: Date;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Perceptual hash (16 hex chars), null until computed',
+  })
+  @Expose()
+  dHash: string | null;
 
   @ApiPropertyOptional() @Expose() fullPath?: string;
 
@@ -253,6 +260,13 @@ export class AdminImageResponseDto {
   })
   @Expose()
   activeShareLinks?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Other images with the same dHash in the caller scope (0 if unhashed or flat). Detail only.',
+  })
+  @Expose()
+  duplicates?: number;
 
   @ApiProperty({
     description: 'Whether the requesting admin has bookmarked this image',
@@ -493,6 +507,7 @@ export class AdminImageListItemDto extends OmitType(AdminImageResponseDto, [
   'creator',
   'albums',
   'activeShareLinks',
+  'duplicates',
 ] as const) {
   @ApiProperty() creatorId: string;
   @ApiProperty({ type: AdminListCreatorDto }) creator: AdminListCreatorDto;

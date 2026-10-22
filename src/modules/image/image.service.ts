@@ -10,10 +10,13 @@ import { Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
+  FLAT_DHASH,
   MAX_OPTIMIZE_ATTEMPTS,
   OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
+import { Prisma } from '@prisma/client';
+import { paginate, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
 import {
   WebhookService,
@@ -52,6 +55,29 @@ export interface ImageFileOptions {
   thumb?: boolean;
   /** Return only `filePath` when the file is already on disk (X-Accel-Redirect). */
   skipDiskRead?: boolean;
+}
+
+/** Previews per duplicate group. */
+const DUPLICATE_PREVIEWS = 6;
+
+export interface DuplicateImage {
+  id: string;
+  clientId: string;
+  originalName: string;
+  width: number;
+  height: number;
+  size: number;
+  createdAt: Date;
+  isPrivate: boolean;
+  creatorExternalId: string;
+}
+
+export interface DuplicateGroup {
+  dHash: string;
+  clientId: string | null;
+  count: number;
+  totalBytes: number;
+  images: DuplicateImage[];
 }
 
 @Injectable()
@@ -195,6 +221,17 @@ export class ImageService implements OnModuleDestroy {
         `[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`,
       );
 
+      // Same input the backfill hashes (original.webp). Duplicate detection is
+      // best-effort: a failure leaves dHash null rather than failing the upload.
+      const dHash = await this.storage
+        .computeDHash(webpBuffer)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `[uploadImage] dHash failed - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
+          );
+          return null;
+        });
+
       // Save to database (storagePath is the base path without extension)
       this.logger.debug(
         `[uploadImage] Saving to database - ID: ${imageId}, Tags: ${tags?.length || 0}, Private: ${isPrivate}`,
@@ -212,6 +249,7 @@ export class ImageService implements OnModuleDestroy {
           height: metadata.height,
           size: webpBuffer.length,
           mimeType: 'image/webp',
+          dHash,
           isOptimized: false,
           isPrivate: isPrivate || false,
           description: description || null,
@@ -1145,6 +1183,104 @@ export class ImageService implements OnModuleDestroy {
     }
 
     return { ...image, isBookmarked };
+  }
+
+  /**
+   * Images sharing `dHash` with this one in `clientIds`, itself excluded.
+   * 0 for an unhashed or flat image (flat ones "match" every other flat one).
+   */
+  async countDuplicates(
+    image: { id: string; dHash: string | null },
+    clientIds: string[],
+  ): Promise<number> {
+    if (!image.dHash || image.dHash === FLAT_DHASH) return 0;
+    return this.prisma.image.count({
+      where: {
+        dHash: image.dHash,
+        clientId: { in: clientIds },
+        id: { not: image.id },
+      },
+    });
+  }
+
+  /**
+   * Groups of images with the same dHash inside `clientIds`, biggest first.
+   * Key `(clientId, dHash)`, or `dHash` alone with `crossClient` (the caller
+   * checks who may ask for that). Nothing outside `clientIds` is ever read, so
+   * neither a group nor a count can reveal a copy the admin does not see.
+   */
+  async findDuplicateGroups(
+    clientIds: string[],
+    filter: { creatorId?: string; crossClient: boolean },
+    page: { page: number; limit: number; skip: number },
+  ): Promise<PaginatedResult<DuplicateGroup>> {
+    const scope = Prisma.sql`"clientId" = ANY(${clientIds}::text[]) AND "dHash" IS NOT NULL AND "dHash" <> ${FLAT_DHASH}${
+      filter.creatorId
+        ? Prisma.sql` AND "creatorId" = ${filter.creatorId}`
+        : Prisma.empty
+    }`;
+    const key = filter.crossClient
+      ? Prisma.sql`"dHash"`
+      : Prisma.sql`"clientId", "dHash"`;
+
+    const [groups, [{ total }]] = await Promise.all([
+      this.prisma.$queryRaw<
+        Omit<DuplicateGroup, 'images'>[]
+      >`SELECT ${filter.crossClient ? Prisma.sql`NULL::text` : Prisma.sql`"clientId"`} AS "clientId",
+          "dHash", count(*)::int AS count, sum(size)::float8 AS "totalBytes"
+        FROM images WHERE ${scope}
+        GROUP BY ${key} HAVING count(*) > 1
+        ORDER BY count DESC, "totalBytes" DESC, "dHash"
+        LIMIT ${page.limit} OFFSET ${page.skip}`,
+      this.prisma.$queryRaw<{ total: number }[]>`SELECT count(*)::int AS total
+        FROM (SELECT 1 FROM images WHERE ${scope} GROUP BY ${key} HAVING count(*) > 1) g`,
+    ]);
+
+    // ponytail: loads every member of the page's groups to keep 6 each; fine for
+    // tens of copies, a ROW_NUMBER() window if a group ever runs into thousands.
+    const members = groups.length
+      ? await this.prisma.image.findMany({
+          where: {
+            dHash: { in: groups.map((g) => g.dHash) },
+            clientId: { in: clientIds },
+            ...(filter.creatorId && { creatorId: filter.creatorId }),
+          },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            clientId: true,
+            dHash: true,
+            originalName: true,
+            width: true,
+            height: true,
+            size: true,
+            createdAt: true,
+            isPrivate: true,
+            creator: { select: { externalId: true } },
+          },
+        })
+      : [];
+
+    const groupKey = (clientId: string | null, dHash: string | null) =>
+      filter.crossClient ? `${dHash}` : `${clientId}:${dHash}`;
+    const previews = new Map<string, DuplicateImage[]>();
+    for (const { dHash, creator, ...image } of members) {
+      const k = groupKey(image.clientId, dHash);
+      const list = previews.get(k) ?? [];
+      if (list.length < DUPLICATE_PREVIEWS) {
+        list.push({ ...image, creatorExternalId: creator.externalId });
+      }
+      previews.set(k, list);
+    }
+
+    return paginate(
+      groups.map((g) => ({
+        ...g,
+        images: previews.get(groupKey(g.clientId, g.dHash)) ?? [],
+      })),
+      total,
+      page,
+    );
   }
 
   /**

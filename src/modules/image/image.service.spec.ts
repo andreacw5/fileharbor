@@ -142,6 +142,7 @@ describe('ImageService', () => {
     deleteDirectory: jest.fn(),
     getImageMetadata: jest.fn(),
     encodeWebpWithThumbnail: jest.fn(),
+    computeDHash: jest.fn(),
     getDefaultImage: jest.fn(),
     resizeImage: jest.fn(),
     fileExists: jest.fn(),
@@ -239,6 +240,7 @@ describe('ImageService', () => {
         original: Buffer.from('webp-data'),
         thumb: Buffer.from('thumb-data'),
       });
+      mockStorageService.computeDHash.mockResolvedValue('00ff00ff00ff00ff');
       mockStorageService.getImagePath.mockReturnValue(
         `storage/${mockDomain}/images/${mockImageId}`,
       );
@@ -271,6 +273,32 @@ describe('ImageService', () => {
         mockClientId,
         WebhookEvent.IMAGE_UPLOADED,
         expect.any(Object),
+      );
+    });
+
+    it('hashes the stored original and saves the dHash', async () => {
+      await service.uploadImage(mockClientId, mockExternalUserId, mockFile);
+
+      expect(mockStorageService.computeDHash).toHaveBeenCalledWith(
+        Buffer.from('webp-data'),
+      );
+      expect(mockPrismaService.image.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dHash: '00ff00ff00ff00ff' }),
+        }),
+      );
+    });
+
+    it('still uploads when the dHash fails, with dHash null', async () => {
+      mockStorageService.computeDHash.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.uploadImage(mockClientId, mockExternalUserId, mockFile),
+      ).resolves.toBeDefined();
+      expect(mockPrismaService.image.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dHash: null }),
+        }),
       );
     });
 

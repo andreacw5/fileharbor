@@ -182,3 +182,68 @@ describe('StorageService.validatePath', () => {
     (target) => expect(() => storage.validatePath(target)).toThrow(),
   );
 });
+
+describe('StorageService.computeDHash', () => {
+  const storage = new StorageService({
+    get: () => undefined,
+  } as unknown as ConfigService);
+
+  // 9x8 blocks of 8 px, neighbours at least 30 levels apart: resizing to 9x8
+  // lands one block per pixel, so no bit sits on a near-tie.
+  const blocks = (seed: number) => {
+    const levels: number[] = [];
+    for (let i = 0, v = seed; i < 72; i++) {
+      v = (v * 1103515245 + 12345) % 2 ** 31;
+      let level = v % 256;
+      if (i % 9 && Math.abs(level - levels[i - 1]) < 30) {
+        level = (levels[i - 1] + 128) % 256;
+      }
+      levels.push(level);
+    }
+    const raw = Buffer.alloc(72 * 64 * 3);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 72; x++) {
+        raw.fill(
+          levels[(y >> 3) * 9 + (x >> 3)],
+          (y * 72 + x) * 3,
+          (y * 72 + x + 1) * 3,
+        );
+      }
+    }
+    return sharp(raw, { raw: { width: 72, height: 64, channels: 3 } });
+  };
+
+  it('matches the same picture across quality and size', async () => {
+    const q100 = await blocks(1).webp({ quality: 100 }).toBuffer();
+    const q85 = await storage.optimizeImage(q100, 85);
+    const smaller = await blocks(1)
+      .resize(36, 32)
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    const hash = await storage.computeDHash(q100);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    await expect(storage.computeDHash(q85)).resolves.toBe(hash);
+    await expect(storage.computeDHash(smaller)).resolves.toBe(hash);
+  });
+
+  it('tells different pictures apart', async () => {
+    const a = await blocks(1).png().toBuffer();
+    const b = await blocks(2).png().toBuffer();
+    expect(await storage.computeDHash(a)).not.toBe(
+      await storage.computeDHash(b),
+    );
+  });
+
+  it('hashes a flat image, transparent or not, to zero', async () => {
+    const flat = (background: string) =>
+      sharp({ create: { width: 20, height: 20, channels: 4, background } })
+        .png()
+        .toBuffer();
+    for (const bg of ['#3a7', '#00000000']) {
+      await expect(storage.computeDHash(await flat(bg))).resolves.toBe(
+        '0000000000000000',
+      );
+    }
+  });
+});

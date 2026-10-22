@@ -103,6 +103,9 @@ model Image {
   views            Int       @default(0)
   downloads        Int       @default(0)
   description      String?
+  // 64-bit dHash of original.webp as 16 hex chars (StorageService.computeDHash), null until
+  // computed. Text, not BigInt: raw rows are spread into responses and JSON.stringify throws on bigint.
+  dHash            String?   @db.Char(16)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -119,6 +122,8 @@ model Image {
   @@index([creatorId])
   // Serves the optimize queue (isOptimized = false, ordered by createdAt).
   @@index([isOptimized, createdAt])
+  // Duplicate lookup (GET /admin/images?dHash=, duplicates count on the show).
+  @@index([dHash])
   @@map("images")
 }
 

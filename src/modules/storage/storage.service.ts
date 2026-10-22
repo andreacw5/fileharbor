@@ -15,6 +15,12 @@ import sharp from 'sharp';
 // with room to spare, at ~400 MB of RGBA per pipeline.
 const MAX_INPUT_PIXELS = 100_000_000;
 
+/** A dHash as stored and as the API speaks it: 16 hex chars (`computeDHash`). */
+export const DHASH_PATTERN = /^[0-9a-f]{16}$/;
+
+/** What a flat image hashes to: every such image would "match" every other. */
+export const FLAT_DHASH = '0000000000000000';
+
 /** Formats accepted on upload, as reported by sharp from the bytes themselves. */
 export const SUPPORTED_IMAGE_FORMATS = ['jpeg', 'png', 'webp', 'gif'];
 
@@ -655,6 +661,30 @@ export class StorageService {
   async isAnimated(buffer: Buffer): Promise<boolean> {
     const { pages } = await openImage(buffer).metadata();
     return (pages ?? 1) > 1;
+  }
+
+  /**
+   * 64-bit difference hash as 16 hex chars: 9x8 grayscale, one bit per
+   * "left pixel brighter than its right neighbour". Survives re-encoding,
+   * optimize, Tinify and resizing, so it matches on content, not bytes.
+   * Animated input: first frame. Transparency is flattened onto white, so a
+   * flat image of any colour hashes to all zeros.
+   */
+  async computeDHash(buffer: Buffer): Promise<string> {
+    const px = await openImage(buffer, false)
+      .flatten({ background: '#ffffff' })
+      .grayscale()
+      .resize(9, 8, { fit: 'fill' })
+      .raw()
+      .toBuffer();
+    let hash = 0n;
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) {
+        const i = y * 9 + x;
+        hash = (hash << 1n) | (px[i] > px[i + 1] ? 1n : 0n);
+      }
+    }
+    return hash.toString(16).padStart(16, '0');
   }
 
   /**

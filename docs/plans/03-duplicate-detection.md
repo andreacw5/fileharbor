@@ -1,7 +1,7 @@
 ---
 type: plan
 service: fileharbor
-status: open
+status: in-progress
 estimate: 2d
 updated: 2026-10-22
 verified: 4774bd3
@@ -141,6 +141,31 @@ interface DuplicateGroup {
    `?dHash=` attivo, scarta le righe il cui `dHash` non coincide e nasconde la bulk bar se il campo
    manca dalla risposta.
 
+## Implementazione (lato FileHarbor)
+
+Fatto, con tre scostamenti dal testo sopra:
+
+- **`dHash CHAR(16)` hex, non `BigInt`**: nessun patch globale per `BigInt` e varie risposte admin
+  spalmano la riga grezza (`findAdminImages`): un `bigint` farebbe esplodere `JSON.stringify`. Il
+  testo evita anche il problema del bit di segno di `int8`. Stessa selettività sull'indice. Le
+  distanze di Hamming, se mai servissero, passano da `('x' || "dHash")::bit(64)`.
+- `dHash` malformato su `GET /admin/images` → `400` con `code: BAD_REQUEST` (stesso stile di
+  `isPrivate`, parametri letti uno per uno), non `VALIDATION_FAILED`. Su `/duplicates` i filtri
+  stanno nel DTO, quindi lì è `VALIDATION_FAILED`.
+- Anteprima gruppo: `creatorExternalId` piatto invece di `creator.externalId`.
+- `duplicates` sulla show conta nello scope del chiamante (tutti i client visibili, come la lista
+  `?dHash=` senza `clientId`), sé esclusa; `0` per hash nullo o piatto.
+
+Codice: `StorageService.computeDHash` + `DHASH_PATTERN`/`FLAT_DHASH` (`storage.service.ts`),
+`ImageService.findDuplicateGroups`/`countDuplicates`, `ImagesAdminController.listDuplicates`,
+`dto/admin-duplicates.dto.ts`, migration `20261022120000_image_dhash`, script
+`src/scripts/backfill-image-dhash.ts`.
+
+Lato Meridian: fatto come da piano (`images/duplicates.vue`, `useFileHarborDuplicates`, BFF
+`images/duplicates.get.ts`, `?dHash=` inoltrato e chip sulla lista, fact sulla show, i18n
+`fileharbor.duplicates.*`). Domanda 3 risolta col toggle sempre visibile + 403. Manca la prova
+end-to-end in console (ultimo criterio).
+
 ## Rischi/domande aperte
 
 1. **Volume**: quante immagini ci sono in produzione? Il backfill costa una decodifica per immagine
@@ -152,14 +177,14 @@ interface DuplicateGroup {
 
 ## Criteri di completamento
 
-- [ ] Spec `computeDHash`: stessa immagine a q100/q85 e ridimensionata → stesso hash; immagini diverse →
+- [x] Spec `computeDHash`: stessa immagine a q100/q85 e ridimensionata → stesso hash; immagini diverse →
       hash diversi; PNG piatto → 0.
-- [ ] Upload nuovo → `dHash` valorizzato; errore di calcolo non fa fallire l'upload.
-- [ ] Backfill dry-run stampa conteggi senza scrivere; `--apply` porta a zero le righe `dHash IS NULL`
+- [x] Upload nuovo → `dHash` valorizzato; errore di calcolo non fa fallire l'upload.
+- [x] Backfill dry-run stampa conteggi senza scrivere; `--apply` porta a zero le righe `dHash IS NULL`
       leggibili; rilanciato non rifà nulla.
-- [ ] Caricando due volte lo stesso file sullo stesso client, `GET /admin/images/duplicates` mostra un
+- [x] Caricando due volte lo stesso file sullo stesso client, `GET /admin/images/duplicates` mostra un
       gruppo da 2; la stessa immagine su un client fuori scope non compare né cambia `count`.
-- [ ] `crossClient=true` da non-`fullAccess` → 403.
-- [ ] `GET /admin/images/duplicates` risponde `{ data, meta }`.
+- [x] `crossClient=true` da non-`fullAccess` → 403.
+- [x] `GET /admin/images/duplicates` risponde `{ data, meta }`.
 - [ ] Meridian: dalla pagina duplicati apro il gruppo, seleziono la copia più nuova e la cancello col
       bulk-delete; il gruppo sparisce. Un AUTHOR vede la pagina ma non la bulk bar di delete.

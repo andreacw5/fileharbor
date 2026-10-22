@@ -4,6 +4,7 @@ import { ImagesAdminController } from './images-admin.controller';
 import { ImageService } from '@/modules/image/image.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
+import { AdminDuplicateListQuery } from '../dto/admin-duplicates.dto';
 
 describe('ImagesAdminController.getImageFile', () => {
   const image = {
@@ -135,6 +136,87 @@ describe('ImagesAdminController.listImages', () => {
       'isPrivate must be true or false',
     );
     expect(imageService.findAdminImages).not.toHaveBeenCalled();
+  });
+
+  const byHash = (dHash: string) =>
+    controller.listImages(
+      admin,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dHash,
+    );
+
+  it('filters on dHash inside the scope', async () => {
+    await byHash('00ff00ff00ff00ff');
+    expect(where()).toEqual({
+      clientId: { in: ['client-1'] },
+      dHash: '00ff00ff00ff00ff',
+    });
+  });
+
+  it('rejects a malformed dHash before querying', async () => {
+    await expect(byHash('00FF')).rejects.toThrow(
+      'dHash must be 16 hex characters',
+    );
+    expect(imageService.findAdminImages).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImagesAdminController.listDuplicates', () => {
+  const imageService = { findDuplicateGroups: jest.fn().mockResolvedValue({}) };
+  const controller = new ImagesAdminController(
+    imageService as unknown as ImageService,
+    {} as RouteHelperService,
+  );
+  const admin = (fullAccess = false) =>
+    ({
+      allowedClientIds: ['client-1', 'client-2'],
+      fullAccess,
+    }) as AdminJwtPayload;
+  const query = (q: Partial<AdminDuplicateListQuery>) =>
+    Object.assign(new AdminDuplicateListQuery(), q);
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('groups inside the caller scope by default', async () => {
+    const q = query({});
+    await controller.listDuplicates(admin(), q);
+    expect(imageService.findDuplicateGroups).toHaveBeenCalledWith(
+      ['client-1', 'client-2'],
+      { creatorId: undefined, crossClient: false },
+      q,
+    );
+  });
+
+  it('narrows to one client the caller sees', async () => {
+    await controller.listDuplicates(admin(), query({ clientId: 'client-2' }));
+    expect(imageService.findDuplicateGroups.mock.calls[0][0]).toEqual([
+      'client-2',
+    ]);
+  });
+
+  it('refuses a client outside the scope', async () => {
+    await expect(
+      controller.listDuplicates(admin(), query({ clientId: 'client-9' })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(imageService.findDuplicateGroups).not.toHaveBeenCalled();
+  });
+
+  it('allows crossClient only with fullAccess', async () => {
+    await expect(
+      controller.listDuplicates(admin(false), query({ crossClient: true })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(imageService.findDuplicateGroups).not.toHaveBeenCalled();
+
+    await controller.listDuplicates(admin(true), query({ crossClient: true }));
+    expect(imageService.findDuplicateGroups.mock.calls[0][1]).toEqual({
+      creatorId: undefined,
+      crossClient: true,
+    });
   });
 });
 
