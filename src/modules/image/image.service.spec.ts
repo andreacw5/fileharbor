@@ -9,6 +9,7 @@ import {
   WebhookEvent,
 } from '@/modules/webhook/webhook.service';
 import { HttpService } from '@nestjs/axios';
+import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
@@ -97,6 +98,8 @@ describe('ImageService', () => {
     $executeRaw: jest.fn().mockResolvedValue(1),
     client: {
       findUnique: jest.fn(),
+      updateMany: jest.fn(),
+      fields: { currentTinifyLimit: 'currentTinifyLimit-ref' },
     },
     creator: {
       findUnique: jest.fn(),
@@ -146,7 +149,11 @@ describe('ImageService', () => {
     ),
     countEntries: jest.fn().mockResolvedValue(0),
     clearImageVariants: jest.fn(),
+    isAnimated: jest.fn(),
+    createThumbnail: jest.fn(),
   };
+
+  const mockHttpService = { post: jest.fn(), get: jest.fn() };
 
   const mockConfigService = {
     get: jest.fn((key: string) => {
@@ -190,7 +197,7 @@ describe('ImageService', () => {
         },
         {
           provide: HttpService,
-          useValue: { post: jest.fn() },
+          useValue: mockHttpService,
         },
         {
           provide: CreatorService,
@@ -874,6 +881,94 @@ describe('ImageService', () => {
           },
         },
       });
+    });
+  });
+
+  describe('compressImageWithTinify', () => {
+    const tinifyClient = {
+      ...mockClient,
+      tinifyActive: true,
+      tinifyApiKey: 'tinify-key',
+      currentTinifyUsage: 499,
+      currentTinifyLimit: 500,
+    };
+
+    beforeEach(() => {
+      mockPrismaService.image.findUnique.mockResolvedValue({
+        ...mockImage,
+        tinifyOptimized: false,
+      });
+      mockPrismaService.client.findUnique.mockResolvedValue(tinifyClient);
+      mockStorageService.getImageFilePath.mockReturnValue('original.webp');
+      mockStorageService.readFile.mockResolvedValue(Buffer.alloc(1000));
+      mockStorageService.isAnimated.mockResolvedValue(false);
+    });
+
+    it('reserves the quota slot in one conditional update', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+      );
+      mockHttpService.get.mockReturnValue(of({ data: Buffer.alloc(600) }));
+      mockStorageService.createThumbnail.mockResolvedValue(Buffer.alloc(10));
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        size: 600,
+        tinifyOptimized: true,
+        imageTags: [],
+      });
+
+      await service.compressImageWithTinify(mockImageId);
+
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: mockClientId,
+          currentTinifyUsage: { lt: 'currentTinifyLimit-ref' },
+        },
+        data: { currentTinifyUsage: { increment: 1 } },
+      });
+    });
+
+    it('refuses without calling Tinify when no slot is left', async () => {
+      // A parallel request took the last slot after our client row was read
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockHttpService.post).not.toHaveBeenCalled();
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives the slot back when Tinify never compressed the image', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        throwError(() => new Error('ECONNRESET')),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow('ECONNRESET');
+      expect(mockPrismaService.client.updateMany).toHaveBeenLastCalledWith({
+        where: { id: mockClientId, currentTinifyUsage: { gt: 0 } },
+        data: { currentTinifyUsage: { decrement: 1 } },
+      });
+    });
+
+    it('keeps the slot spent when failing after Tinify billed it', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+      );
+      mockHttpService.get.mockReturnValue(
+        throwError(() => new Error('download failed')),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow('download failed');
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
     });
   });
 

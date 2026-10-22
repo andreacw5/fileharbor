@@ -1237,15 +1237,9 @@ export class ImageService implements OnModuleDestroy {
       );
     }
 
-    // Check usage limit (configurable per client, default 500)
-    if (client.currentTinifyUsage >= client.currentTinifyLimit) {
-      this.logger.warn(
-        `[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Usage: ${client.currentTinifyUsage}/${client.currentTinifyLimit}`,
-      );
-      throw new BadRequestException(
-        `Monthly Tinify compression limit reached (${client.currentTinifyUsage}/${client.currentTinifyLimit}). Limit will reset next month.`,
-      );
-    }
+    // Quota slot taken (and not yet spent at Tinify): released if we fail before Tinify bills it
+    let reserved = false;
+    let billed = false;
 
     try {
       const domain = client.domain || image.clientId;
@@ -1269,6 +1263,28 @@ export class ImageService implements OnModuleDestroy {
       this.logger.debug(
         `[compressImageWithTinify] Original size: ${originalSize} bytes - ID: ${imageId}`,
       );
+
+      // Reserve a slot of the monthly limit (configurable per client, default 500) in one
+      // conditional UPDATE: a read-then-increment would let parallel requests (a whole
+      // console page selected at once) all pass the check and overshoot the limit.
+      const { count } = await this.prisma.client.updateMany({
+        where: {
+          id: client.id,
+          currentTinifyUsage: {
+            lt: this.prisma.client.fields.currentTinifyLimit,
+          },
+        },
+        data: { currentTinifyUsage: { increment: 1 } },
+      });
+      if (count === 0) {
+        this.logger.warn(
+          `[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Limit: ${client.currentTinifyLimit}`,
+        );
+        throw new BadRequestException(
+          `Monthly Tinify compression limit reached (${client.currentTinifyLimit}). Limit will reset next month.`,
+        );
+      }
+      reserved = true;
 
       // Prepare Basic Auth header (api:YOUR_API_KEY)
       const authString = Buffer.from(`api:${tinifyKey.trim()}`).toString(
@@ -1301,6 +1317,7 @@ export class ImageService implements OnModuleDestroy {
         );
         throw new BadRequestException('Failed to compress image with Tinify');
       }
+      billed = true;
 
       const compressedUrl = uploadResponse.data.output.url;
       const compressedSize = uploadResponse.data.output.size;
@@ -1352,39 +1369,25 @@ export class ImageService implements OnModuleDestroy {
         `[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`,
       );
 
-      // Update database with new size, mark as Tinify-optimized, and increment usage counter
-      const [updatedImage] = await this.prisma.$transaction([
-        this.prisma.image.update({
-          where: { id: imageId },
-          data: {
-            size: compressedSize,
-            tinifyOptimized: true,
-          },
-          include: {
-            imageTags: {
-              include: {
-                tag: {
-                  select: {
-                    name: true,
-                  },
+      // Update database with new size and mark as Tinify-optimized (usage counted at reservation)
+      const updatedImage = await this.prisma.image.update({
+        where: { id: imageId },
+        data: {
+          size: compressedSize,
+          tinifyOptimized: true,
+        },
+        include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
                 },
               },
             },
           },
-        }),
-        this.prisma.client.update({
-          where: { id: client.id },
-          data: {
-            currentTinifyUsage: {
-              increment: 1,
-            },
-          },
-        }),
-      ]);
-
-      this.logger.log(
-        `[compressImageWithTinify] Tinify usage updated for client ${client.id}: ${client.currentTinifyUsage + 1}/${client.currentTinifyLimit}`,
-      );
+        },
+      });
 
       // Send webhook notification (non-blocking)
       this.webhook
@@ -1433,6 +1436,19 @@ export class ImageService implements OnModuleDestroy {
         this.logger.error(
           `[compressImageWithTinify] Failed - ID: ${imageId}, Error: ${error.message}`,
         );
+      }
+      // Tinify never compressed it: give the slot back. Once billed, it stays spent.
+      if (reserved && !billed) {
+        await this.prisma.client
+          .updateMany({
+            where: { id: client.id, currentTinifyUsage: { gt: 0 } },
+            data: { currentTinifyUsage: { decrement: 1 } },
+          })
+          .catch((releaseError) =>
+            this.logger.warn(
+              `[compressImageWithTinify] Failed to release Tinify slot for client ${client.id}: ${releaseError.message}`,
+            ),
+          );
       }
       throw error;
     }
