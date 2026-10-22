@@ -2444,6 +2444,15 @@
             }
           },
           {
+            "name": "dHash",
+            "required": false,
+            "in": "query",
+            "description": "Only images with this dHash (16 hex chars)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sortBy",
             "required": false,
             "in": "query",
@@ -2517,6 +2526,109 @@
           }
         ],
         "summary": "List images (scoped to accessible clients)",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
+    "/admin/images/duplicates": {
+      "get": {
+        "description": "Key (clientId, dHash); dHash alone with crossClient=true, fullAccess only. Flat images (dHash 0) and unhashed ones are left out.",
+        "operationId": "ImagesAdminController_listDuplicates",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Only this client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "creatorId",
+            "required": false,
+            "in": "query",
+            "description": "Only images of this creator (id)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "crossClient",
+            "required": false,
+            "in": "query",
+            "description": "Group across clients (key = dHash alone). fullAccess principals only, 403 otherwise.",
+            "schema": {
+              "default": false,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminDuplicateGroupDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "crossClient without fullAccess"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Groups of images with the same dHash (scoped to accessible clients)",
         "tags": [
           "Admin - Images"
         ]
@@ -3543,8 +3655,30 @@
     },
     "/admin/image-share-links": {
       "get": {
+        "description": "An unknown image and an image outside the caller scope both give an empty list.",
         "operationId": "ImageShareLinksAdminController_listShareLinks",
         "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
           {
             "name": "clientId",
             "required": false,
@@ -3564,29 +3698,41 @@
             }
           },
           {
-            "name": "page",
+            "name": "status",
             "required": false,
             "in": "query",
             "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "perPage",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "expired",
+                "all"
+              ]
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Paginated list.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminImageShareLinksListResponseDto"
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminImageShareLinkResponseDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
                 }
               }
             }
@@ -3598,6 +3744,50 @@
           }
         ],
         "summary": "List image share links (scoped to accessible clients)",
+        "tags": [
+          "Admin - Image Share Links"
+        ]
+      },
+      "post": {
+        "operationId": "ImageShareLinksAdminController_createShareLink",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCreateShareLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminImageShareLinkResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid expiry, or IMAGE_NOT_PRIVATE"
+          },
+          "403": {
+            "description": "Image client outside scope"
+          },
+          "404": {
+            "description": "Image not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a share link on a private image (admin)",
         "tags": [
           "Admin - Image Share Links"
         ]
@@ -4889,8 +5079,9 @@
         "type": "object",
         "properties": {
           "expiresAt": {
+            "format": "date-time",
             "type": "string",
-            "description": "Expiration date for the share link",
+            "description": "Expiration date for the share link (future)",
             "example": "2025-11-05T12:00:00.000Z"
           }
         }
@@ -6207,6 +6398,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "dHash": {
+            "type": "string",
+            "nullable": true,
+            "description": "Perceptual hash (16 hex chars), null until computed"
+          },
           "fullPath": {
             "type": "string"
           },
@@ -6242,6 +6438,7 @@
           "storagePath",
           "createdAt",
           "updatedAt",
+          "dHash",
           "isBookmarked",
           "creatorId",
           "creator",
@@ -6288,6 +6485,112 @@
           "data",
           "pagination"
         ]
+      },
+      "PageMetaDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "AdminDuplicateImageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "size": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isPrivate": {
+            "type": "boolean"
+          },
+          "creatorExternalId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "originalName",
+          "width",
+          "height",
+          "size",
+          "createdAt",
+          "isPrivate",
+          "creatorExternalId"
+        ]
+      },
+      "AdminDuplicateGroupDto": {
+        "type": "object",
+        "properties": {
+          "dHash": {
+            "type": "string",
+            "example": "3c3e1e0f0f1e3c3c"
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true,
+            "description": "null only with crossClient=true"
+          },
+          "count": {
+            "type": "number"
+          },
+          "totalBytes": {
+            "type": "number",
+            "description": "Sum of size over the whole group"
+          },
+          "images": {
+            "description": "Up to 6, oldest first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminDuplicateImageDto"
+            }
+          }
+        },
+        "required": [
+          "dHash",
+          "clientId",
+          "count",
+          "totalBytes",
+          "images"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
       },
       "AdminClientCreatorClientDto": {
         "type": "object",
@@ -6414,6 +6717,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "dHash": {
+            "type": "string",
+            "nullable": true,
+            "description": "Perceptual hash (16 hex chars), null until computed"
+          },
           "fullPath": {
             "type": "string"
           },
@@ -6433,6 +6741,10 @@
           "activeShareLinks": {
             "type": "number",
             "description": "Number of active (non-expired) share links for this image"
+          },
+          "duplicates": {
+            "type": "number",
+            "description": "Other images with the same dHash in the caller scope (0 if unhashed or flat). Detail only."
           },
           "isBookmarked": {
             "type": "boolean",
@@ -6457,6 +6769,7 @@
           "storagePath",
           "createdAt",
           "updatedAt",
+          "dHash",
           "isBookmarked"
         ]
       },
@@ -7179,6 +7492,40 @@
           }
         }
       },
+      "AdminShareLinkImageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "isPrivate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "originalName",
+          "isPrivate"
+        ]
+      },
+      "AdminShareLinkClientDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "AdminImageShareLinkResponseDto": {
         "type": "object",
         "properties": {
@@ -7194,6 +7541,10 @@
           "readToken": {
             "type": "string"
           },
+          "shareUrl": {
+            "type": "string",
+            "description": "Absolute URL: BASE_URL + /images/:id?token="
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -7205,6 +7556,12 @@
           "isExpired": {
             "type": "boolean",
             "description": "True if the link is expired at response time"
+          },
+          "image": {
+            "$ref": "#/components/schemas/AdminShareLinkImageDto"
+          },
+          "client": {
+            "$ref": "#/components/schemas/AdminShareLinkClientDto"
           }
         },
         "required": [
@@ -7212,26 +7569,30 @@
           "imageId",
           "clientId",
           "readToken",
+          "shareUrl",
           "createdAt",
-          "isExpired"
+          "isExpired",
+          "image",
+          "client"
         ]
       },
-      "AdminImageShareLinksListResponseDto": {
+      "AdminCreateShareLinkDto": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AdminImageShareLinkResponseDto"
-            }
+          "imageId": {
+            "type": "string",
+            "description": "Image ID (must be private)"
           },
-          "pagination": {
-            "$ref": "#/components/schemas/AdminPaginationResponseDto"
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Expiry, in the future and at most 365 days out",
+            "example": "2026-11-05T12:00:00.000Z"
           }
         },
         "required": [
-          "data",
-          "pagination"
+          "imageId",
+          "expiresAt"
         ]
       },
       "AdminBookmarkResponseDto": {
