@@ -1,11 +1,13 @@
 # FileHarbor — Backlog
 
-Aggiornato al 2026-10-14. Nasce da una revisione multi-agente delle feature possibili (integratori,
+Aggiornato al 2026-10-22 (§2 rivisto, nuova §2b). Nasce da una revisione multi-agente delle feature possibili (integratori,
 ops/sicurezza, console/end-user), passata al vaglio di un revisore critico sul codice, e dalla revisione
 dei commit `50ae9c9`, `edf5424`, `c42848a`, `02f658a`.
 
 Contesto che guida le priorità: pochi tenant, un solo sviluppatore, storage su disco locale. Articuno è
 l'unico consumer reale dell'API client (Gatherly e Beacon salvano URL, Meridian usa solo l'admin).
+**Dal 2026-10:** anche Almanac carica (archivio DeviantArt, immagini + avatar autori) tramite l'SDK
+`@heyatom/client`, che ora esiste — due consumer, non più uno.
 
 ---
 
@@ -57,6 +59,7 @@ In ordine di valore stimato. Non vanno fatte tutte: ognuna parte quando c'è un 
 
 1. **Bulk ops admin** (delete, tag, privacy, aggiungi ad album) — `POST admin/images/bulk`,
    `admin/videos/bulk`. Oggi Meridian fa un loop di chiamate (`images/index.vue:429`). **S**
+   — *parziale*: `POST admin/images/bulk-delete` fatto (`aeb84be`); restano tag/privacy/album e i video.
 2. **API key salvata come hash** (sha256 + prefisso visibile). Niente multi-key né rotazione con overlap:
    con un solo consumer basta cambiare l'env. **S**
 3. **`fit=cover` + `position`** sulle trasformazioni (oggi sempre `fit: 'inside'`), per le cover
@@ -64,6 +67,7 @@ In ordine di valore stimato. Non vanno fatte tutte: ognuna parte quando c'è un 
 4. **Gestione tag**: rename/merge/delete con conteggi (`tag.controller.ts` ha solo `GET`). **S**
 5. **Filtri lista più ricchi** (isPrivate, range di date, `q` su nome+descrizione, stato di
    ottimizzazione/falliti) per l'admin, aggiunti quando servono a Meridian. **S**
+   — *parziale*: `isPrivate` fatto (`2ab1eda`), ricerca avatar per username/externalId (`411007e`).
 6. **`DELETE admin/creators/:id`** con cascata su file e audit (diritto all'oblio). **S-M**
 7. **Alt text / caption** su Image e Video, se Articuno li usa. **XS**
 8. **Share link e album token in Meridian**: l'API admin per gli share link esiste già, manca la UI;
@@ -73,11 +77,34 @@ In ordine di valore stimato. Non vanno fatte tutte: ognuna parte quando c'è un 
 10. **Faststart MP4** (`-movflags +faststart`) all'upload, da fare insieme a un altro intervento sui video.
     **XS**
 
+## 2b. Nuove idee (2026-10-22)
+
+Dalla lettura dell'app (schema, controller, consumer). Stessa regola di §2: si parte con un caso d'uso.
+Le prime quattro servono ai siti Nuxt (portfolio, puma-arts, sgweb, Articuno) che mostrano immagini.
+
+| # | Feature | Perché / dove | Effort |
+|---|---|---|---|
+| 2b.1 | **Placeholder: ThumbHash/BlurHash + colore dominante** calcolati all'upload (Sharp ha già i pixel), salvati su `Image` ed esposti in `info` | Blur-up nei siti senza una seconda richiesta; oggi il layout salta finché l'immagine non arriva | S |
+| 2b.2 | **`srcset` pronto** nella risposta `info`: lista di URL sulle `VARIANT_SIZES` ≤ larghezza originale | I client oggi costruiscono a mano i `?w=`; con lo snapping ogni URL sarebbe comunque una variante in cache | XS |
+| 2b.3 | **Focal point** (`focusX`/`focusY` 0–1 su `Image`, settabile da PATCH e Meridian), usato da `fit=cover` (§2.3) | Senza, `cover` taglia al centro e decapita i ritratti. Va fatto insieme a §2.3 | XS (sopra 2.3) |
+| 2b.4 | **`format=auto` / AVIF**: negoziazione su `Accept` (avif → webp → jpeg) con `Vary: Accept`; `avif` aggiunto a `GetImageDto` (oggi `webp`/`jpeg`/`png`) | 20–30% di byte in meno sulle foto. Attenzione: AVIF costa CPU in encoding → passa dal semaforo e conta nel limite di 20 varianti | S |
+| 2b.5 | **Throttle per API key** invece che per IP sulle route client autenticate (key = `clientId`, store in memoria come oggi) | Almanac si autolimita a 10/60s (`FILEHARBOR_MIN_INTERVAL_MS`) perché il bucket è per IP: un servizio fidato dietro la stessa rete paga per tutti. Non è lo "store condiviso" scartato in §3 | XS |
+| 2b.6 | **Webhook mancanti**: `image.updated` (privacy, descrizione, tag), `video.updated`, item video negli album | Oggi un cambio di `isPrivate` via PATCH (`d7151a5`) non arriva a nessuno | XS |
+| 2b.7 | **Riprova ottimizzazione da Meridian**: `POST admin/images/:id/reoptimize` (azzera `optimizeAttempts`) + filtro "falliti" (§2.5) | L'alert `fileharbor_optimize_given_up > 0` oggi si risolve solo in SQL | XS |
+| 2b.8 | **Rigenera thumbnail/varianti** (`POST admin/images/:id/regenerate`, svuota `variants/`) | Dopo un cambio di `THUMBNAIL_SIZE`/qualità, o un thumb corrotto; oggi l'unica via è cancellare e ricaricare (id nuovo, URL rotti) | S |
+| 2b.9 | **Poster video a scelta**: `?t=<sec>` sul thumbnail all'upload o `PATCH admin/videos/:id/poster` | Il frame fisso iniziale è spesso nero/dissolvenza | S |
+| 2b.10 | **Metadati EXIF utili conservati prima dello strip** (data scatto, fotocamera, obiettivo) in colonne/JSON su `Image`; GPS mai | Gallerie di portfolio e puma-arts ordinano per data di scatto, non di upload | S |
+| 2b.11 | **Metrica `fileharbor_storage_bytes{client}`** (gauge lazy come il backlog di ottimizzazione) + alert di crescita | Il disco locale è il vincolo vero (§1.3): sapere *chi* lo riempie prima che la readiness cada | XS |
+| 2b.12 | **Download ZIP di un album** (`GET /albums/:id/zip`, stream con `archiver`, stessi controlli di accesso/token) | Consegna a cliente di un set (puma-arts). Solo se arriva la richiesta: nuova dipendenza | M |
+
+Escluse di proposito: upload da URL lato server (SSRF; Almanac scarica già da sé), signed URL stateless
+(gli share link coprono il caso), gestione `AdminPrincipal` via API (scelta di sicurezza, vedi CLAUDE.md).
+
 ## 3. Scartate (per ora)
 
 Motivo comune: nessun consumer oggi. Si riconsiderano se cambia il contesto.
 
-- Storage S3/R2 pluggable · Pipeline video HLS/transcoding · SDK TypeScript `@heyatom/fileharbor-client`
+- Storage S3/R2 pluggable · Pipeline video HLS/transcoding · ~~SDK TypeScript~~ (fatto: `@heyatom/client`)
 - Webhook HTTP firmati con retry (nessun ricevitore oltre Discord) · Upload diretto da browser
 - Dedup sha256 / integrity scrub · Moderazione / ClamAV (tutti gli uploader sono servizi fidati)
 - Soft delete / cestino (c'è il backup) · Quote per client (un solo owner)
