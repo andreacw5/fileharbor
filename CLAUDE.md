@@ -89,6 +89,7 @@ No `job` module: each cron lives next to the module it serves (`ScheduleModule.f
 | `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
 | `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar/video dirs with no DB row (older than 1h) |
 | `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
+| `StorageSnapshotJob.snapshotStorage` | 00:30 UTC (+ at boot if today has none) | upserts `storage_snapshots`: one row per client × kind (IMAGE/VIDEO/AVATAR), zeros included |
 
 Deletes remove the DB row first, then the files; a failed file delete only logs a `warn` and
 leaves the dir to this sweep (a row pointing at missing files would be worse than a stray dir).
@@ -135,6 +136,13 @@ Three parts:
   hash (flat image) never counts as a duplicate. Never auto-delete: deleting is the bulk-delete.
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
   scoped totals, a 7-day trend and a per-day chart. `totalStorage` / `newStorage` sum image, video and avatar bytes.
+  **Storage report** (plan 04): `StorageSnapshot` is the only storage history (live rows rewrite the past on
+  delete/optimize), per client, never per creator. `storageByKind` + `dailyChart[].storage` (snapshot bytes,
+  `null` on a day with none) on `GET admin/stats`; `GET admin/stats/storage?from&to&clientId` (bare object,
+  ≤ 366 days, series `null` before `firstSnapshot`, `byClient` live); `GET admin/stats/storage/creators`
+  (`{ data, meta }`, live, **`library.manage`**). Every byte figure is the originals' `size`: no thumbs, no
+  cached variants. All live per-client sums go through `storageUsageByClient` (`statistics/storage-usage.ts`),
+  shared with `ClientService` — never a second copy of the query.
 
 ### Guard
 

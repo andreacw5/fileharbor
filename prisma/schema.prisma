@@ -43,13 +43,14 @@ model Client {
   ownerPrincipalId String?
 
   // Relations
-  creators       Creator[]
-  images         Image[]
-  avatars        Avatar[]
-  albums         Album[]
-  tags           Tag[]
-  videos         Video[]
-  ownerPrincipal AdminPrincipal? @relation(fields: [ownerPrincipalId], references: [id], onDelete: Restrict)
+  creators         Creator[]
+  images           Image[]
+  avatars          Avatar[]
+  albums           Album[]
+  tags             Tag[]
+  videos           Video[]
+  storageSnapshots StorageSnapshot[]
+  ownerPrincipal   AdminPrincipal?   @relation(fields: [ownerPrincipalId], references: [id], onDelete: Restrict)
 
   @@index([ownerPrincipalId])
   @@map("clients")
@@ -396,4 +397,29 @@ model ImageShareLink {
 
   @@index([imageId])
   @@map("image_share_links")
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AVATAR
+}
+
+// Daily per-client storage (plan 04), written by StorageSnapshotJob at 00:30 UTC: the
+// only history of storage, since live rows rewrite the past on delete and optimize.
+// `bytes` sums the originals' `size`, like totalStorage (no thumbs, no cached variants).
+model StorageSnapshot {
+  id        String    @id @default(uuid())
+  day       DateTime  @db.Date // UTC day the snapshot was taken
+  clientId  String
+  kind      MediaKind
+  count     Int
+  bytes     BigInt
+  createdAt DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([day, clientId, kind])
+  @@index([clientId, day])
+  @@map("storage_snapshots")
 }

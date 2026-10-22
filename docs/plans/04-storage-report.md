@@ -1,7 +1,7 @@
 ---
 type: plan
 service: fileharbor
-status: open
+status: in-progress
 estimate: 2d
 updated: 2026-10-22
 verified: 4774bd3
@@ -151,6 +151,23 @@ Byte come `number` (esatto fino a 8 PiB, stessa scelta di `sumBytes`). `to < fro
 2. **Storia per creator**: il piano dà solo il presente. Serve la crescita per creator (righe = creator
    × 3 al giorno)?
 3. **Fuso**: snapshot a mezzanotte UTC, come `dailyChart`. Va bene per una console italiana?
+
+## Implementazione (2026-10-22)
+
+Fatto come da piano, con queste scelte:
+
+- `day` = giorno UTC in cui lo snapshot è preso (00:30): lo stato a inizio giornata. Al boot il job gira
+  se oggi non ha righe (fire-and-forget, `runExclusive`), quindi il giorno 0 arriva col deploy; nessuno
+  script a parte.
+- `from`/`to` opzionali: default ultimi 30 giorni. Range rovesciato, oltre 366 gg o data impossibile
+  (`2026-02-31`) → `400 VALIDATION_FAILED`.
+- Serie: un giorno con almeno una riga nello scope conta 0 i tipi mancanti, uno senza righe è `null`.
+- Meridian: le tile del report mostrano il valore **live** (da `byClient`), sparkline e delta dagli
+  snapshot; la tabella creator non c'è proprio senza `library.manage`.
+- Domande aperte: risposte di default (numero dal DB, niente storia per creator, UTC). Da rivedere se serve.
+
+Da verificare dopo il deploy (sotto): niente test E2E con Bastion, la UI Meridian non è stata provata
+nel browser.
 
 ## Criteri di completamento
 

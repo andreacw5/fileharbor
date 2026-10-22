@@ -359,13 +359,17 @@ describe('ClientService', () => {
     it('updates the client and returns it enriched with stats', async () => {
       mockPrismaService.client.update.mockResolvedValue(updatedClient);
       mockPrismaService.image.groupBy.mockResolvedValue([
-        { clientId: 'client-123', _sum: { size: 1024 } },
+        { clientId: 'client-123', _count: { _all: 1 }, _sum: { size: 1024 } },
       ]);
       mockPrismaService.video.groupBy.mockResolvedValue([
-        { clientId: 'client-123', _sum: { size: BigInt(4096) } },
+        {
+          clientId: 'client-123',
+          _count: { _all: 1 },
+          _sum: { size: BigInt(4096) },
+        },
       ]);
       mockPrismaService.avatar.groupBy.mockResolvedValue([
-        { clientId: 'client-123', _sum: { size: 512 } },
+        { clientId: 'client-123', _count: { _all: 1 }, _sum: { size: 512 } },
       ]);
 
       const result = await service.updateClientWithStats('client-123', {

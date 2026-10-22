@@ -70,6 +70,20 @@ export class DailyDataPointDto {
   @ApiProperty() @Expose() avatars: number;
   @ApiProperty() @Expose() albums: number;
   @ApiProperty() @Expose() videos: number;
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description:
+      "Bytes in scope from that day's storage snapshot (00:30 UTC); null when there is none",
+  })
+  @Expose()
+  storage: number | null;
+}
+
+export class StorageByKindDto {
+  @ApiProperty({ description: 'Bytes' }) @Expose() images: number;
+  @ApiProperty({ description: 'Bytes' }) @Expose() videos: number;
+  @ApiProperty({ description: 'Bytes' }) @Expose() avatars: number;
 }
 
 export class StatsTrendDto {
@@ -104,6 +118,14 @@ export class AdminStatsResponseDto {
   @ApiProperty() @Expose() totalVideos: number;
   @ApiProperty() @Expose() totalStorage: number;
   @ApiProperty() @Expose() totalCreators: number;
+
+  @ApiProperty({
+    description: 'totalStorage split by kind (bytes)',
+    type: StorageByKindDto,
+  })
+  @Expose()
+  @Type(() => StorageByKindDto)
+  storageByKind: StorageByKindDto;
 
   @ApiProperty({
     description: 'New counts in the last 7 days',

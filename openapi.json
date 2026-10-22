@@ -4616,6 +4616,149 @@
         ]
       }
     },
+    "/admin/stats/storage": {
+      "get": {
+        "description": "Bytes of the originals: thumbnails and cached variants are not counted.",
+        "operationId": "StatisticsController_getStorageReport",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First day (UTC), default `to` - 29 days",
+            "schema": {
+              "example": "2026-10-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last day (UTC, included), default today. Max 366 days from `from`.",
+            "schema": {
+              "example": "2026-10-30",
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Only this client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad range (to < from, > 366 days)"
+          },
+          "403": {
+            "description": "clientId out of scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Storage per day and kind (snapshots) and per client (live)",
+        "tags": [
+          "Admin - Statistics"
+        ]
+      }
+    },
+    "/admin/stats/storage/creators": {
+      "get": {
+        "operationId": "StatisticsController_getCreatorStorage",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Only this client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CreatorStorageDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "clientId out of scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Live storage per creator, biggest first",
+        "tags": [
+          "Admin - Statistics"
+        ]
+      }
+    },
     "/admin/tags": {
       "get": {
         "operationId": "TagController_listTags",
@@ -7871,6 +8014,28 @@
           "pagination"
         ]
       },
+      "StorageByKindDto": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "videos": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "avatars": {
+            "type": "number",
+            "description": "Bytes"
+          }
+        },
+        "required": [
+          "images",
+          "videos",
+          "avatars"
+        ]
+      },
       "StatsTrendDto": {
         "type": "object",
         "properties": {
@@ -7926,6 +8091,11 @@
           },
           "videos": {
             "type": "number"
+          },
+          "storage": {
+            "type": "number",
+            "nullable": true,
+            "description": "Bytes in scope from that day's storage snapshot (00:30 UTC); null when there is none"
           }
         },
         "required": [
@@ -7933,7 +8103,8 @@
           "images",
           "avatars",
           "albums",
-          "videos"
+          "videos",
+          "storage"
         ]
       },
       "AdminStatsResponseDto": {
@@ -7965,6 +8136,14 @@
           "totalCreators": {
             "type": "number"
           },
+          "storageByKind": {
+            "description": "totalStorage split by kind (bytes)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageByKindDto"
+              }
+            ]
+          },
           "last7Days": {
             "description": "New counts in the last 7 days",
             "allOf": [
@@ -7990,8 +8169,163 @@
           "totalVideos",
           "totalStorage",
           "totalCreators",
+          "storageByKind",
           "last7Days",
           "dailyChart"
+        ]
+      },
+      "StorageSeriesPointDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-22"
+          },
+          "images": {
+            "type": "number",
+            "nullable": true
+          },
+          "videos": {
+            "type": "number",
+            "nullable": true
+          },
+          "avatars": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "date",
+          "images",
+          "videos",
+          "avatars"
+        ]
+      },
+      "KindUsageDto": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number",
+            "description": "Bytes"
+          }
+        },
+        "required": [
+          "count",
+          "bytes"
+        ]
+      },
+      "ClientStorageDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "images": {
+            "$ref": "#/components/schemas/KindUsageDto"
+          },
+          "videos": {
+            "$ref": "#/components/schemas/KindUsageDto"
+          },
+          "avatars": {
+            "$ref": "#/components/schemas/KindUsageDto"
+          }
+        },
+        "required": [
+          "clientId",
+          "name",
+          "images",
+          "videos",
+          "avatars"
+        ]
+      },
+      "StorageReportDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "firstSnapshot": {
+            "type": "string",
+            "nullable": true,
+            "description": "First snapshot in scope: the series is real from this day"
+          },
+          "series": {
+            "description": "One point per day, bytes; null on days with no snapshot",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageSeriesPointDto"
+            }
+          },
+          "byClient": {
+            "description": "Live, biggest first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientStorageDto"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "firstSnapshot",
+          "series",
+          "byClient"
+        ]
+      },
+      "CreatorStorageDto": {
+        "type": "object",
+        "properties": {
+          "creatorId": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "images": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "videos": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "avatars": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "totalBytes": {
+            "type": "number"
+          },
+          "itemCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "creatorId",
+          "externalId",
+          "username",
+          "clientId",
+          "images",
+          "videos",
+          "avatars",
+          "totalBytes",
+          "itemCount"
         ]
       },
       "TagTagClientDto": {
