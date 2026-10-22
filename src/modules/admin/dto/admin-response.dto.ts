@@ -298,16 +298,40 @@ export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty() @Expose() message: string;
 }
 
+export class AdminShareLinkImageDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() originalName: string;
+  @ApiProperty() @Expose() isPrivate: boolean;
+}
+
+export class AdminShareLinkClientDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() name: string;
+}
+
 export class AdminImageShareLinkResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() imageId: string;
   @ApiProperty() @Expose() clientId: string;
   @ApiProperty() @Expose() readToken: string;
+  @ApiProperty({ description: 'Absolute URL: BASE_URL + /images/:id?token=' })
+  @Expose()
+  shareUrl: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiPropertyOptional() @Expose() @Type(() => Date) expiresAt?: Date;
   @ApiProperty({ description: 'True if the link is expired at response time' })
   @Expose()
   isExpired: boolean;
+
+  @ApiProperty({ type: AdminShareLinkImageDto })
+  @Expose()
+  @Type(() => AdminShareLinkImageDto)
+  image: AdminShareLinkImageDto;
+
+  @ApiProperty({ type: AdminShareLinkClientDto })
+  @Expose()
+  @Type(() => AdminShareLinkClientDto)
+  client: AdminShareLinkClientDto;
 }
 
 export class AdminPaginationResponseDto {
@@ -315,18 +339,6 @@ export class AdminPaginationResponseDto {
   @ApiProperty() @Expose() perPage: number;
   @ApiProperty() @Expose() total: number;
   @ApiProperty() @Expose() totalPages: number;
-}
-
-export class AdminImageShareLinksListResponseDto {
-  @ApiProperty({ type: [AdminImageShareLinkResponseDto] })
-  @Expose()
-  @Type(() => AdminImageShareLinkResponseDto)
-  data: AdminImageShareLinkResponseDto[];
-
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  @Expose()
-  @Type(() => AdminPaginationResponseDto)
-  pagination: AdminPaginationResponseDto;
 }
 
 export class AdminBookmarkResponseDto {

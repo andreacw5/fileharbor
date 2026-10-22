@@ -492,7 +492,7 @@ export class ImageController {
 
     const validCreatorExternalId =
       this.imageService.validateCreatorExternalId(creatorId);
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
+    const expiresAt = dto.expiresAt;
 
     try {
       const result = await this.imageService.createShareLink(

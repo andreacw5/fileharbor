@@ -1,21 +1,28 @@
 import { SkipThrottle } from '@nestjs/throttler';
 import {
+  BadRequestException,
+  Body,
   Controller,
-  Get,
   Delete,
+  Get,
+  NotFoundException,
   Param,
+  Post,
   Query,
   UseGuards,
-  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  ApiPaginatedResponse,
+  paginate,
+  PaginatedResult,
+} from '@heyatom/nest-common';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
@@ -23,15 +30,37 @@ import { RequirePermission } from '@/modules/bastion/decorators/require-permissi
 import { Audit, AuditRequest } from '@heyatom/bastion-client/nest';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ImageService } from '@/modules/image/image.service';
+import { RouteHelperService } from '@/utils/route.utils';
+import { Prisma } from '@prisma/client';
 import {
   AdminDeleteResponseDto,
   AdminImageShareLinkResponseDto,
-  AdminImageShareLinksListResponseDto,
 } from '../dto/admin-response.dto';
+import {
+  AdminCreateShareLinkDto,
+  AdminShareLinkListQuery,
+} from '../dto/admin-share-link.dto';
 import {
   assertClientAccess,
   resolveAllowedClients,
 } from '../helpers/admin-access.helper';
+
+const LINK_IMAGE_SELECT = {
+  id: true,
+  originalName: true,
+  isPrivate: true,
+  clientId: true,
+  client: { select: { id: true, name: true } },
+} satisfies Prisma.ImageSelect;
+
+type LinkImage = Prisma.ImageGetPayload<{ select: typeof LINK_IMAGE_SELECT }>;
+type LinkRow = {
+  id: string;
+  imageId: string;
+  readToken: string;
+  createdAt: Date;
+  expiresAt: Date | null;
+};
 
 @ApiTags('Admin - Image Share Links')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -43,145 +72,99 @@ import {
 @RequirePermission('fileharbor-media.manage')
 export class ImageShareLinksAdminController {
   constructor(
-    private readonly imageService: ImageService,
     private readonly prisma: PrismaService,
+    private readonly imageService: ImageService,
+    private readonly route: RouteHelperService,
   ) {}
 
   @Get()
   @ApiOperation({
     summary: 'List image share links (scoped to accessible clients)',
+    description:
+      'An unknown image and an image outside the caller scope both give an empty list.',
   })
-  @ApiQuery({
-    name: 'clientId',
-    required: false,
-    description: 'Filter by client ID',
-  })
-  @ApiQuery({
-    name: 'imageId',
-    required: false,
-    description: 'Filter by image ID',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminImageShareLinksListResponseDto })
+  @ApiPaginatedResponse(AdminImageShareLinkResponseDto)
   async listShareLinks(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('imageId') imageId?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ): Promise<AdminImageShareLinksListResponseDto> {
-    const pageNum = Number(page) || 1;
-    const take = Math.min(Number(perPage) || 20, 100);
-    const skip = Math.max((pageNum - 1) * take, 0);
-
-    const allowedClients = resolveAllowedClients(adminUser);
-
-    let shareLinks: Array<{
-      id: string;
-      imageId: string;
-      clientId: string;
-      readToken: string;
-      createdAt: Date;
-      expiresAt: Date | null;
-    }> = [];
-    let total = 0;
-
-    if (imageId) {
-      const image = await this.imageService.getImageById(imageId);
-
-      if (clientId && image.clientId !== clientId) {
-        total = 0;
-      } else if (
-        allowedClients !== null &&
-        !allowedClients.includes(image.clientId)
-      ) {
-        total = 0;
-      } else {
-        const links = await this.imageService.getShareLinks(
-          image.id,
-          image.clientId,
-          image.creatorId,
-        );
-        const mapped = links.map((link) => ({
-          id: link.id,
-          imageId: link.imageId,
-          clientId: image.clientId,
-          readToken: link.readToken,
-          createdAt: link.createdAt,
-          expiresAt: link.expiresAt ?? null,
-        }));
-
-        total = mapped.length;
-        shareLinks = mapped.slice(skip, skip + take);
-      }
+    @Query() query: AdminShareLinkListQuery = new AdminShareLinkListQuery(),
+  ): Promise<PaginatedResult<AdminImageShareLinkResponseDto>> {
+    // Admin scope is the client, not the uploader: go straight to the table.
+    const where: Prisma.ImageShareLinkWhereInput = {};
+    if (query.imageId) where.imageId = query.imageId;
+    if (query.clientId) {
+      assertClientAccess(adminUser, query.clientId);
+      where.image = { clientId: query.clientId };
     } else {
-      const where: any = {};
-      if (clientId) {
-        assertClientAccess(adminUser, clientId);
-        where.image = { clientId };
-      } else if (allowedClients !== null) {
-        where.image = { clientId: { in: allowedClients } };
-      }
-
-      const [rows, count] = await Promise.all([
-        this.prisma.imageShareLink.findMany({
-          where,
-          include: {
-            image: {
-              select: {
-                clientId: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take,
-        }),
-        this.prisma.imageShareLink.count({ where }),
-      ]);
-
-      shareLinks = rows.map((row) => ({
-        id: row.id,
-        imageId: row.imageId,
-        clientId: row.image.clientId,
-        readToken: row.readToken,
-        createdAt: row.createdAt,
-        expiresAt: row.expiresAt,
-      }));
-      total = count;
+      where.image = { clientId: { in: resolveAllowedClients(adminUser) } };
+    }
+    // Same "active" predicate as findAdminImageById's activeShareLinks count.
+    const now = new Date();
+    if (query.status === 'active') {
+      where.OR = [{ expiresAt: null }, { expiresAt: { gt: now } }];
+    } else if (query.status === 'expired') {
+      where.expiresAt = { lte: now };
     }
 
-    const now = new Date();
-    const data = shareLinks.map((link) =>
-      plainToInstance(
-        AdminImageShareLinkResponseDto,
-        {
-          id: link.id,
-          imageId: link.imageId,
-          clientId: link.clientId,
-          readToken: link.readToken,
-          createdAt: link.createdAt,
-          expiresAt: link.expiresAt,
-          isExpired: !!link.expiresAt && link.expiresAt <= now,
-        },
-        { excludeExtraneousValues: true },
-      ),
-    );
+    const [rows, total] = await Promise.all([
+      this.prisma.imageShareLink.findMany({
+        where,
+        include: { image: { select: LINK_IMAGE_SELECT } },
+        orderBy: { createdAt: 'desc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.imageShareLink.count({ where }),
+    ]);
 
-    return plainToInstance(
-      AdminImageShareLinksListResponseDto,
-      {
-        data,
-        pagination: {
-          page: pageNum,
-          perPage: take,
-          total,
-          totalPages: Math.ceil(total / take),
-        },
-      },
-      { excludeExtraneousValues: true },
+    return paginate(
+      rows.map((row) => this.toResponse(row, row.image, now)),
+      total,
+      query,
     );
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create a share link on a private image (admin)' })
+  @ApiResponse({ status: 201, type: AdminImageShareLinkResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid expiry, or IMAGE_NOT_PRIVATE',
+  })
+  @ApiResponse({ status: 403, description: 'Image client outside scope' })
+  @ApiResponse({ status: 404, description: 'Image not found' })
+  // Never the token: whoever reads the audit log must not get the image.
+  @Audit('fh_share_link.created', {
+    metadata: (r: AdminImageShareLinkResponseDto) => ({
+      shareLinkId: r.id,
+      imageId: r.imageId,
+      expiresAt: r.expiresAt,
+    }),
+  })
+  async createShareLink(
+    @Body() dto: AdminCreateShareLinkDto,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<AdminImageShareLinkResponseDto> {
+    const image = await this.prisma.image.findUnique({
+      where: { id: dto.imageId },
+      select: LINK_IMAGE_SELECT,
+    });
+    if (!image) throw new NotFoundException('Image not found');
+    assertClientAccess(adminUser, image.clientId);
+
+    // A link on a public image adds nothing today, and would silently grant
+    // access the day the image turns private.
+    if (!image.isPrivate) {
+      throw new BadRequestException({
+        code: 'IMAGE_NOT_PRIVATE',
+        message: 'Share links can only be created on private images',
+      });
+    }
+
+    const link = await this.imageService.createShareLinkFor(
+      image.id,
+      dto.expiresAt,
+    );
+    return this.toResponse(link, image, new Date());
   }
 
   @Delete(':id')
@@ -204,12 +187,7 @@ export class ImageShareLinksAdminController {
     const shareLink = await this.prisma.imageShareLink.findUnique({
       where: { id },
       include: {
-        image: {
-          select: {
-            clientId: true,
-            creatorId: true,
-          },
-        },
+        image: { select: { clientId: true } },
       },
     });
 
@@ -219,15 +197,34 @@ export class ImageShareLinksAdminController {
 
     assertClientAccess(adminUser, shareLink.image.clientId);
 
-    await this.imageService.deleteShareLink(
-      id,
-      shareLink.image.clientId,
-      shareLink.image.creatorId,
-    );
+    await this.prisma.imageShareLink.delete({ where: { id } });
 
     return plainToInstance(
       AdminDeleteResponseDto,
       { success: true, message: 'Share link deleted successfully' },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  private toResponse(
+    link: LinkRow,
+    image: LinkImage,
+    now: Date,
+  ): AdminImageShareLinkResponseDto {
+    return plainToInstance(
+      AdminImageShareLinkResponseDto,
+      {
+        id: link.id,
+        imageId: link.imageId,
+        clientId: image.clientId,
+        readToken: link.readToken,
+        shareUrl: `${this.route.fullUrl('images', link.imageId)}?token=${link.readToken}`,
+        createdAt: link.createdAt,
+        expiresAt: link.expiresAt,
+        isExpired: !!link.expiresAt && link.expiresAt <= now,
+        image,
+        client: image.client,
+      },
       { excludeExtraneousValues: true },
     );
   }

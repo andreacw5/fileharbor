@@ -766,20 +766,22 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Image not found');
     }
 
-    const readToken = randomUUID();
-
-    const shareLink = await this.prisma.imageShareLink.create({
-      data: {
-        imageId,
-        readToken,
-        expiresAt: expiresAt || null,
-      },
-    });
+    const shareLink = await this.createShareLinkFor(imageId, expiresAt);
 
     this.logger.log(
       `[createShareLink] Success - ID: ${imageId}, Link: ${shareLink.id}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
     return this.formatShareLinkResponse(shareLink);
+  }
+
+  /**
+   * Create the link row, no ownership check: callers authorize first
+   * (`findOwnedImage` on the client path, client scope on the admin one).
+   */
+  createShareLinkFor(imageId: string, expiresAt?: Date) {
+    return this.prisma.imageShareLink.create({
+      data: { imageId, readToken: randomUUID(), expiresAt: expiresAt || null },
+    });
   }
 
   /**

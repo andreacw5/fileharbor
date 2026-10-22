@@ -71,8 +71,8 @@ In ordine di valore stimato. Non vanno fatte tutte: ognuna parte quando c'è un 
    — *parziale*: `isPrivate` fatto (`2ab1eda`), ricerca avatar per username/externalId (`411007e`).
 6. **`DELETE admin/creators/:id`** con cascata su file e audit (diritto all'oblio). **S-M**
 7. **Alt text / caption** su Image e Video, se Articuno li usa. **XS**
-8. **Share link e album token in Meridian**: l'API admin per gli share link esiste già, manca la UI;
-   mancano anche gli endpoint per i token album. **S**
+8. **Album token in Meridian**: mancano gli endpoint admin per i token album. **S**
+   — share link fatti col [piano 02](plans/02-share-links-admin.md).
 9. **Restore di prova** del backup storage + mini runbook (lo script con rotazione è in `server-backup`).
    **S**
 10. **Faststart MP4** (`-movflags +faststart`) all'upload, da fare insieme a un altro intervento sui video.
