@@ -164,6 +164,8 @@ export class ClientsAdminController {
       data.currentTinifyUsage = dto.currentTinifyUsage;
     if (dto.currentTinifyLimit !== undefined)
       data.currentTinifyLimit = dto.currentTinifyLimit;
+    if ('tinifyAutoMinBytes' in dto)
+      data.tinifyAutoMinBytes = dto.tinifyAutoMinBytes ?? null;
     if ('bastionTenantSlug' in dto) {
       assertTenantSlugAllowed(adminUser, dto.bastionTenantSlug);
       data.bastionTenantSlug = dto.bastionTenantSlug ?? null;

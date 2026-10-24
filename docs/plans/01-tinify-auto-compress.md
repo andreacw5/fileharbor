@@ -1,10 +1,10 @@
 ---
 type: plan
 service: fileharbor
-status: in-progress
+status: done
 estimate: 1d
-updated: 2026-10-22
-verified: 3d6a9ad
+updated: 2026-10-24
+verified: ab856c6
 ---
 
 # 01 · Compressione Tinify automatica delle immagini grandi
@@ -207,6 +207,14 @@ a 0. Regola in `monitoring/alerts.yml` solo se serve; un giorno di `failed > 0` 
 - `.env.example`, `config.validation.ts`.
 - `../docs/integrations/fileharbor.md` solo se il campo client è esposto ai consumer (non lo è:
   è admin-only).
+
+## Dubbi aperti
+
+- `TinifyResetJob` azzera il contatore alle 00:00 del 1° (ora del server). Se Tinify azzera il suo
+  mese più tardi, la prima risposta dopo il nostro reset porta ancora il `Compression-Count` del mese
+  vecchio e `syncTinifyUsage` lo riscrive: il mese nuovo parte dal conteggio vecchio (bloccato, se
+  era al limite) finché Tinify non azzera. Da
+  verificare quando e in che fuso azzera Tinify.
 
 ## Fuori scope
 

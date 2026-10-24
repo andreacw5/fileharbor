@@ -565,7 +565,7 @@ export class ImagesAdminController {
   @ApiResponse({
     status: 400,
     description:
-      'Tinify not enabled, API key not configured, monthly limit reached, or image already compressed with Tinify',
+      'Tinify not enabled, API key not configured, monthly limit reached, image not optimized yet, or already compressed with Tinify',
   })
   @ApiResponse({ status: 403, description: 'Access denied' })
   @ApiResponse({ status: 404, description: 'Image or client not found' })

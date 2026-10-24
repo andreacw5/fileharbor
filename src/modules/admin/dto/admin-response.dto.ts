@@ -41,6 +41,13 @@ export class AdminClientResponseDto {
   currentTinifyLimit: number;
   @ApiPropertyOptional({
     description:
+      'Images above this size (bytes) are auto-compressed with Tinify; null = off',
+    nullable: true,
+  })
+  @Expose()
+  tinifyAutoMinBytes: number | null;
+  @ApiPropertyOptional({
+    description:
       'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar',
     nullable: true,
   })

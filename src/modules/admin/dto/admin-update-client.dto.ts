@@ -7,6 +7,7 @@ import {
   MaxLength,
   IsInt,
   Min,
+  Max,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { DISCORD_WEBHOOK_URL } from '@/modules/webhook/webhook.service';
@@ -71,6 +72,19 @@ export class AdminUpdateClientDto {
   @IsInt()
   @Min(1)
   currentTinifyLimit?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Auto-compress with Tinify the images above this size, in bytes (1048576 = 1 MB is a sensible start). ' +
+      'null turns auto-compression off. Spends the same monthly quota as manual compression.',
+    example: 1048576,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2147483647) // INTEGER column
+  tinifyAutoMinBytes?: number | null;
 
   @ApiPropertyOptional({
     description:

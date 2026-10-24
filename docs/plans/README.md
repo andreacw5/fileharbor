@@ -2,7 +2,7 @@
 
 | # | Piano | Stato |
 |---|---|---|
-| 01 | [Compressione Tinify automatica](01-tinify-auto-compress.md) | open |
+| 01 | [Compressione Tinify automatica](01-tinify-auto-compress.md) | done |
 | 02 | [Share-link dalla console](02-share-links-admin.md) | in-progress |
 | 03 | [Immagini duplicate (dHash)](03-duplicate-detection.md) | in-progress |
 | 04 | [Report storage nel tempo](04-storage-report.md) | in-progress |

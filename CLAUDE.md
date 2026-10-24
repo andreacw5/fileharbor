@@ -89,6 +89,7 @@ No `job` module: each cron lives next to the module it serves (`ScheduleModule.f
 | `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
 | `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar/video dirs with no DB row (older than 1h) |
 | `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
+| `TinifyAutoJob.compressLargeImages` | hourly at :30 | Tinify-compresses optimized images above the client's `tinifyAutoMinBytes`, largest first |
 | `StorageSnapshotJob.snapshotStorage` | 00:30 UTC (+ at boot if today has none) | upserts `storage_snapshots`: one row per client × kind (IMAGE/VIDEO/AVATAR), zeros included |
 
 Deletes remove the DB row first, then the files; a failed file delete only logs a `warn` and
@@ -107,6 +108,17 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 (same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
+
+Tinify auto-compress is opt-in per client: `Client.tinifyAutoMinBytes` (`null` = off, set via
+`PATCH /admin/clients/:id`; 1048576 is the suggested start) is both flag and threshold, and still needs
+`tinifyActive` + a key. The job calls `ImageService.compressImageWithTinify`, so it shares the manual
+endpoint's quota (`currentTinifyUsage`/`currentTinifyLimit`, reserved atomically before the call, raised to
+Tinify's `Compression-Count`, set to the limit on a Tinify 429), checks and webhook. At most
+`TINIFY_AUTO_BATCH` (default 20) images per client per run, so the month's quota is spread. A failure bumps
+`Image.tinifyAttempts` (skipped at `MAX_OPTIMIZE_ATTEMPTS`, reset by SQL); a 401, a 429, our own limit
+(`code: TINIFY_LIMIT_REACHED`) or Tinify unreachable (no response, 60s timeout, 5xx) stops that client for
+the run instead, so an outage never gives up on images. The manual endpoint refuses rows not yet `isOptimized`. A compression that saves nothing keeps
+our file but still counts. Only `isOptimized` rows: the optimize job would re-encode a Tinify output.
 
 ## Admin Module
 
@@ -489,6 +501,7 @@ Swagger UI: `http://localhost:3000/docs` (when `ENABLE_SWAGGER` resolves to true
 - Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
 - `MetricsMiddleware` (all routes, applied by the package module) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`, requests the client abandons `status="499"`. `/health/*` is not instrumented.
 - `fileharbor_video_processing_failures_total{stage}` (counter, `stage` = `thumbnail` | `metadata`, both pre-initialized to 0): incremented by `VideoService.uploadVideo` when ffmpeg thumbnail or ffprobe metadata extraction fails. The upload still returns 2xx (no thumbnail, duration/width/height stored as null), so HTTP metrics stay green — a missing `ffmpeg-static`/`ffprobe-static` binary or the 30s timeout only shows here. Alert: `increase(fileharbor_video_processing_failures_total[1h]) > 0`.
+- `fileharbor_tinify_auto_total{result}` (counter, `result` = `compressed` | `skipped` | `failed`, pre-initialized to 0): `TinifyAutoJob` outcomes; `skipped` = the real file was already under the threshold. A day of `failed` with no `compressed` means a broken key. No alert rule.
 - Optimize backlog gauges (label `kind` = `image` | `avatar`, both always present), lazy `collect()` — no query until scraped; a DB error logs `warn` and keeps the previous value. Aggregates only (`count` / `_min`), same predicates as the optimize jobs (`OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE`, `storage.service.ts`):
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
   - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).

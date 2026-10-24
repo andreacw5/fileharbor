@@ -30,6 +30,7 @@ model Client {
   tinifyApiKey       String?
   currentTinifyUsage Int     @default(0) // Track current month's usage for billing purposes
   currentTinifyLimit Int     @default(500) // Monthly compression limit (default: 500 for free tier)
+  tinifyAutoMinBytes Int? // null = auto-compress off; else TinifyAutoJob compresses images above this size
 
   // Bastion tenant this client is mapped to for self-service (user-JWT) endpoints,
   // e.g. /me/avatar. Bastion tenant slugs are immutable, so this is a safe key.
@@ -100,6 +101,7 @@ model Image {
   optimizedAt      DateTime?
   optimizeAttempts Int       @default(0) // failed optimization runs; skipped at MAX_OPTIMIZE_ATTEMPTS
   tinifyOptimized  Boolean   @default(false) // Track if image was compressed with Tinify to avoid reprocessing
+  tinifyAttempts   Int       @default(0) // failed auto Tinify runs; skipped at MAX_OPTIMIZE_ATTEMPTS
   isPrivate        Boolean   @default(false)
   views            Int       @default(0)
   downloads        Int       @default(0)
@@ -125,6 +127,8 @@ model Image {
   @@index([isOptimized, createdAt])
   // Duplicate lookup (GET /admin/images?dHash=, duplicates count on the show).
   @@index([dHash])
+  // Serves TinifyAutoJob (per client, not yet compressed, largest first).
+  @@index([clientId, tinifyOptimized, size])
   @@map("images")
 }
 
