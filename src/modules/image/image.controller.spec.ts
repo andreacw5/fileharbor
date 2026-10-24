@@ -1,5 +1,10 @@
 import { ConfigService } from '@nestjs/config';
-import { NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
+import { UpdateImageMetadataDto } from './dto/update-image-metadata.dto';
 import type { BastionAuditService } from '@heyatom/bastion-client/nest';
 import { Response, Request } from 'express';
 import { ImageController } from './image.controller';
@@ -128,5 +133,30 @@ describe('ImageController client-surface audit', () => {
     });
 
     expect(audit.write).not.toHaveBeenCalled();
+  });
+});
+
+describe('UpdateImageMetadataDto.isPrivate', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  });
+  const validate = (body: Record<string, unknown>) =>
+    pipe.transform(body, { type: 'body', metatype: UpdateImageMetadataDto });
+
+  it('rejects null instead of passing it to Prisma', async () => {
+    await expect(validate({ isPrivate: null })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('accepts a boolean or no key at all', async () => {
+    await expect(validate({ isPrivate: false })).resolves.toMatchObject({
+      isPrivate: false,
+    });
+    await expect(validate({ description: 'x' })).resolves.not.toHaveProperty(
+      'isPrivate',
+    );
   });
 });

@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsBoolean,
+  ValidateIf,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateImageMetadataDto {
@@ -24,7 +30,8 @@ export class UpdateImageMetadataDto {
     description:
       'Make the image private or public. Bytes already served public may stay in browser and shared caches until they expire.',
   })
-  @IsOptional()
+  // Not @IsOptional: that lets null through to Prisma (non-nullable column → 500).
+  @ValidateIf((o) => o.isPrivate !== undefined)
   @IsBoolean()
   isPrivate?: boolean;
 }
