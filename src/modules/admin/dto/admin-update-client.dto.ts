@@ -7,6 +7,7 @@ import {
   MaxLength,
   IsInt,
   Min,
+  Max,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { DISCORD_WEBHOOK_URL } from '@/modules/webhook/webhook.service';
@@ -82,6 +83,7 @@ export class AdminUpdateClientDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(2147483647) // INTEGER column
   tinifyAutoMinBytes?: number | null;
 
   @ApiPropertyOptional({
