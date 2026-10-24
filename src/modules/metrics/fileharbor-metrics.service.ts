@@ -44,6 +44,7 @@ const QUEUED_AT: Record<MediaKind, AgeField> = {
 export class FileharborMetrics {
   private readonly logger = new Logger(FileharborMetrics.name);
   readonly videoProcessingFailures: Counter<'stage'>;
+  readonly tinifyAuto: Counter<'result'>;
 
   constructor(
     private readonly metrics: MetricsService,
@@ -61,6 +62,17 @@ export class FileharborMetrics {
     // Pre-initialized so increase() sees the very first failure.
     for (const stage of ['thumbnail', 'metadata']) {
       this.videoProcessingFailures.inc({ stage }, 0);
+    }
+
+    // TinifyAutoJob outcomes. A day of `failed` with no `compressed` means a broken key.
+    this.tinifyAuto = new Counter({
+      name: 'fileharbor_tinify_auto_total',
+      help: 'Images handled by the Tinify auto-compress job, by result',
+      labelNames: ['result'],
+      registers: [this.metrics.registry],
+    });
+    for (const result of ['compressed', 'skipped', 'failed']) {
+      this.tinifyAuto.inc({ result }, 0);
     }
 
     this.registerOptimizeGauges();

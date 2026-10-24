@@ -66,6 +66,8 @@ export const configValidationSchema = Joi.object({
   // at most this many at once; up to RENDER_QUEUE_LIMIT more wait, the rest 503.
   RENDER_CONCURRENCY: Joi.number().integer().min(1).default(2),
   RENDER_QUEUE_LIMIT: Joi.number().integer().min(0).default(20),
+  // TinifyAutoJob: images compressed per client per hourly run, so the monthly quota lasts
+  TINIFY_AUTO_BATCH: Joi.number().integer().min(1).default(20),
 
   // Rate Limiting
   THROTTLE_TTL: Joi.number().positive().default(60),

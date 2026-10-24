@@ -8,6 +8,8 @@ import { StorageModule } from '../storage/storage.module';
 import { CreatorModule } from '../creator/creator.module';
 import { ImageCleanupJob } from '@/modules/image/jobs/image.cleanup.job';
 import { TinifyResetJob } from '@/modules/image/jobs/tinify-reset.job';
+import { TinifyAutoJob } from '@/modules/image/jobs/tinify-auto.job';
+import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.module';
 
 @Module({
   imports: [
@@ -16,9 +18,10 @@ import { TinifyResetJob } from '@/modules/image/jobs/tinify-reset.job';
     StorageModule,
     HttpModule,
     CreatorModule,
+    FileharborMetricsModule,
   ],
   controllers: [ImageController],
-  providers: [ImageService, ImageCleanupJob, TinifyResetJob],
+  providers: [ImageService, ImageCleanupJob, TinifyResetJob, TinifyAutoJob],
   exports: [ImageService],
 })
 export class ImageModule {}
