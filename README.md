@@ -210,7 +210,6 @@ pnpm run prisma:migrate
 
 ### 🔗 Integrations & API
 - [ ] **WebSocket Support**: Real-time notifications for upload progress, optimization status
-- [X] **Webhook System**: Client notifications for image events (upload, optimization, deletion)
 - [ ] **CDN Integration**: CloudFlare, AWS CloudFront integration for global distribution
 
 ### 📱 User Experience

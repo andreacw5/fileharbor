@@ -2302,7 +2302,7 @@
             "bearer": []
           }
         ],
-        "summary": "Update client name, status, webhook and Tinify settings",
+        "summary": "Update client name, status and Tinify settings",
         "tags": [
           "Admin - Clients"
         ]
@@ -6460,14 +6460,6 @@
           "active": {
             "type": "boolean"
           },
-          "webhookEnabled": {
-            "type": "boolean"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Discord webhook URL, token masked",
-            "example": "https://discord.com/api/webhooks/123456/****"
-          },
           "tinifyActive": {
             "type": "boolean",
             "description": "Whether Tinify compression is enabled for this client"
@@ -6527,7 +6519,6 @@
           "id",
           "name",
           "active",
-          "webhookEnabled",
           "tinifyActive",
           "currentTinifyUsage",
           "currentTinifyLimit",
@@ -6577,14 +6568,6 @@
           },
           "active": {
             "type": "boolean"
-          },
-          "webhookEnabled": {
-            "type": "boolean"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Discord webhook URL, token masked",
-            "example": "https://discord.com/api/webhooks/123456/****"
           },
           "tinifyActive": {
             "type": "boolean",
@@ -6649,7 +6632,6 @@
           "id",
           "name",
           "active",
-          "webhookEnabled",
           "tinifyActive",
           "currentTinifyUsage",
           "currentTinifyLimit",
@@ -6668,14 +6650,6 @@
           "active": {
             "type": "boolean",
             "description": "Enable or disable the client"
-          },
-          "webhookEnabled": {
-            "type": "boolean",
-            "description": "Enable or disable webhook notifications"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Discord webhook URL, https://discord.com/api/webhooks/<id>/<token> (set to null to remove)"
           },
           "tinifyActive": {
             "type": "boolean",

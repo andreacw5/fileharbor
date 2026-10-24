@@ -24,7 +24,6 @@ Multi-tenant NestJS 11 image management API. All data scoped by `clientId`. Auth
 | `avatar` | Single-avatar-per-creator lifecycle |
 | `album` | Collections, token-based private access |
 | `storage` | All disk I/O and Sharp image processing |
-| `webhook` | Fire-and-forget Discord webhook notifications |
 | `admin` | Admin console API: cross-client ops, scoped by tenant |
 | `bastion` | Everything Bastion, on `@heyatom/bastion-client`: the package verifies tokens and writes audit events; guards, console permissions and multi-app acceptance stay local (no controller) |
 | `prisma` | Database service wrapper |
@@ -68,15 +67,6 @@ Default fallback images live at `storage/defaults.fileharbor/`. `GET /images/:id
 
 All service responses shaped with `plainToInstance(..., { excludeExtraneousValues: true })`. Only `@Expose()` decorated properties are returned. Follow this for every new response DTO.
 
-## Webhook System
-
-Always call non-blocking:
-```typescript
-this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, payload)
-  .catch(error => this.logger.warn(...));
-```
-Webhooks are opt-in per client (`client.webhookEnabled` + `client.webhookUrl`). Failures must be swallowed — never let them propagate.
-
 ## Scheduled Jobs
 
 No `job` module: each cron lives next to the module it serves (`ScheduleModule.forRoot()` in `app.module.ts`). Live:
@@ -118,7 +108,7 @@ Tinify auto-compress is opt-in per client: `Client.tinifyAutoMinBytes` (`null` =
 `PATCH /admin/clients/:id`; 1048576 is the suggested start) is both flag and threshold, and still needs
 `tinifyActive` + a key. The job calls `ImageService.compressImageWithTinify`, so it shares the manual
 endpoint's quota (`currentTinifyUsage`/`currentTinifyLimit`, reserved atomically before the call, raised to
-Tinify's `Compression-Count`, set to the limit on a Tinify 429), checks and webhook. At most
+Tinify's `Compression-Count`, set to the limit on a Tinify 429) and checks. At most
 `TINIFY_AUTO_BATCH` (default 20) images per client per run, so the month's quota is spread. A failure bumps
 `Image.tinifyAttempts` (skipped at `MAX_OPTIMIZE_ATTEMPTS`, reset by SQL); a 401, a 429, our own limit
 (`code: TINIFY_LIMIT_REACHED`) or Tinify unreachable (no response, 60s timeout, 5xx) stops that client for
@@ -315,12 +305,32 @@ Admin writes report to Bastion's audit log. Same mechanism as Herald and Beacon:
   allows exactly two segments and the nouns here (`image`, `client`, `creator`) would otherwise collide with
   other services'.
 - Metadata carries ids and **field names**, never field values — a client update body can hold a Tinify
-  API key and a webhook URL.
+  API key.
 - Without `BASTION_CLIENT_API_KEY` the service starts normally and skips every write, with a warning per
   skipped event.
 
 Bookmarks are deliberately **not** audited: they are per-actor console UI state, not a change to anyone's
 data, and one event per toggle would spend the `/events` budget on noise.
+
+#### Client surface (`X-API-Key`)
+
+Where the information is lost or visibility changes, client writes are audited too (plan 10), under the
+console's event names: `DELETE /images/:imageId`, `/videos/:id`, `/avatars/:externalUserId`,
+`/albums/:albumId` → `fh_{image,video,avatar,album}.deleted`; `PATCH /images/:imageId` and `/videos/:id`
+**only when the body carries `isPrivate`** → `fh_{image,video}.updated`. Nothing else: no uploads, no
+metadata or album edits, no share links (the row stays, or is temporary by design). There are no outgoing
+webhooks: the per-client Discord ones were removed.
+
+- `auditClientWrite()` (`common/client-audit.ts`) → `BastionAuditService.write()`, `void`, after the service
+  succeeded: a 403/404 writes nothing. Not `@Audit()`: `AuditInterceptor` takes `request.adminUser` as the
+  actor, and client routes have none.
+- **In the client controllers, never the services**: `ImageService.deleteImage` & co. are shared with the
+  admin routes, which `@Audit` already covers — writing in the service would double every console event.
+- Metadata: `via: 'api_key'`, `clientId`, `externalUserId` (the `X-User-Id` actor, `null` without one), the
+  resource id (`ownerExternalUserId` for the avatar's path). Never `userId`: an app's user id is not a
+  Bastion user.
+- The PATCH events add `fields: ['isPrivate']` **and the `isPrivate` boolean**: the one value allowed in
+  metadata, since it is the fact being tracked and not a secret.
 
 
 ## Self-Service Module (`/me`)
@@ -391,7 +401,7 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 (`src/utils/route.utils.ts`). Never concatenate a prefix by hand.
 
 `path()` gives the relative `url`/`thumbnailUrl`/`shareUrl`/album token `url` (`/{prefix}/...`);
-`fullUrl()` = `BASE_URL + path()` gives `fullPath`. Webhook links use `BASE_URL` directly.
+`fullUrl()` = `BASE_URL + path()` gives `fullPath`.
 
 **Prod (behind nginx)**: nginx serves `https://fileharbor.heyatom.dev/v2/...` and strips `/v2` before
 proxying, so `API_PREFIX` stays **empty** and the public prefix lives in `BASE_URL=https://fileharbor.heyatom.dev/v2`.
@@ -480,8 +490,6 @@ this.config.get('throttle.ttl')      // nested key from config.schema.ts
 3. Use `@ClientId()` / `@CreatorExternalId()` for tenant/creator context
 4. Scope all Prisma queries with `where: { clientId }`
 5. Return responses via `plainToInstance(ResponseDto, data, { excludeExtraneousValues: true })`
-6. Fire webhooks non-blocking with `.catch()`
-7. Import `WebhookModule` if needed (already exported from `WebhookModule`)
 
 ## Key Commands
 
