@@ -4,6 +4,7 @@ import { AdminUpdateClientDto } from './admin-update-client.dto';
 // The webhook fields are gone (plan 10). With nest-common's pipe they are a 400,
 // not a silent strip: Meridian must stop sending them before this deploys.
 describe('AdminUpdateClientDto', () => {
+  // Must match setupHttpApp's global pipe (@heyatom/nest-common), which doesn't export its options.
   const pipe = new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
