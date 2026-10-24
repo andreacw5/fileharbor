@@ -1360,6 +1360,17 @@ export class ImageService implements OnModuleDestroy {
       );
     }
 
+    // The hourly optimize job would re-encode Tinify's output at OPTIMIZE_QUALITY,
+    // throwing away a compression we paid for
+    if (!image.isOptimized) {
+      throw new BadRequestException(
+        'This image has not been optimized yet, retry after the next optimize run',
+      );
+    }
+
+    // ponytail: no per-image claim, so a manual call racing TinifyAutoJob on the same
+    // image can pay Tinify twice. Rare (one console click vs. one hourly pick); accepted.
+
     // Get client to retrieve Tinify configuration
     const client = await this.prisma.client.findUnique({
       where: { id: image.clientId },
@@ -1462,6 +1473,9 @@ export class ImageService implements OnModuleDestroy {
           responseType: 'json',
         }),
       );
+      // Any 2xx means Tinify counted it, even with a body we can't use: no refund from here
+      billed = true;
+      await this.syncTinifyUsage(client.id, uploadResponse.headers);
 
       // Check for successful upload
       if (
@@ -1474,8 +1488,6 @@ export class ImageService implements OnModuleDestroy {
         );
         throw new BadRequestException('Failed to compress image with Tinify');
       }
-      billed = true;
-      await this.syncTinifyUsage(client.id, uploadResponse.headers);
 
       const compressedUrl = uploadResponse.data.output.url;
       // No gain: keep our file. Still marked compressed (and counted): Tinify billed it.

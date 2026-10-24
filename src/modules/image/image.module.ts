@@ -16,7 +16,9 @@ import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.mo
     ClientModule,
     WebhookModule,
     StorageModule,
-    HttpModule,
+    // Tinify: a hung call would hold TinifyAutoJob's advisory lock (and the job) forever.
+    // A timeout has no response, so its quota slot is refunded.
+    HttpModule.register({ timeout: 60_000 }),
     CreatorModule,
     FileharborMetricsModule,
   ],

@@ -1070,6 +1070,7 @@ describe('ImageService', () => {
     beforeEach(() => {
       mockPrismaService.image.findUnique.mockResolvedValue({
         ...mockImage,
+        isOptimized: true,
         tinifyOptimized: false,
       });
       mockPrismaService.client.findUnique.mockResolvedValue(tinifyClient);
@@ -1206,6 +1207,37 @@ describe('ImageService', () => {
         where: { id: mockClientId },
         data: { currentTinifyUsage: 500 },
       });
+      // refund first, so the decrement can't undo the exhausted mark
+      const refund =
+        mockPrismaService.client.updateMany.mock.invocationCallOrder;
+      const exhaust =
+        mockPrismaService.client.update.mock.invocationCallOrder[0];
+      expect(refund[refund.length - 1]).toBeLessThan(exhaust);
+    });
+
+    it('keeps the slot spent on a 2xx without a usable output', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(of({ data: {} }));
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      // the reservation only: no refund
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses an image the optimize job has not re-encoded yet', async () => {
+      mockPrismaService.image.findUnique.mockResolvedValue({
+        ...mockImage,
+        isOptimized: false,
+        tinifyOptimized: false,
+      });
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.client.updateMany).not.toHaveBeenCalled();
+      expect(mockHttpService.post).not.toHaveBeenCalled();
     });
   });
 
