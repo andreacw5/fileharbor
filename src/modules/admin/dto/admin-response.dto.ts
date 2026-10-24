@@ -221,6 +221,14 @@ export class AdminBulkDeleteResponseDto {
   failed: AdminBulkDeleteFailureDto[];
 }
 
+export class RegenerateImageResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty({ description: 'New value, use it as the ?t= cache-buster' })
+  @Expose()
+  @Type(() => Date)
+  updatedAt: Date;
+}
+
 export class AdminImageCreatorDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() externalId: string;

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Logger,
   OnModuleDestroy,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
@@ -1316,6 +1317,49 @@ export class ImageService implements OnModuleDestroy {
     });
 
     return result.count;
+  }
+
+  /**
+   * Rebuild the thumbnail from the stored original and drop cached variants,
+   * keeping id and original. `updatedAt` moves last: it is in the ETag, and moving
+   * it first would let a GET in between pin the old thumb under the new tag.
+   */
+  async regenerateRenditions(image: {
+    id: string;
+    clientId: string;
+    client?: { domain: string | null } | null;
+  }): Promise<{ id: string; updatedAt: Date }> {
+    const domain = image.client?.domain || image.clientId;
+    const originalPath = this.storage.getImageFilePath(
+      domain,
+      image.id,
+      'original',
+    );
+    if (!(await this.storage.fileExists(originalPath))) {
+      throw new NotFoundException('Original file missing');
+    }
+    try {
+      await this.storage.regenerateImageThumb(
+        domain,
+        image.id,
+        this.thumbnailSize,
+        this.thumbnailQuality,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to regenerate renditions of image ${image.id}: ${error instanceof Error ? error.message : error}`,
+      );
+      // ponytail: any storage error reads as "unreadable original"; a full disk on
+      // the thumb write lands here too (logged above), split it if that ever matters
+      throw new UnprocessableEntityException(
+        'Original file is not a readable image',
+      );
+    }
+    return this.prisma.image.update({
+      where: { id: image.id },
+      data: { updatedAt: new Date() },
+      select: { id: true, updatedAt: true },
+    });
   }
 
   /**

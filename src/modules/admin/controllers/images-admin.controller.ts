@@ -46,6 +46,7 @@ import {
   AdminDeleteResponseDto,
   AdminImageResponseDto,
   AdminImageListResponseDto,
+  RegenerateImageResponseDto,
 } from '../dto/admin-response.dto';
 import { ImageService } from '@/modules/image/image.service';
 import { plainToInstance } from 'class-transformer';
@@ -549,6 +550,37 @@ export class ImagesAdminController {
       type: mimeType,
       length: buffer!.length,
     });
+  }
+
+  @Post(':id/regenerate')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Regenerate thumbnail and drop cached variants',
+    description:
+      'Rebuilds thumb.webp from the stored original and empties the variant cache; id, original, size and optimize state are untouched. Public GETs are cached `immutable`: a cache holding the old thumb keeps it, reload with `?t=<updatedAt>`.',
+  })
+  @ApiResponse({ status: 200, type: RegenerateImageResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Image or original file not found' })
+  @ApiResponse({
+    status: 422,
+    description: 'Original file is not a readable image',
+  })
+  @Audit('fh_image.regenerated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+  })
+  async regenerateImage(
+    @Param('id') id: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<RegenerateImageResponseDto> {
+    const image = await this.imageService.getImageById(id, undefined, false);
+    assertClientAccess(adminUser, image.clientId);
+
+    return plainToInstance(
+      RegenerateImageResponseDto,
+      await this.imageService.regenerateRenditions(image),
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Post(':id/tinify-compress')

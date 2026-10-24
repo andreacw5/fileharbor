@@ -266,3 +266,41 @@ describe('ImagesAdminController.bulkDeleteImages', () => {
     });
   });
 });
+
+describe('ImagesAdminController.regenerateImage', () => {
+  const image = { id: 'img-1', clientId: 'client-1' };
+  const imageService = {
+    getImageById: jest.fn(),
+    regenerateRenditions: jest.fn(),
+  };
+  const controller = new ImagesAdminController(
+    imageService as unknown as ImageService,
+    {} as RouteHelperService,
+  );
+  const admin = (allowedClientIds: string[]) =>
+    ({ allowedClientIds }) as AdminJwtPayload;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    imageService.getImageById.mockResolvedValue(image);
+  });
+
+  it('returns the new updatedAt', async () => {
+    const updatedAt = new Date();
+    imageService.regenerateRenditions.mockResolvedValue({
+      id: 'img-1',
+      updatedAt,
+    });
+    await expect(
+      controller.regenerateImage('img-1', admin(['client-1'])),
+    ).resolves.toEqual({ id: 'img-1', updatedAt });
+    expect(imageService.regenerateRenditions).toHaveBeenCalledWith(image);
+  });
+
+  it('refuses a client out of scope before touching the files', async () => {
+    await expect(
+      controller.regenerateImage('img-1', admin(['client-2'])),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(imageService.regenerateRenditions).not.toHaveBeenCalled();
+  });
+});

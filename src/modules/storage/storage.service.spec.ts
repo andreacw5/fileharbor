@@ -1,4 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
 import { deflateSync } from 'zlib';
@@ -275,5 +278,42 @@ describe('StorageService.computeDHash', () => {
         '0000000000000000',
       );
     }
+  });
+});
+
+describe('StorageService.regenerateImageThumb', () => {
+  let root: string;
+  let storage: StorageService;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'fh-regen-'));
+    storage = new StorageService({
+      get: (key: string) => (key === 'STORAGE_PATH' ? root : undefined),
+    } as unknown as ConfigService);
+  });
+
+  afterEach(() => rm(root, { recursive: true, force: true }));
+
+  it('rewrites the thumb at the new size, drops variants, keeps the original', async () => {
+    const original = await sharp({
+      create: { width: 400, height: 200, channels: 3, background: '#c33' },
+    })
+      .webp()
+      .toBuffer();
+    const originalPath = storage.getImageFilePath('d', 'img', 'original');
+    const variants = storage.getImageVariantsPath('d', 'img');
+    await mkdir(variants, { recursive: true });
+    await writeFile(originalPath, original);
+    await writeFile(join(variants, '64x-q75.webp'), 'stale');
+    await writeFile(storage.getImageFilePath('d', 'img', 'thumb'), 'corrupt');
+
+    await storage.regenerateImageThumb('d', 'img', 100, 70);
+
+    const thumb = await sharp(
+      await readFile(storage.getImageFilePath('d', 'img', 'thumb')),
+    ).metadata();
+    expect([thumb.width, thumb.height]).toEqual([100, 50]);
+    await expect(stat(variants)).rejects.toThrow();
+    expect((await readFile(originalPath)).equals(original)).toBe(true);
   });
 });

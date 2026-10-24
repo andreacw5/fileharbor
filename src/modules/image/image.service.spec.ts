@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ImageService } from './image.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
@@ -154,6 +159,7 @@ describe('ImageService', () => {
     clearImageVariants: jest.fn(),
     isAnimated: jest.fn(),
     createThumbnail: jest.fn(),
+    regenerateImageThumb: jest.fn(),
   };
 
   const mockHttpService = { post: jest.fn(), get: jest.fn() };
@@ -851,6 +857,82 @@ describe('ImageService', () => {
         orderBy: { createdAt: 'asc' },
         take: 50,
       });
+    });
+  });
+
+  describe('regenerateRenditions', () => {
+    const image = {
+      id: mockImageId,
+      clientId: mockClientId,
+      client: { domain: mockDomain },
+    };
+
+    // Once: these mocks are shared with the rest of the suite
+    beforeEach(() => {
+      mockStorageService.fileExists.mockResolvedValueOnce(true);
+      mockStorageService.regenerateImageThumb.mockResolvedValueOnce(undefined);
+      mockPrismaService.image.update.mockResolvedValueOnce({
+        id: mockImageId,
+        updatedAt: new Date(),
+      });
+    });
+
+    afterEach(() => {
+      mockStorageService.fileExists.mockReset();
+      mockStorageService.regenerateImageThumb.mockReset();
+      mockPrismaService.image.update.mockReset();
+    });
+
+    it('rebuilds the thumb with the configured size, then moves updatedAt', async () => {
+      await service.regenerateRenditions(image);
+
+      expect(mockStorageService.regenerateImageThumb).toHaveBeenCalledWith(
+        mockDomain,
+        mockImageId,
+        800,
+        70,
+      );
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith({
+        where: { id: mockImageId },
+        data: { updatedAt: expect.any(Date) },
+        select: { id: true, updatedAt: true },
+      });
+      expect(
+        mockStorageService.regenerateImageThumb.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockPrismaService.image.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('falls back to the clientId directory without a domain', async () => {
+      await service.regenerateRenditions({
+        ...image,
+        client: { domain: null },
+      });
+      expect(mockStorageService.regenerateImageThumb.mock.calls[0][0]).toBe(
+        mockClientId,
+      );
+    });
+
+    it('404s on a missing original without writing anything', async () => {
+      mockStorageService.fileExists.mockReset().mockResolvedValueOnce(false);
+      await expect(service.regenerateRenditions(image)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(mockStorageService.regenerateImageThumb).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+    });
+
+    it('422s on an unreadable original, leaving updatedAt alone', async () => {
+      mockStorageService.regenerateImageThumb
+        .mockReset()
+        .mockRejectedValueOnce(
+          new InternalServerErrorException('Failed to create thumbnail'),
+        );
+      await expect(service.regenerateRenditions(image)).rejects.toBeInstanceOf(
+        UnprocessableEntityException,
+      );
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
     });
   });
 

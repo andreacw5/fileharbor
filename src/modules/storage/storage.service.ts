@@ -238,6 +238,22 @@ export class StorageService {
     await this.deleteDirectory(this.getImageVariantsPath(domain, imageId));
   }
 
+  /** Rebuilds thumb.webp from the stored original and drops cached variants. The original is untouched. */
+  async regenerateImageThumb(
+    domain: string,
+    imageId: string,
+    size: number,
+    quality: number,
+  ): Promise<void> {
+    const original = await this.readFile(
+      this.getImageFilePath(domain, imageId, 'original'),
+    );
+    const thumb = await this.createThumbnail(original, size, quality);
+    // Thumb first: if clearing the variants fails, the new thumb is still good
+    await this.saveFile(this.getImageFilePath(domain, imageId, 'thumb'), thumb);
+    await this.clearImageVariants(domain, imageId);
+  }
+
   /** Number of entries in a directory, 0 when it doesn't exist. */
   async countEntries(dirPath: string): Promise<number> {
     this.validatePath(dirPath);
