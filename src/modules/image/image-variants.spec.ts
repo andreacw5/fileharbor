@@ -1,7 +1,9 @@
 import {
   DEFAULT_VARIANT_QUALITY,
+  SRCSET_WIDTHS,
   VARIANT_QUALITIES,
   VARIANT_SIZES,
+  buildSrcset,
   snapQuality,
   snapSize,
 } from './image-variants';
@@ -37,5 +39,37 @@ describe('image variants', () => {
     );
     expect(widths.size).toBe(VARIANT_SIZES.length);
     expect(qualities.size).toBe(VARIANT_QUALITIES.length);
+  });
+});
+
+describe('buildSrcset', () => {
+  const fullPath = 'https://x/images/id';
+
+  it('offers only widths that are variant steps', () => {
+    for (const w of SRCSET_WIDTHS) {
+      expect(VARIANT_SIZES).toContain(w);
+    }
+  });
+
+  it('lists the fixed widths below the original, then the original', () => {
+    expect(buildSrcset(fullPath, 1000)).toBe(
+      `${fullPath}?width=320 320w, ${fullPath}?width=640 640w, ${fullPath}?width=960 960w, ${fullPath} 1000w`,
+    );
+  });
+
+  it('serves the original instead of an equal fixed width', () => {
+    const srcset = buildSrcset(fullPath, 1920);
+    expect(srcset).not.toContain('?width=1920');
+    expect(srcset.endsWith(`, ${fullPath} 1920w`)).toBe(true);
+  });
+
+  it('has a single entry when the original is below every fixed width', () => {
+    expect(buildSrcset(fullPath, 200)).toBe(`${fullPath} 200w`);
+  });
+
+  it('keeps a prefixed fullPath intact', () => {
+    expect(buildSrcset('https://x/v2/images/id', 4000)).toMatch(
+      /^https:\/\/x\/v2\/images\/id\?width=320 320w, /,
+    );
   });
 });

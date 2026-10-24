@@ -39,7 +39,7 @@ import {
   extractTagNames,
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
-import { snapQuality, snapSize } from './image-variants';
+import { buildSrcset, snapQuality, snapSize } from './image-variants';
 
 // On-demand resizes cached per image; past this many, new ones are served but
 // not stored, so arbitrary width/height/quality combinations can't fill the disk.
@@ -1038,6 +1038,7 @@ export class ImageService implements OnModuleDestroy {
   private formatImageResponse(image: any): ImageResponseDto {
     const url = this.route.path('images', image.id);
     const thumbnailUrl = this.route.path('images', image.id) + '?thumb=true';
+    const fullPath = this.route.fullUrl('images', image.id);
 
     return plainToInstance(
       ImageResponseDto,
@@ -1046,7 +1047,11 @@ export class ImageService implements OnModuleDestroy {
         tags: extractTagNames(image),
         url,
         thumbnailUrl,
-        fullPath: this.route.fullUrl('images', image.id),
+        fullPath,
+        // Private images need a header or token, which `<img srcset>` can't send.
+        srcset: image.isPrivate
+          ? undefined
+          : buildSrcset(fullPath, image.width),
       },
       { excludeExtraneousValues: true },
     );

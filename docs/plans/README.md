@@ -10,4 +10,4 @@
 | 06 | [Rigenera thumbnail e varianti](06-regenerate-renditions.md) | open |
 | 07 | [Riprova ottimizzazione dalla console](07-retry-optimize-admin.md) | open |
 | 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | open |
-| 09 | [`srcset` nelle risposte immagine](09-srcset.md) | open |
+| 09 | [`srcset` nelle risposte immagine](09-srcset.md) | done |

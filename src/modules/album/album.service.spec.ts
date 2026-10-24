@@ -1051,6 +1051,46 @@ describe('AlbumService', () => {
       );
     });
 
+    it('offers srcset on public image items and omits it on private ones', async () => {
+      const imageRow = (id: string, isPrivate: boolean) => ({
+        id: `item-${id}`,
+        resourceType: AlbumResourceType.IMAGE,
+        order: 0,
+        addedAt: new Date('2024-01-01'),
+        image: {
+          id,
+          originalName: 'test.jpg',
+          mimeType: 'image/jpeg',
+          width: 1000,
+          height: 800,
+          size: 1024000,
+          isPrivate,
+          imageTags: [],
+        },
+      });
+      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
+      mockPrismaService.$transaction.mockResolvedValue([
+        [imageRow('public-img', false), imageRow('private-img', true)],
+        2,
+      ]);
+
+      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
+        page: 1,
+        perPage: 20,
+      });
+
+      const [pub, priv] = result.data.map(
+        (item) => (item as { image: { srcset?: string } }).image,
+      );
+      expect(pub.srcset).toBe(
+        'http://localhost:3000/images/public-img?width=320 320w, ' +
+          'http://localhost:3000/images/public-img?width=640 640w, ' +
+          'http://localhost:3000/images/public-img?width=960 960w, ' +
+          'http://localhost:3000/images/public-img 1000w',
+      );
+      expect(priv.srcset).toBeUndefined();
+    });
+
     it('keeps the video thumbnail on the path segment that does exist', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
       mockPrismaService.$transaction.mockResolvedValue([

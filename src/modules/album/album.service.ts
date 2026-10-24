@@ -14,6 +14,7 @@ import {
 import { randomUUID } from 'crypto';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 import { RouteHelperService } from '@/utils/route.utils';
+import { buildSrcset } from '@/modules/image/image-variants';
 
 @Injectable()
 export class AlbumService {
@@ -85,6 +86,7 @@ export class AlbumService {
       addedAt: item.addedAt,
     };
     if (item.resourceType === AlbumResourceType.IMAGE && item.image) {
+      const fullPath = this.route.fullUrl('images', item.image.id);
       return {
         ...base,
         image: {
@@ -95,7 +97,10 @@ export class AlbumService {
           height: item.image.height,
           size: item.image.size,
           tags: item.image.imageTags?.map((t: any) => t.tag.name) ?? [],
-          fullPath: this.route.fullUrl('images', item.image.id),
+          fullPath,
+          srcset: item.image.isPrivate
+            ? undefined
+            : buildSrcset(fullPath, item.image.width),
           // The thumbnail is a query on the unified image route, not a path
           // segment: `image.controller.ts` declares only `@Get()` and
           // `@Get(':imageId')`, so `/images/:id/thumb` is a 404. Appended as a
@@ -574,6 +579,7 @@ export class AlbumService {
               width: true,
               height: true,
               size: true,
+              isPrivate: true,
               imageTags: { include: { tag: { select: { name: true } } } },
             },
           },
