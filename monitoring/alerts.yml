@@ -43,3 +43,18 @@ groups:
           description: >-
             {{ $value }} {{ $labels.kind }} rows reached MAX_OPTIMIZE_ATTEMPTS.
             Inspect the files, then set optimizeAttempts = 0 to retry or delete them.
+
+      - alert: FileHarborClientStorageGrowth
+        # Originals only (DB size), not the real disk: says who grows, not how much
+        # is left. Optimize/delete make delta negative, never a false positive.
+        # 5 GiB/day is a starting point: tune on prod volume size and growth.
+        expr: delta(fileharbor_storage_bytes[24h]) > 5 * 1024 * 1024 * 1024
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'FileHarbor client {{ $labels.client }} storage growing fast'
+          description: >-
+            Client {{ $labels.client }} grew by {{ $value | humanize1024 }}B in 24h
+            (threshold 5 GiB). Check free space (/health/ready, HEALTH_DISK_MIN_FREE_MB)
+            and what the client is uploading.

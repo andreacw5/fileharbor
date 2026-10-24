@@ -5,11 +5,18 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 
 describe('FileharborMetrics optimize backlog gauges', () => {
   let service: FileharborMetrics;
-  const model = () => ({ count: jest.fn(), aggregate: jest.fn() });
-  const mockPrisma = { image: model(), avatar: model() };
+  const model = () => ({
+    count: jest.fn(),
+    aggregate: jest.fn(),
+    groupBy: jest.fn(),
+  });
+  const mockPrisma = { image: model(), avatar: model(), video: model() };
 
-  /** One scrape of a gauge: value by `kind` label. */
-  async function scrape(name: string): Promise<Record<string, number>> {
+  /** One scrape of a gauge: value by `kind` label (or another one). */
+  async function scrape(
+    name: string,
+    label = 'kind',
+  ): Promise<Record<string, number>> {
     const { values } = await (
       service['metrics'].registry.getSingleMetric(name) as unknown as {
         get(): Promise<{
@@ -17,7 +24,7 @@ describe('FileharborMetrics optimize backlog gauges', () => {
         }>;
       }
     ).get();
-    return Object.fromEntries(values.map((v) => [v.labels.kind, v.value]));
+    return Object.fromEntries(values.map((v) => [v.labels[label], v.value]));
   }
 
   const gaugeValue = async (name: string, kind: string) =>
@@ -35,6 +42,7 @@ describe('FileharborMetrics optimize backlog gauges', () => {
     expect(mockPrisma.image.count).not.toHaveBeenCalled();
     expect(mockPrisma.image.aggregate).not.toHaveBeenCalled();
     expect(mockPrisma.avatar.count).not.toHaveBeenCalled();
+    expect(mockPrisma.image.groupBy).not.toHaveBeenCalled();
   });
 
   it('fileharbor_unoptimized_media counts retryable rows for both kinds, with the job predicate', async () => {
@@ -104,5 +112,60 @@ describe('FileharborMetrics optimize backlog gauges', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('fileharbor_unoptimized_media'),
     );
+  });
+
+  describe('fileharbor_storage_bytes', () => {
+    const rows = (...r: [string, number | bigint][]) =>
+      r.map(([clientId, size]) => ({
+        clientId,
+        _count: { _all: 1 },
+        _sum: { size },
+      }));
+
+    beforeEach(() => {
+      mockPrisma.image.groupBy.mockResolvedValue([]);
+      mockPrisma.video.groupBy.mockResolvedValue([]);
+      mockPrisma.avatar.groupBy.mockResolvedValue([]);
+    });
+
+    it('sums images, videos (BigInt) and avatars per client, over every client', async () => {
+      mockPrisma.image.groupBy.mockResolvedValue(rows(['c1', 100], ['c2', 5]));
+      mockPrisma.video.groupBy.mockResolvedValue(rows(['c1', BigInt(1000)]));
+      mockPrisma.avatar.groupBy.mockResolvedValue(rows(['c1', 10]));
+
+      expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({
+        c1: 1110,
+        c2: 5,
+      });
+      expect(mockPrisma.image.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({ where: undefined }),
+      );
+    });
+
+    it('drops a client missing from the next scrape', async () => {
+      mockPrisma.image.groupBy.mockResolvedValueOnce(
+        rows(['c1', 1], ['c2', 2]),
+      );
+      await scrape('fileharbor_storage_bytes', 'client');
+
+      mockPrisma.image.groupBy.mockResolvedValueOnce(rows(['c1', 3]));
+      expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({
+        c1: 3,
+      });
+    });
+
+    it('a DB error keeps the previous values and warns', async () => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      mockPrisma.image.groupBy.mockResolvedValueOnce(rows(['c1', 7]));
+      await scrape('fileharbor_storage_bytes', 'client');
+
+      mockPrisma.video.groupBy.mockRejectedValueOnce(new Error('db down'));
+      expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({
+        c1: 7,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('fileharbor_storage_bytes'),
+      );
+    });
   });
 });

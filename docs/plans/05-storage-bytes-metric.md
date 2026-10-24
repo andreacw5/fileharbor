@@ -1,9 +1,9 @@
 ---
 type: plan
 service: fileharbor
-status: open
+status: done
 estimate: 0.5d
-updated: 2026-10-22
+updated: 2026-10-24
 verified: 4774bd3
 ---
 
