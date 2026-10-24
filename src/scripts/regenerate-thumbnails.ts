@@ -33,10 +33,15 @@ async function main(apply: boolean, clientId?: string) {
   const quality = parseInt(config.get('THUMBNAIL_QUALITY') || '70');
   const t = { checked: 0, regenerated: 0, missing: 0, failed: 0 };
   try {
-    let cursor: string | undefined;
+    // Keyset on id, not a Prisma cursor: a cursor row deleted mid-run would end
+    // the paging early without a word
+    let lastId: string | undefined;
     for (;;) {
       const rows = await prisma.image.findMany({
-        where: clientId ? { clientId } : {},
+        where: {
+          ...(clientId && { clientId }),
+          ...(lastId && { id: { gt: lastId } }),
+        },
         select: {
           id: true,
           clientId: true,
@@ -44,9 +49,12 @@ async function main(apply: boolean, clientId?: string) {
         },
         orderBy: { id: 'asc' },
         take: PAGE,
-        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
       });
-      if (!rows.length) break;
+      if (!rows.length) {
+        if (!lastId && clientId)
+          console.warn(`no images for client ${clientId}`);
+        break;
+      }
       for (const row of rows) {
         t.checked++;
         const domain = row.client.domain || row.clientId;
@@ -75,7 +83,7 @@ async function main(apply: boolean, clientId?: string) {
           );
         }
       }
-      cursor = rows[rows.length - 1].id;
+      lastId = rows[rows.length - 1].id;
     }
     console.log(
       apply
@@ -89,9 +97,17 @@ async function main(apply: boolean, clientId?: string) {
 }
 
 const args = process.argv.slice(2);
-const clientFlag = args.indexOf('--client');
-const clientId = clientFlag >= 0 ? args[clientFlag + 1] : undefined;
-if (clientFlag >= 0 && !clientId) {
+// --client <id> or --client=<id>
+const clientFlag = args.findIndex(
+  (a) => a === '--client' || a.startsWith('--client='),
+);
+const clientId =
+  clientFlag < 0
+    ? undefined
+    : args[clientFlag].startsWith('--client=')
+      ? args[clientFlag].slice('--client='.length)
+      : args[clientFlag + 1];
+if (clientFlag >= 0 && (!clientId || clientId.startsWith('--'))) {
   console.error('--client needs a client id');
   process.exit(1);
 }
