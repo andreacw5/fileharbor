@@ -98,6 +98,7 @@ describe('ImageService', () => {
     $executeRaw: jest.fn().mockResolvedValue(1),
     client: {
       findUnique: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn(),
       fields: { currentTinifyLimit: 'currentTinifyLimit-ref' },
     },
@@ -1142,6 +1143,69 @@ describe('ImageService', () => {
         service.compressImageWithTinify(mockImageId),
       ).rejects.toThrow('download failed');
       expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the original, still marked compressed, when Tinify saves nothing', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({ data: { output: { url: 'https://t/x', size: 1200 } } }),
+      );
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        tinifyOptimized: true,
+        imageTags: [],
+      });
+
+      await service.compressImageWithTinify(mockImageId);
+
+      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { size: 1000, tinifyOptimized: true },
+        }),
+      );
+    });
+
+    it('raises the local usage to a higher Compression-Count', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({
+          headers: { 'compression-count': '42' },
+          data: { output: { url: 'https://t/x', size: 1200 } },
+        }),
+      );
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        imageTags: [],
+      });
+
+      await service.compressImageWithTinify(mockImageId);
+
+      expect(mockPrismaService.client.updateMany).toHaveBeenLastCalledWith({
+        where: { id: mockClientId, currentTinifyUsage: { lt: 42 } },
+        data: { currentTinifyUsage: 42 },
+      });
+    });
+
+    it('marks the quota exhausted on a Tinify 429', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockPrismaService.client.update.mockResolvedValue({});
+      mockHttpService.post.mockReturnValue(
+        throwError(() =>
+          Object.assign(new Error('Too many requests'), {
+            response: { status: 429, data: {} },
+          }),
+        ),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow('Too many requests');
+      expect(mockPrismaService.client.update).toHaveBeenCalledWith({
+        where: { id: mockClientId },
+        data: { currentTinifyUsage: 500 },
+      });
     });
   });
 

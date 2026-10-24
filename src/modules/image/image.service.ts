@@ -80,6 +80,9 @@ export interface DuplicateGroup {
   images: DuplicateImage[];
 }
 
+/** `code` of the 400 thrown when the client's monthly Tinify slots are used up. */
+export const TINIFY_LIMIT_REACHED = 'TINIFY_LIMIT_REACHED';
+
 @Injectable()
 export class ImageService implements OnModuleDestroy {
   private readonly logger = new Logger(ImageService.name);
@@ -1433,9 +1436,10 @@ export class ImageService implements OnModuleDestroy {
         this.logger.warn(
           `[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Limit: ${client.currentTinifyLimit}`,
         );
-        throw new BadRequestException(
-          `Monthly Tinify compression limit reached (${client.currentTinifyLimit}). Limit will reset next month.`,
-        );
+        throw new BadRequestException({
+          code: TINIFY_LIMIT_REACHED,
+          message: `Monthly Tinify compression limit reached (${client.currentTinifyLimit}). Limit will reset next month.`,
+        });
       }
       reserved = true;
 
@@ -1471,9 +1475,14 @@ export class ImageService implements OnModuleDestroy {
         throw new BadRequestException('Failed to compress image with Tinify');
       }
       billed = true;
+      await this.syncTinifyUsage(client.id, uploadResponse.headers);
 
       const compressedUrl = uploadResponse.data.output.url;
-      const compressedSize = uploadResponse.data.output.size;
+      // No gain: keep our file. Still marked compressed (and counted): Tinify billed it.
+      const kept = uploadResponse.data.output.size >= originalSize;
+      const compressedSize = kept
+        ? originalSize
+        : uploadResponse.data.output.size;
       const savedBytes = originalSize - compressedSize;
       const savedPercentage = ((savedBytes / originalSize) * 100).toFixed(2);
 
@@ -1481,46 +1490,52 @@ export class ImageService implements OnModuleDestroy {
         `[compressImageWithTinify] Compressed size: ${compressedSize} bytes (saved ${savedBytes} bytes, ${savedPercentage}%) - ID: ${imageId}`,
       );
 
-      // Step 2: Download compressed image
-      this.logger.debug(
-        `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
-      );
-      const downloadResponse = await lastValueFrom(
-        this.httpService.get(compressedUrl, {
-          headers: {
-            Authorization: `Basic ${authString}`,
-          },
-          responseType: 'arraybuffer',
-        }),
-      );
+      if (kept) {
+        this.logger.debug(
+          `[compressImageWithTinify] No gain, original kept - ID: ${imageId}`,
+        );
+      } else {
+        // Step 2: Download compressed image
+        this.logger.debug(
+          `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
+        );
+        const downloadResponse = await lastValueFrom(
+          this.httpService.get(compressedUrl, {
+            headers: {
+              Authorization: `Basic ${authString}`,
+            },
+            responseType: 'arraybuffer',
+          }),
+        );
 
-      const compressedBuffer = Buffer.from(downloadResponse.data);
+        const compressedBuffer = Buffer.from(downloadResponse.data);
 
-      // Save compressed file, replacing the original
-      await this.storage.saveFile(originalPath, compressedBuffer);
-      await this.storage.clearImageVariants(domain, imageId);
-      this.logger.debug(
-        `[compressImageWithTinify] Compressed file saved - ID: ${imageId}`,
-      );
+        // Save compressed file, replacing the original
+        await this.storage.saveFile(originalPath, compressedBuffer);
+        await this.storage.clearImageVariants(domain, imageId);
+        this.logger.debug(
+          `[compressImageWithTinify] Compressed file saved - ID: ${imageId}`,
+        );
 
-      // Regenerate thumbnail from compressed image
-      this.logger.debug(
-        `[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`,
-      );
-      const thumbBuffer = await this.storage.createThumbnail(
-        compressedBuffer,
-        this.thumbnailSize,
-        this.thumbnailQuality,
-      );
-      const thumbnailPath = this.storage.getImageFilePath(
-        domain,
-        imageId,
-        'thumb',
-      );
-      await this.storage.saveFile(thumbnailPath, thumbBuffer);
-      this.logger.debug(
-        `[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`,
-      );
+        // Regenerate thumbnail from compressed image
+        this.logger.debug(
+          `[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`,
+        );
+        const thumbBuffer = await this.storage.createThumbnail(
+          compressedBuffer,
+          this.thumbnailSize,
+          this.thumbnailQuality,
+        );
+        const thumbnailPath = this.storage.getImageFilePath(
+          domain,
+          imageId,
+          'thumb',
+        );
+        await this.storage.saveFile(thumbnailPath, thumbBuffer);
+        this.logger.debug(
+          `[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`,
+        );
+      }
 
       // Update database with new size and mark as Tinify-optimized (usage counted at reservation)
       const updatedImage = await this.prisma.image.update({
@@ -1603,7 +1618,45 @@ export class ImageService implements OnModuleDestroy {
             ),
           );
       }
+      if (error.response?.status === 429) {
+        // The key's account is out of compressions: nothing retries until the monthly reset
+        await this.prisma.client
+          .update({
+            where: { id: client.id },
+            data: { currentTinifyUsage: client.currentTinifyLimit },
+          })
+          .catch((syncError) =>
+            this.logger.warn(
+              `[compressImageWithTinify] Failed to exhaust Tinify usage for client ${client.id}: ${syncError.message}`,
+            ),
+          );
+      } else {
+        await this.syncTinifyUsage(client.id, error.response?.headers);
+      }
       throw error;
     }
+  }
+
+  /**
+   * Raise the local counter to Tinify's `Compression-Count` (the key's real count this
+   * calendar month): covers compressions made outside FileHarbor with the same key and a
+   * monthly reset out of step with theirs. Never lowers it.
+   */
+  private async syncTinifyUsage(
+    clientId: string,
+    headers?: Record<string, unknown>,
+  ): Promise<void> {
+    const count = Number(headers?.['compression-count']);
+    if (!Number.isInteger(count)) return;
+    await this.prisma.client
+      .updateMany({
+        where: { id: clientId, currentTinifyUsage: { lt: count } },
+        data: { currentTinifyUsage: count },
+      })
+      .catch((error) =>
+        this.logger.warn(
+          `[compressImageWithTinify] Failed to sync Tinify usage for client ${clientId}: ${error.message}`,
+        ),
+      );
   }
 }
