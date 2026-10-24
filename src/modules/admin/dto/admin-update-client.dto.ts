@@ -74,6 +74,18 @@ export class AdminUpdateClientDto {
 
   @ApiPropertyOptional({
     description:
+      'Auto-compress with Tinify the images above this size, in bytes (1048576 = 1 MB is a sensible start). ' +
+      'null turns auto-compression off. Spends the same monthly quota as manual compression.',
+    example: 1048576,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  tinifyAutoMinBytes?: number | null;
+
+  @ApiPropertyOptional({
+    description:
       'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar. ' +
       'Set to null (or an empty string) to remove the mapping — a client without one never gets self-service avatars.',
     example: 'heyatom',
