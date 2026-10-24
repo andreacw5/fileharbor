@@ -209,7 +209,8 @@ export class VideoController {
       dto.description,
       dto.isPrivate,
     );
-    if ('isPrivate' in dto)
+    // Not `'isPrivate' in dto`: the DTO's Transform leaves the key as undefined on junk.
+    if (typeof dto.isPrivate === 'boolean')
       auditClientWrite(this.audit, 'fh_video.updated', clientId, creatorId, {
         videoId: id,
         fields: ['isPrivate'],

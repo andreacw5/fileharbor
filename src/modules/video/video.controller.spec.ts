@@ -1,5 +1,10 @@
 import { ConfigService } from '@nestjs/config';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
+import { UpdateVideoDto } from './dto/update-video.dto';
 import type { BastionAuditService } from '@heyatom/bastion-client/nest';
 import { VideoController } from './video.controller';
 import { VideoService } from './video.service';
@@ -72,6 +77,37 @@ describe('VideoController client-surface audit', () => {
     });
 
     expect(audit.write).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 'yes'])(
+    'does not audit isPrivate: %p, which the DTO turns into undefined',
+    async (isPrivate) => {
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      });
+      const dto = (await pipe.transform(
+        { isPrivate },
+        { type: 'body', metatype: UpdateVideoDto },
+      )) as UpdateVideoDto;
+      expect('isPrivate' in dto && dto.isPrivate === undefined).toBe(true);
+      videoService.updateVideoMetadata.mockResolvedValue({ id: 'vid-1' });
+
+      await controller.updateVideo('vid-1', 'client-1', 'user-1', dto);
+
+      expect(audit.write).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns without waiting for the audit write', async () => {
+    audit.write.mockReturnValueOnce(new Promise(() => {}));
+    videoService.deleteVideo.mockResolvedValue({ success: true });
+
+    await expect(
+      controller.deleteVideo('vid-1', 'client-1', 'user-1'),
+    ).resolves.toEqual({ success: true });
+    expect(audit.write).toHaveBeenCalled();
   });
 
   it('does not audit a refused PATCH', async () => {

@@ -453,7 +453,7 @@ export class ImageController {
         dto.description,
         dto.isPrivate,
       );
-      if ('isPrivate' in dto)
+      if (typeof dto.isPrivate === 'boolean')
         auditClientWrite(this.audit, 'fh_image.updated', clientId, creatorId, {
           imageId,
           fields: ['isPrivate'],
