@@ -10,6 +10,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.6.0] – 2026-10-24
+
+Deploy **Meridian first**, then FileHarbor (see Removed). Four migrations run at boot. After the
+deploy, run `backfill-media-size.js` and `backfill-image-dhash.js` (dry run, then `--apply`).
+
+### Added
+- **Automatic Tinify compression.** `TinifyAutoJob` compresses, hourly and largest first, the
+  optimized images above a per-client threshold (`tinifyAutoMinBytes` on
+  `PATCH /admin/clients/:id`, `null` = off), within the monthly quota. A Tinify outage stops the
+  client for that run without counting attempts; a per-image failure counts in `tinifyAttempts`
+  (given up at 3).
+- **Share links from the console** — `admin/image-share-links`: list, create and revoke an image's
+  share links. Creating one requires a private image and an expiry within 365 days.
+- **Duplicate images** — `Image.dHash` (perceptual hash, computed on upload).
+  `GET /admin/images/duplicates` groups by client and hash (`crossClient=true` for `fullAccess`
+  only), `GET /admin/images?dHash=` lists one group. Never deletes on its own.
+- **Storage report** — daily `storage_snapshots` per client × kind (`StorageSnapshotJob`, 00:30 UTC).
+  `storageByKind` and `dailyChart[].storage` on `GET /admin/stats`, plus `GET /admin/stats/storage`
+  and `GET /admin/stats/storage/creators`.
+- **`POST /admin/images/:id/regenerate`** — rebuilds the thumbnail from the stored original and drops
+  cached variants. Id, original and size are untouched. Bulk version for a `THUMBNAIL_SIZE` change:
+  `node dist/scripts/regenerate-thumbnails.js [--apply] [--client <id>]`.
+- **Retry optimization from the console** — `POST /admin/images/:id/reoptimize`,
+  `POST /admin/images/reoptimize-failed` and the same for avatars: reset `optimizeAttempts` so the
+  hourly job picks the rows up again. `optimizeStatus` filter on the lists.
+- **`srcset` in image responses** — absolute URLs on fixed widths (320–1920) below the original,
+  then the original. Public images only, also on album items.
+- **`isPrivate` on `PATCH /images/:id`.**
+- **Metric `fileharbor_storage_bytes{client}`** and alert `FileHarborClientStorageGrowth`
+  (> 5 GiB in 24h). Reload `monitoring/alerts.yml`.
+- **Audit on the client surface** — `DELETE` of images, videos, avatars and albums, and `isPrivate`
+  changes through `PATCH /images/:id` and `PATCH /videos/:id`, write `fh_*` events to Bastion with
+  `via: "api_key"`, `clientId` and the `X-User-Id` that made the call.
+
+### Changed
+- `size` stays in step with the file after the optimize job re-encodes it (it kept the upload's
+  byte count). Existing rows: `backfill-media-size.js`.
+- The Tinify quota is reserved atomically and synced with the key's real count
+  (`Compression-Count`). A Tinify `429` marks the client's quota as used up until the monthly reset.
+- Manual Tinify compression refuses an image that hasn't been optimized yet: the optimize job would
+  re-encode the paid result.
+- Tinify calls time out after 60s.
+- The console surface skips the IP throttler: Meridian calls from one IP for every admin.
+
+### Fixed
+- Owner checks on share links and video updates compared `X-User-Id` with the internal creator id.
+- JPEGs that libjpeg only warns about ("Invalid SOS parameters") are accepted.
+- `PATCH /images/:id` with `isPrivate: null` is a `400`, not a `500`.
+
+### Removed
+- **Per-client Discord webhooks.** The `webhookEnabled` / `webhookUrl` columns are dropped, and
+  `PATCH /admin/clients/:id` answers `400` if it receives them, which is why Meridian goes first.
+  FileHarbor has no outgoing notifications any more; consumers poll.
+
+---
+
 ## [3.5.0] – 2026-10-22
 
 ### Added

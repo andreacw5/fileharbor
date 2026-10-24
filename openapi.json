@@ -5183,7 +5183,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "3.5.0",
+    "version": "3.6.0",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
