@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import {
+  storageUsageByClient,
+  totalBytes,
+} from '@/modules/statistics/storage-usage';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
 import { randomBytes } from 'crypto';
 
@@ -311,44 +315,11 @@ export class ClientService {
     };
   }
 
-  /**
-   * Bytes on disk per client: images, videos and avatars, like the admin stats.
-   * Video sizes are BigInt; a Number is exact up to 8 PiB.
-   */
+  /** Bytes per client (images, videos and avatars), like the admin stats. */
   private async storageByClient(
     clientIds: string[],
   ): Promise<Map<string, number>> {
-    const where = { clientId: { in: clientIds } };
-    const groups = await Promise.all([
-      this.prisma.image.groupBy({
-        by: ['clientId'],
-        where,
-        _sum: { size: true },
-      }),
-      this.prisma.video.groupBy({
-        by: ['clientId'],
-        where,
-        _sum: { size: true },
-      }),
-      this.prisma.avatar.groupBy({
-        by: ['clientId'],
-        where,
-        _sum: { size: true },
-      }),
-    ]);
-
-    const totals = new Map<string, number>();
-    for (const rows of groups) {
-      for (const row of rows as {
-        clientId: string;
-        _sum: { size: number | bigint | null };
-      }[]) {
-        totals.set(
-          row.clientId,
-          (totals.get(row.clientId) ?? 0) + Number(row._sum.size ?? 0),
-        );
-      }
-    }
-    return totals;
+    const usage = await storageUsageByClient(this.prisma, clientIds);
+    return new Map([...usage].map(([id, u]) => [id, totalBytes(u)]));
   }
 }

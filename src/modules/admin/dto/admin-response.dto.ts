@@ -8,15 +8,6 @@ export class AdminClientResponseDto {
   @ApiProperty() @Expose() name: string;
   @ApiPropertyOptional() @Expose() domain?: string;
   @ApiProperty() @Expose() active: boolean;
-  @ApiProperty() @Expose() webhookEnabled: boolean;
-  @ApiPropertyOptional({
-    description: 'Discord webhook URL, token masked',
-    example: 'https://discord.com/api/webhooks/123456/****',
-  })
-  @Expose()
-  // The last path segment is the webhook's secret token.
-  @Transform(({ value }) => value?.replace(/\/[^/?]+(\?.*)?$/, '/****'))
-  webhookUrl?: string;
   @ApiProperty({
     description: 'Whether Tinify compression is enabled for this client',
   })
@@ -39,6 +30,13 @@ export class AdminClientResponseDto {
   })
   @Expose()
   currentTinifyLimit: number;
+  @ApiPropertyOptional({
+    description:
+      'Images above this size (bytes) are auto-compressed with Tinify; null = off',
+    nullable: true,
+  })
+  @Expose()
+  tinifyAutoMinBytes: number | null;
   @ApiPropertyOptional({
     description:
       'Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar',
@@ -70,6 +68,20 @@ export class DailyDataPointDto {
   @ApiProperty() @Expose() avatars: number;
   @ApiProperty() @Expose() albums: number;
   @ApiProperty() @Expose() videos: number;
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description:
+      "Bytes in scope from that day's storage snapshot (00:30 UTC); null when there is none",
+  })
+  @Expose()
+  storage: number | null;
+}
+
+export class StorageByKindDto {
+  @ApiProperty({ description: 'Bytes' }) @Expose() images: number;
+  @ApiProperty({ description: 'Bytes' }) @Expose() videos: number;
+  @ApiProperty({ description: 'Bytes' }) @Expose() avatars: number;
 }
 
 export class StatsTrendDto {
@@ -104,6 +116,14 @@ export class AdminStatsResponseDto {
   @ApiProperty() @Expose() totalVideos: number;
   @ApiProperty() @Expose() totalStorage: number;
   @ApiProperty() @Expose() totalCreators: number;
+
+  @ApiProperty({
+    description: 'totalStorage split by kind (bytes)',
+    type: StorageByKindDto,
+  })
+  @Expose()
+  @Type(() => StorageByKindDto)
+  storageByKind: StorageByKindDto;
 
   @ApiProperty({
     description: 'New counts in the last 7 days',
@@ -192,6 +212,14 @@ export class AdminBulkDeleteResponseDto {
   failed: AdminBulkDeleteFailureDto[];
 }
 
+export class RegenerateImageResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty({ description: 'New value, use it as the ?t= cache-buster' })
+  @Expose()
+  @Type(() => Date)
+  updatedAt: Date;
+}
+
 export class AdminImageCreatorDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() externalId: string;
@@ -216,6 +244,12 @@ export class AdminImageResponseDto {
   @ApiProperty() @Expose() mimeType: string;
   @ApiProperty() @Expose() isPrivate: boolean;
   @ApiProperty() @Expose() isOptimized: boolean;
+  @ApiProperty({
+    description:
+      'Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)',
+  })
+  @Expose()
+  optimizeAttempts: number;
   @ApiProperty({ description: 'Whether image was compressed with Tinify API' })
   @Expose()
   tinifyOptimized: boolean;
@@ -227,6 +261,13 @@ export class AdminImageResponseDto {
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
   @ApiPropertyOptional() @Expose() @Type(() => Date) optimizedAt?: Date;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Perceptual hash (16 hex chars), null until computed',
+  })
+  @Expose()
+  dHash: string | null;
 
   @ApiPropertyOptional() @Expose() fullPath?: string;
 
@@ -254,6 +295,13 @@ export class AdminImageResponseDto {
   @Expose()
   activeShareLinks?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Other images with the same dHash in the caller scope (0 if unhashed or flat). Detail only.',
+  })
+  @Expose()
+  duplicates?: number;
+
   @ApiProperty({
     description: 'Whether the requesting admin has bookmarked this image',
   })
@@ -271,6 +319,12 @@ export class AdminAvatarResponseDto {
   @ApiProperty() @Expose() size: number;
   @ApiProperty() @Expose() mimeType: string;
   @ApiProperty() @Expose() isOptimized: boolean;
+  @ApiProperty({
+    description:
+      'Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)',
+  })
+  @Expose()
+  optimizeAttempts: number;
   @ApiProperty() @Expose() storagePath: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;
@@ -298,16 +352,40 @@ export class AdminRemoveImagesFromAlbumResponseDto {
   @ApiProperty() @Expose() message: string;
 }
 
+export class AdminShareLinkImageDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() originalName: string;
+  @ApiProperty() @Expose() isPrivate: boolean;
+}
+
+export class AdminShareLinkClientDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() name: string;
+}
+
 export class AdminImageShareLinkResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() imageId: string;
   @ApiProperty() @Expose() clientId: string;
   @ApiProperty() @Expose() readToken: string;
+  @ApiProperty({ description: 'Absolute URL: BASE_URL + /images/:id?token=' })
+  @Expose()
+  shareUrl: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiPropertyOptional() @Expose() @Type(() => Date) expiresAt?: Date;
   @ApiProperty({ description: 'True if the link is expired at response time' })
   @Expose()
   isExpired: boolean;
+
+  @ApiProperty({ type: AdminShareLinkImageDto })
+  @Expose()
+  @Type(() => AdminShareLinkImageDto)
+  image: AdminShareLinkImageDto;
+
+  @ApiProperty({ type: AdminShareLinkClientDto })
+  @Expose()
+  @Type(() => AdminShareLinkClientDto)
+  client: AdminShareLinkClientDto;
 }
 
 export class AdminPaginationResponseDto {
@@ -315,18 +393,6 @@ export class AdminPaginationResponseDto {
   @ApiProperty() @Expose() perPage: number;
   @ApiProperty() @Expose() total: number;
   @ApiProperty() @Expose() totalPages: number;
-}
-
-export class AdminImageShareLinksListResponseDto {
-  @ApiProperty({ type: [AdminImageShareLinkResponseDto] })
-  @Expose()
-  @Type(() => AdminImageShareLinkResponseDto)
-  data: AdminImageShareLinkResponseDto[];
-
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  @Expose()
-  @Type(() => AdminPaginationResponseDto)
-  pagination: AdminPaginationResponseDto;
 }
 
 export class AdminBookmarkResponseDto {
@@ -481,6 +547,7 @@ export class AdminImageListItemDto extends OmitType(AdminImageResponseDto, [
   'creator',
   'albums',
   'activeShareLinks',
+  'duplicates',
 ] as const) {
   @ApiProperty() creatorId: string;
   @ApiProperty({ type: AdminListCreatorDto }) creator: AdminListCreatorDto;

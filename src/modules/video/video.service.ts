@@ -9,10 +9,6 @@ import * as fs from 'fs/promises';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
@@ -38,7 +34,6 @@ export class VideoService {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private webhook: WebhookService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private metrics: FileharborMetrics,
@@ -160,19 +155,6 @@ export class VideoService {
         );
         await this.addVideoToAlbum(videoId, albumId, clientId);
       }
-
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
-          videoId: video.id,
-          originalName: video.originalName,
-          size: Number(video.size),
-          creatorId: creator.externalId,
-        })
-        .catch((err) =>
-          this.logger.warn(
-            `[uploadVideo] Webhook failed: ${err instanceof Error ? err.message : err}`,
-          ),
-        );
 
       this.logger.log(
         `[uploadVideo] Success - ID: ${videoId}, Client: ${clientId}`,
@@ -317,17 +299,6 @@ export class VideoService {
       );
     }
 
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.VIDEO_DELETED, {
-        id: videoId,
-        timestamp: new Date().toISOString(),
-      })
-      .catch((err) =>
-        this.logger.warn(
-          `[deleteVideo] Webhook failed: ${err instanceof Error ? err.message : err}`,
-        ),
-      );
-
     return plainToInstance(
       DeleteVideoResponseDto,
       { success: true, message: 'Video deleted successfully' },
@@ -343,9 +314,16 @@ export class VideoService {
     description?: string,
     isPrivate?: boolean,
   ): Promise<VideoResponseDto> {
-    const video = await this.prisma.video.findFirst({
-      where: { id: videoId, clientId, creatorId },
+    // creatorId is the external one (X-User-Id); video.creatorId is the internal Creator id.
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId: creatorId } },
+      select: { id: true },
     });
+    const video =
+      creator &&
+      (await this.prisma.video.findFirst({
+        where: { id: videoId, clientId, creatorId: creator.id },
+      }));
     if (!video) throw new NotFoundException('Video not found');
 
     const videoTagsInput =

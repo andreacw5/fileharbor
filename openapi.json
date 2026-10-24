@@ -318,7 +318,7 @@
         ]
       },
       "patch": {
-        "description": "Update tags, description, or other metadata. Only owner can update.",
+        "description": "Update tags, description or isPrivate. Only the owner (X-User-Id) can update.",
         "operationId": "ImageController_updateImage",
         "parameters": [
           {
@@ -2302,7 +2302,7 @@
             "bearer": []
           }
         ],
-        "summary": "Update client name, status, webhook and Tinify settings",
+        "summary": "Update client name, status and Tinify settings",
         "tags": [
           "Admin - Clients"
         ]
@@ -2444,6 +2444,15 @@
             }
           },
           {
+            "name": "dHash",
+            "required": false,
+            "in": "query",
+            "description": "Only images with this dHash (16 hex chars)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sortBy",
             "required": false,
             "in": "query",
@@ -2489,6 +2498,20 @@
             }
           },
           {
+            "name": "optimizeStatus",
+            "required": false,
+            "in": "query",
+            "description": "optimized, pending (the job will retry) or failed (the job gave up)",
+            "schema": {
+              "enum": [
+                "optimized",
+                "pending",
+                "failed"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "name": "tags",
             "required": false,
             "in": "query",
@@ -2517,6 +2540,109 @@
           }
         ],
         "summary": "List images (scoped to accessible clients)",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
+    "/admin/images/duplicates": {
+      "get": {
+        "description": "Key (clientId, dHash); dHash alone with crossClient=true, fullAccess only. Flat images (dHash 0) and unhashed ones are left out.",
+        "operationId": "ImagesAdminController_listDuplicates",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Only this client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "creatorId",
+            "required": false,
+            "in": "query",
+            "description": "Only images of this creator (id)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "crossClient",
+            "required": false,
+            "in": "query",
+            "description": "Group across clients (key = dHash alone). fullAccess principals only, 403 otherwise.",
+            "schema": {
+              "default": false,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminDuplicateGroupDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "crossClient without fullAccess"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Groups of images with the same dHash (scoped to accessible clients)",
         "tags": [
           "Admin - Images"
         ]
@@ -2674,6 +2800,51 @@
         ]
       }
     },
+    "/admin/images/reoptimize-failed": {
+      "post": {
+        "description": "Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.",
+        "operationId": "ImagesAdminController_reoptimizeFailedImages",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReoptimizeFailedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "clientId outside your scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Re-queue every image the optimize job gave up on",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
     "/admin/images/{id}/download": {
       "get": {
         "description": "Download the original image file for any image. Admin JWT replaces the API key. Increments the download counter.",
@@ -2764,6 +2935,52 @@
         ]
       }
     },
+    "/admin/images/{id}/regenerate": {
+      "post": {
+        "description": "Rebuilds thumb.webp from the stored original and empties the variant cache; id, original, size and optimize state are untouched. Public GETs are cached `immutable`: a cache holding the old thumb keeps it, reload with `?t=<updatedAt>`.",
+        "operationId": "ImagesAdminController_regenerateImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegenerateImageResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Image or original file not found"
+          },
+          "422": {
+            "description": "Original file is not a readable image"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Regenerate thumbnail and drop cached variants",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
     "/admin/images/{id}/tinify-compress": {
       "post": {
         "description": "Sends the existing image to Tinify API for additional compression, replaces the original, and regenerates the thumbnail. Returns compression statistics along with the updated image. Requires the client to have Tinify enabled (tinifyActive=true) and a valid API key configured. The compression limit is configurable per client (default: 500/month for free tier).",
@@ -2790,7 +3007,7 @@
             }
           },
           "400": {
-            "description": "Tinify not enabled, API key not configured, monthly limit reached, or image already compressed with Tinify"
+            "description": "Tinify not enabled, API key not configured, monthly limit reached, image not optimized yet, or already compressed with Tinify"
           },
           "403": {
             "description": "Access denied"
@@ -2805,6 +3022,45 @@
           }
         ],
         "summary": "Compress image with Tinify (TinyPNG)",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
+    "/admin/images/{id}/reoptimize": {
+      "post": {
+        "description": "Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.",
+        "operationId": "ImagesAdminController_reoptimizeImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Queued"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Image not found"
+          },
+          "409": {
+            "description": "Image already optimized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put an unoptimized image back in the optimize queue",
         "tags": [
           "Admin - Images"
         ]
@@ -2854,6 +3110,20 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "optimizeStatus",
+            "required": false,
+            "in": "query",
+            "description": "optimized, pending (the job will retry) or failed (the job gave up)",
+            "schema": {
+              "enum": [
+                "optimized",
+                "pending",
+                "failed"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2874,6 +3144,51 @@
           }
         ],
         "summary": "List avatars (scoped to accessible clients)",
+        "tags": [
+          "Admin - Avatars"
+        ]
+      }
+    },
+    "/admin/avatars/reoptimize-failed": {
+      "post": {
+        "description": "Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.",
+        "operationId": "AvatarsAdminController_reoptimizeFailedAvatars",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReoptimizeFailedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "clientId outside your scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Re-queue every avatar the optimize job gave up on",
         "tags": [
           "Admin - Avatars"
         ]
@@ -2944,6 +3259,45 @@
           }
         ],
         "summary": "Force delete an avatar (admin)",
+        "tags": [
+          "Admin - Avatars"
+        ]
+      }
+    },
+    "/admin/avatars/{id}/reoptimize": {
+      "post": {
+        "description": "Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.",
+        "operationId": "AvatarsAdminController_reoptimizeAvatar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Queued"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Avatar not found"
+          },
+          "409": {
+            "description": "Avatar already optimized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put an unoptimized avatar back in the optimize queue",
         "tags": [
           "Admin - Avatars"
         ]
@@ -3543,8 +3897,30 @@
     },
     "/admin/image-share-links": {
       "get": {
+        "description": "An unknown image and an image outside the caller scope both give an empty list.",
         "operationId": "ImageShareLinksAdminController_listShareLinks",
         "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
           {
             "name": "clientId",
             "required": false,
@@ -3564,29 +3940,41 @@
             }
           },
           {
-            "name": "page",
+            "name": "status",
             "required": false,
             "in": "query",
             "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "perPage",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "expired",
+                "all"
+              ]
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Paginated list.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminImageShareLinksListResponseDto"
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminImageShareLinkResponseDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
                 }
               }
             }
@@ -3598,6 +3986,50 @@
           }
         ],
         "summary": "List image share links (scoped to accessible clients)",
+        "tags": [
+          "Admin - Image Share Links"
+        ]
+      },
+      "post": {
+        "operationId": "ImageShareLinksAdminController_createShareLink",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCreateShareLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminImageShareLinkResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid expiry, or IMAGE_NOT_PRIVATE"
+          },
+          "403": {
+            "description": "Image client outside scope"
+          },
+          "404": {
+            "description": "Image not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a share link on a private image (admin)",
         "tags": [
           "Admin - Image Share Links"
         ]
@@ -4426,6 +4858,149 @@
         ]
       }
     },
+    "/admin/stats/storage": {
+      "get": {
+        "description": "Bytes of the originals: thumbnails and cached variants are not counted.",
+        "operationId": "StatisticsController_getStorageReport",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First day (UTC), default `to` - 29 days",
+            "schema": {
+              "example": "2026-10-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last day (UTC, included), default today. Max 366 days from `from`.",
+            "schema": {
+              "example": "2026-10-30",
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Only this client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad range (to < from, > 366 days)"
+          },
+          "403": {
+            "description": "clientId out of scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Storage per day and kind (snapshots) and per client (live)",
+        "tags": [
+          "Admin - Statistics"
+        ]
+      }
+    },
+    "/admin/stats/storage/creators": {
+      "get": {
+        "operationId": "StatisticsController_getCreatorStorage",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Only this client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CreatorStorageDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "clientId out of scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Live storage per creator, biggest first",
+        "tags": [
+          "Admin - Statistics"
+        ]
+      }
+    },
     "/admin/tags": {
       "get": {
         "operationId": "TagController_listTags",
@@ -4608,7 +5183,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "3.5.0",
+    "version": "3.6.0",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
@@ -4782,6 +5357,11 @@
             "type": "string",
             "description": "Full URL to access the image (baseUrl + url)",
             "example": "http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423"
+          },
+          "srcset": {
+            "type": "string",
+            "description": "Ready-made srcset (absolute URLs, WebP q85): 320/640/960/1280/1920w below the original width, then the original. Omitted for private images",
+            "example": "http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423?width=320 320w, http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423 400w"
           }
         },
         "required": [
@@ -4878,6 +5458,10 @@
             "type": "string",
             "description": "Image description",
             "example": "Beautiful sunset over the mountains"
+          },
+          "isPrivate": {
+            "type": "boolean",
+            "description": "Make the image private or public. Bytes already served public may stay in browser and shared caches until they expire."
           }
         }
       },
@@ -4885,8 +5469,9 @@
         "type": "object",
         "properties": {
           "expiresAt": {
+            "format": "date-time",
             "type": "string",
-            "description": "Expiration date for the share link",
+            "description": "Expiration date for the share link (future)",
             "example": "2025-11-05T12:00:00.000Z"
           }
         }
@@ -5875,14 +6460,6 @@
           "active": {
             "type": "boolean"
           },
-          "webhookEnabled": {
-            "type": "boolean"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Discord webhook URL, token masked",
-            "example": "https://discord.com/api/webhooks/123456/****"
-          },
           "tinifyActive": {
             "type": "boolean",
             "description": "Whether Tinify compression is enabled for this client"
@@ -5900,6 +6477,11 @@
             "type": "number",
             "description": "Monthly Tinify compression limit (default: 500 for free tier)",
             "default": 500
+          },
+          "tinifyAutoMinBytes": {
+            "type": "number",
+            "description": "Images above this size (bytes) are auto-compressed with Tinify; null = off",
+            "nullable": true
           },
           "bastionTenantSlug": {
             "type": "string",
@@ -5937,7 +6519,6 @@
           "id",
           "name",
           "active",
-          "webhookEnabled",
           "tinifyActive",
           "currentTinifyUsage",
           "currentTinifyLimit",
@@ -5988,14 +6569,6 @@
           "active": {
             "type": "boolean"
           },
-          "webhookEnabled": {
-            "type": "boolean"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Discord webhook URL, token masked",
-            "example": "https://discord.com/api/webhooks/123456/****"
-          },
           "tinifyActive": {
             "type": "boolean",
             "description": "Whether Tinify compression is enabled for this client"
@@ -6013,6 +6586,11 @@
             "type": "number",
             "description": "Monthly Tinify compression limit (default: 500 for free tier)",
             "default": 500
+          },
+          "tinifyAutoMinBytes": {
+            "type": "number",
+            "description": "Images above this size (bytes) are auto-compressed with Tinify; null = off",
+            "nullable": true
           },
           "bastionTenantSlug": {
             "type": "string",
@@ -6054,7 +6632,6 @@
           "id",
           "name",
           "active",
-          "webhookEnabled",
           "tinifyActive",
           "currentTinifyUsage",
           "currentTinifyLimit",
@@ -6074,14 +6651,6 @@
             "type": "boolean",
             "description": "Enable or disable the client"
           },
-          "webhookEnabled": {
-            "type": "boolean",
-            "description": "Enable or disable webhook notifications"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Discord webhook URL, https://discord.com/api/webhooks/<id>/<token> (set to null to remove)"
-          },
           "tinifyActive": {
             "type": "boolean",
             "description": "Enable or disable Tinify compression for this client"
@@ -6097,6 +6666,12 @@
           "currentTinifyLimit": {
             "type": "number",
             "description": "Monthly Tinify compression limit (default: 500 for free tier)"
+          },
+          "tinifyAutoMinBytes": {
+            "type": "number",
+            "description": "Auto-compress with Tinify the images above this size, in bytes (1048576 = 1 MB is a sensible start). null turns auto-compression off. Spends the same monthly quota as manual compression.",
+            "example": 1048576,
+            "nullable": true
           },
           "bastionTenantSlug": {
             "type": "string",
@@ -6169,6 +6744,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "tinifyOptimized": {
             "type": "boolean",
             "description": "Whether image was compressed with Tinify API"
@@ -6203,6 +6782,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "dHash": {
+            "type": "string",
+            "nullable": true,
+            "description": "Perceptual hash (16 hex chars), null until computed"
+          },
           "fullPath": {
             "type": "string"
           },
@@ -6231,6 +6815,7 @@
           "mimeType",
           "isPrivate",
           "isOptimized",
+          "optimizeAttempts",
           "tinifyOptimized",
           "tags",
           "views",
@@ -6238,6 +6823,7 @@
           "storagePath",
           "createdAt",
           "updatedAt",
+          "dHash",
           "isBookmarked",
           "creatorId",
           "creator",
@@ -6284,6 +6870,112 @@
           "data",
           "pagination"
         ]
+      },
+      "PageMetaDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "AdminDuplicateImageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "size": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isPrivate": {
+            "type": "boolean"
+          },
+          "creatorExternalId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "originalName",
+          "width",
+          "height",
+          "size",
+          "createdAt",
+          "isPrivate",
+          "creatorExternalId"
+        ]
+      },
+      "AdminDuplicateGroupDto": {
+        "type": "object",
+        "properties": {
+          "dHash": {
+            "type": "string",
+            "example": "3c3e1e0f0f1e3c3c"
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true,
+            "description": "null only with crossClient=true"
+          },
+          "count": {
+            "type": "number"
+          },
+          "totalBytes": {
+            "type": "number",
+            "description": "Sum of size over the whole group"
+          },
+          "images": {
+            "description": "Up to 6, oldest first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminDuplicateImageDto"
+            }
+          }
+        },
+        "required": [
+          "dHash",
+          "clientId",
+          "count",
+          "totalBytes",
+          "images"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
       },
       "AdminClientCreatorClientDto": {
         "type": "object",
@@ -6376,6 +7068,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "tinifyOptimized": {
             "type": "boolean",
             "description": "Whether image was compressed with Tinify API"
@@ -6410,6 +7106,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "dHash": {
+            "type": "string",
+            "nullable": true,
+            "description": "Perceptual hash (16 hex chars), null until computed"
+          },
           "fullPath": {
             "type": "string"
           },
@@ -6430,6 +7131,10 @@
             "type": "number",
             "description": "Number of active (non-expired) share links for this image"
           },
+          "duplicates": {
+            "type": "number",
+            "description": "Other images with the same dHash in the caller scope (0 if unhashed or flat). Detail only."
+          },
           "isBookmarked": {
             "type": "boolean",
             "description": "Whether the requesting admin has bookmarked this image"
@@ -6446,6 +7151,7 @@
           "mimeType",
           "isPrivate",
           "isOptimized",
+          "optimizeAttempts",
           "tinifyOptimized",
           "tags",
           "views",
@@ -6453,6 +7159,7 @@
           "storagePath",
           "createdAt",
           "updatedAt",
+          "dHash",
           "isBookmarked"
         ]
       },
@@ -6533,6 +7240,16 @@
           "failed"
         ]
       },
+      "AdminReoptimizeFailedDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Limit to one client; omitted = every client you can see"
+          }
+        }
+      },
       "AdminDeleteResponseDto": {
         "type": "object",
         "properties": {
@@ -6546,6 +7263,23 @@
         "required": [
           "success",
           "message"
+        ]
+      },
+      "RegenerateImageResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "New value, use it as the ?t= cache-buster"
+          }
+        },
+        "required": [
+          "id",
+          "updatedAt"
         ]
       },
       "CompressionStatsDto": {
@@ -6634,6 +7368,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "storagePath": {
             "type": "string"
           },
@@ -6671,6 +7409,7 @@
           "size",
           "mimeType",
           "isOptimized",
+          "optimizeAttempts",
           "storagePath",
           "createdAt",
           "updatedAt",
@@ -6727,6 +7466,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "storagePath": {
             "type": "string"
           },
@@ -6762,6 +7505,7 @@
           "size",
           "mimeType",
           "isOptimized",
+          "optimizeAttempts",
           "storagePath",
           "createdAt",
           "updatedAt"
@@ -7175,6 +7919,40 @@
           }
         }
       },
+      "AdminShareLinkImageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "isPrivate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "originalName",
+          "isPrivate"
+        ]
+      },
+      "AdminShareLinkClientDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "AdminImageShareLinkResponseDto": {
         "type": "object",
         "properties": {
@@ -7190,6 +7968,10 @@
           "readToken": {
             "type": "string"
           },
+          "shareUrl": {
+            "type": "string",
+            "description": "Absolute URL: BASE_URL + /images/:id?token="
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -7201,6 +7983,12 @@
           "isExpired": {
             "type": "boolean",
             "description": "True if the link is expired at response time"
+          },
+          "image": {
+            "$ref": "#/components/schemas/AdminShareLinkImageDto"
+          },
+          "client": {
+            "$ref": "#/components/schemas/AdminShareLinkClientDto"
           }
         },
         "required": [
@@ -7208,26 +7996,30 @@
           "imageId",
           "clientId",
           "readToken",
+          "shareUrl",
           "createdAt",
-          "isExpired"
+          "isExpired",
+          "image",
+          "client"
         ]
       },
-      "AdminImageShareLinksListResponseDto": {
+      "AdminCreateShareLinkDto": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AdminImageShareLinkResponseDto"
-            }
+          "imageId": {
+            "type": "string",
+            "description": "Image ID (must be private)"
           },
-          "pagination": {
-            "$ref": "#/components/schemas/AdminPaginationResponseDto"
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Expiry, in the future and at most 365 days out",
+            "example": "2026-11-05T12:00:00.000Z"
           }
         },
         "required": [
-          "data",
-          "pagination"
+          "imageId",
+          "expiresAt"
         ]
       },
       "AdminBookmarkResponseDto": {
@@ -7506,6 +8298,28 @@
           "pagination"
         ]
       },
+      "StorageByKindDto": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "videos": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "avatars": {
+            "type": "number",
+            "description": "Bytes"
+          }
+        },
+        "required": [
+          "images",
+          "videos",
+          "avatars"
+        ]
+      },
       "StatsTrendDto": {
         "type": "object",
         "properties": {
@@ -7561,6 +8375,11 @@
           },
           "videos": {
             "type": "number"
+          },
+          "storage": {
+            "type": "number",
+            "nullable": true,
+            "description": "Bytes in scope from that day's storage snapshot (00:30 UTC); null when there is none"
           }
         },
         "required": [
@@ -7568,7 +8387,8 @@
           "images",
           "avatars",
           "albums",
-          "videos"
+          "videos",
+          "storage"
         ]
       },
       "AdminStatsResponseDto": {
@@ -7600,6 +8420,14 @@
           "totalCreators": {
             "type": "number"
           },
+          "storageByKind": {
+            "description": "totalStorage split by kind (bytes)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageByKindDto"
+              }
+            ]
+          },
           "last7Days": {
             "description": "New counts in the last 7 days",
             "allOf": [
@@ -7625,8 +8453,163 @@
           "totalVideos",
           "totalStorage",
           "totalCreators",
+          "storageByKind",
           "last7Days",
           "dailyChart"
+        ]
+      },
+      "StorageSeriesPointDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-22"
+          },
+          "images": {
+            "type": "number",
+            "nullable": true
+          },
+          "videos": {
+            "type": "number",
+            "nullable": true
+          },
+          "avatars": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "date",
+          "images",
+          "videos",
+          "avatars"
+        ]
+      },
+      "KindUsageDto": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number",
+            "description": "Bytes"
+          }
+        },
+        "required": [
+          "count",
+          "bytes"
+        ]
+      },
+      "ClientStorageDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "images": {
+            "$ref": "#/components/schemas/KindUsageDto"
+          },
+          "videos": {
+            "$ref": "#/components/schemas/KindUsageDto"
+          },
+          "avatars": {
+            "$ref": "#/components/schemas/KindUsageDto"
+          }
+        },
+        "required": [
+          "clientId",
+          "name",
+          "images",
+          "videos",
+          "avatars"
+        ]
+      },
+      "StorageReportDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "firstSnapshot": {
+            "type": "string",
+            "nullable": true,
+            "description": "First snapshot in scope: the series is real from this day"
+          },
+          "series": {
+            "description": "One point per day, bytes; null on days with no snapshot",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageSeriesPointDto"
+            }
+          },
+          "byClient": {
+            "description": "Live, biggest first",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientStorageDto"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "firstSnapshot",
+          "series",
+          "byClient"
+        ]
+      },
+      "CreatorStorageDto": {
+        "type": "object",
+        "properties": {
+          "creatorId": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "images": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "videos": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "avatars": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "totalBytes": {
+            "type": "number"
+          },
+          "itemCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "creatorId",
+          "externalId",
+          "username",
+          "clientId",
+          "images",
+          "videos",
+          "avatars",
+          "totalBytes",
+          "itemCount"
         ]
       },
       "TagTagClientDto": {

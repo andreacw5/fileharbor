@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -32,6 +33,9 @@ import {
 import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
 
 @ApiTags('Admin - Bookmarks')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/bookmarks')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()

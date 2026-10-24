@@ -54,6 +54,9 @@ import {
 } from '../dto/admin-response.dto';
 
 @ApiTags('Admin - Videos')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/videos')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()
@@ -328,8 +331,6 @@ export class VideosAdminController {
     );
   }
 
-  // Media for the console: a grid embeds dozens at once, like the public delivery.
-  @SkipThrottle()
   @Get(':id/thumb')
   @ApiOperation({ summary: 'Get video thumbnail (admin, JWT auth)' })
   async getThumb(
@@ -358,8 +359,6 @@ export class VideosAdminController {
     res.end(buffer);
   }
 
-  // Media for the console: a grid embeds dozens at once, like the public delivery.
-  @SkipThrottle()
   @Get(':id/stream')
   @ApiOperation({ summary: 'Stream video (admin, JWT auth, Range support)' })
   @ApiQuery({ name: 'download', required: false, type: Boolean })

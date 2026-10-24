@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
@@ -14,6 +15,12 @@ import sharp from 'sharp';
 // enormous dimensions (decompression bomb). 100 MP fits a 48 MP phone photo
 // with room to spare, at ~400 MB of RGBA per pipeline.
 const MAX_INPUT_PIXELS = 100_000_000;
+
+/** A dHash as stored and as the API speaks it: 16 hex chars (`computeDHash`). */
+export const DHASH_PATTERN = /^[0-9a-f]{16}$/;
+
+/** What a flat image hashes to: every such image would "match" every other. */
+export const FLAT_DHASH = '0000000000000000';
 
 /** Formats accepted on upload, as reported by sharp from the bytes themselves. */
 export const SUPPORTED_IMAGE_FORMATS = ['jpeg', 'png', 'webp', 'gif'];
@@ -28,8 +35,14 @@ export const IMAGE_UPLOAD_LIMITS = {
 // Animated GIF/WebP keep every frame (WebP output stays animated). The pixel
 // cap then counts all frames together. JPEG/PNG outputs take the first frame
 // only: an animated input would otherwise come out as a strip of frames.
+// failOn 'error': sharp's default ('warning') rejects files browsers render
+// fine, e.g. libjpeg's "Invalid SOS parameters for sequential JPEG".
 function openImage(input: Buffer, animated = true) {
-  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated });
+  return sharp(input, {
+    limitInputPixels: MAX_INPUT_PIXELS,
+    animated,
+    failOn: 'error',
+  });
 }
 import * as os from 'os';
 import { randomUUID } from 'crypto';
@@ -58,7 +71,8 @@ try {
 
 /**
  * Failed optimization runs after which an image/avatar is left unoptimized and
- * no longer retried by the hourly jobs. Reset `optimizeAttempts` to 0 to retry.
+ * no longer retried by the hourly jobs. Reset `optimizeAttempts` to 0 to retry
+ * (`POST admin/{images,avatars}/:id/reoptimize`, `…/reoptimize-failed`, or SQL).
  */
 export const MAX_OPTIMIZE_ATTEMPTS = 3;
 
@@ -71,7 +85,7 @@ export const OPTIMIZE_RETRYABLE_WHERE = {
   optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
 };
 
-/** Rows the optimize jobs gave up on: only a manual reset retries them. */
+/** Rows the optimize jobs gave up on: only a manual reset (admin reoptimize or SQL) retries them. */
 export const OPTIMIZE_GIVEN_UP_WHERE = {
   isOptimized: false,
   optimizeAttempts: { gte: MAX_OPTIMIZE_ATTEMPTS },
@@ -224,6 +238,37 @@ export class StorageService {
 
   async clearImageVariants(domain: string, imageId: string): Promise<void> {
     await this.deleteDirectory(this.getImageVariantsPath(domain, imageId));
+  }
+
+  /**
+   * Rebuilds thumb.webp from the stored original and drops cached variants. The original
+   * is untouched. Only reading/decoding the original is a 422 (re-upload needed); a failed
+   * thumb write stays a 500, and a failed variants clear only warns: the new thumb is
+   * already on disk, so the caller must still move updatedAt.
+   */
+  async regenerateImageThumb(
+    domain: string,
+    imageId: string,
+    size: number,
+    quality: number,
+  ): Promise<void> {
+    let thumb: Buffer;
+    try {
+      const original = await this.readFile(
+        this.getImageFilePath(domain, imageId, 'original'),
+      );
+      thumb = await this.createThumbnail(original, size, quality);
+    } catch {
+      throw new UnprocessableEntityException(
+        'Original file is not a readable image',
+      );
+    }
+    await this.saveFile(this.getImageFilePath(domain, imageId, 'thumb'), thumb);
+    await this.clearImageVariants(domain, imageId).catch((error: unknown) =>
+      this.logger.warn(
+        `[regenerateImageThumb] Variants of ${imageId} not cleared: ${error instanceof Error ? error.message : error}`,
+      ),
+    );
   }
 
   /** Number of entries in a directory, 0 when it doesn't exist. */
@@ -655,6 +700,30 @@ export class StorageService {
   async isAnimated(buffer: Buffer): Promise<boolean> {
     const { pages } = await openImage(buffer).metadata();
     return (pages ?? 1) > 1;
+  }
+
+  /**
+   * 64-bit difference hash as 16 hex chars: 9x8 grayscale, one bit per
+   * "left pixel brighter than its right neighbour". Survives re-encoding,
+   * optimize, Tinify and resizing, so it matches on content, not bytes.
+   * Animated input: first frame. Transparency is flattened onto white, so a
+   * flat image of any colour hashes to all zeros.
+   */
+  async computeDHash(buffer: Buffer): Promise<string> {
+    const px = await openImage(buffer, false)
+      .flatten({ background: '#ffffff' })
+      .grayscale()
+      .resize(9, 8, { fit: 'fill' })
+      .raw()
+      .toBuffer();
+    let hash = 0n;
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) {
+        const i = y * 9 + x;
+        hash = (hash << 1n) | (px[i] > px[i + 1] ? 1n : 0n);
+      }
+    }
+    return hash.toString(16).padStart(16, '0');
   }
 
   /**

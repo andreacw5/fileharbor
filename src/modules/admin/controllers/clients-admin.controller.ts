@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -37,6 +38,9 @@ import {
 } from '../helpers/admin-access.helper';
 
 @ApiTags('Admin - Clients')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/clients')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()
@@ -127,12 +131,12 @@ export class ClientsAdminController {
   @Patch(':id')
   @RequirePermission('fileharbor-config.manage')
   @ApiOperation({
-    summary: 'Update client name, status, webhook and Tinify settings',
+    summary: 'Update client name, status and Tinify settings',
   })
   @ApiResponse({ status: 200, type: AdminClientResponseDto })
   @Audit('fh_client.updated', {
     // Only the field names, never their values: the body can carry a Tinify API
-    // key and a webhook URL.
+    // key.
     metadata: (_r: unknown, req: AuditRequest) => ({
       clientId: req.params.id,
       fields: Object.keys((req.body ?? {}) as Record<string, unknown>),
@@ -151,15 +155,14 @@ export class ClientsAdminController {
     const data: Record<string, any> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.active !== undefined) data.active = dto.active;
-    if (dto.webhookEnabled !== undefined)
-      data.webhookEnabled = dto.webhookEnabled;
-    if ('webhookUrl' in dto) data.webhookUrl = dto.webhookUrl ?? null;
     if (dto.tinifyActive !== undefined) data.tinifyActive = dto.tinifyActive;
     if ('tinifyApiKey' in dto) data.tinifyApiKey = dto.tinifyApiKey ?? null;
     if (dto.currentTinifyUsage !== undefined)
       data.currentTinifyUsage = dto.currentTinifyUsage;
     if (dto.currentTinifyLimit !== undefined)
       data.currentTinifyLimit = dto.currentTinifyLimit;
+    if ('tinifyAutoMinBytes' in dto)
+      data.tinifyAutoMinBytes = dto.tinifyAutoMinBytes ?? null;
     if ('bastionTenantSlug' in dto) {
       assertTenantSlugAllowed(adminUser, dto.bastionTenantSlug);
       data.bastionTenantSlug = dto.bastionTenantSlug ?? null;

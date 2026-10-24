@@ -80,6 +80,7 @@ usa `coverImageId` quando è impostato; le altre route lo ignorano e prendono se
     tags: string[],
     fullPath: string,            // {BASE_URL}/images/{id}
     thumbnailPath: string,       // {BASE_URL}/images/{id}?thumb=true
+    srcset?: string,             // assoluto, solo immagini pubbliche (vedi ImageResponse.srcset)
   };
   video?: {                      // se VIDEO
     id, originalName, mimeType, duration?, width?, height?, size,
@@ -114,7 +115,7 @@ Gli URL seguono `API_PREFIX` (vedi `RouteHelperService`): non costruirli a mano.
 | `isPublic` | boolean | no | default `false` |
 | `coverImageId` | UUID | no | **Accettato ma ignorato** in creazione: impostarlo poi con `PATCH` |
 
-`201` → `Album`. Webhook `album.created`.
+`201` → `Album`.
 
 ### `GET /albums` — lista
 
@@ -137,12 +138,13 @@ case-insensitive), `page` (default 1), `perPage` (default 20, max 100). Ordine: 
 | `name`, `description`, `isPublic` | |
 | `coverImageId` | UUID di un'immagine **già nell'album** e dello stesso creator, altrimenti `400`. `null` rimuove la copertina |
 
-`200` → `Album` (senza contatori). Webhook `album.updated`.
+`200` → `Album` (senza contatori).
 
 ### `DELETE /albums/:albumId` — cancella
 
 `X-User-Id` obbligatorio, deve essere il creator. Cancella album, item e token; immagini e video
-restano. `200` → `{ success: true, message: "Album deleted successfully" }`. Webhook `album.deleted`.
+restano. `200` → `{ success: true, message: "Album deleted successfully" }`. Scrive l'audit
+`fh_album.deleted` in Bastion (`via: 'api_key'`, client, `X-User-Id`, `albumId`).
 
 Non esiste la variante per `externalAlbumId`: usare l'`id` interno.
 
@@ -167,7 +169,6 @@ Non esiste la variante per `externalAlbumId`: usare l'`id` interno.
   duplicata: ne cambia solo l'`order`.
 
 `201` → `{ albumId, count, items: [{ id, resourceType, order }] }` (`id` = riga AlbumItem).
-Webhook `album.image_added`, uno per immagine (nessuno per i video).
 
 ### `DELETE /albums/:albumId/items` — rimuovi
 
@@ -176,7 +177,6 @@ max 100. Le risorse non presenti nell'album sono ignorate in silenzio. Immagini 
 cancellati.
 
 `200` → `{ albumId, removed, success: true, message: "<n> item(s) removed" }`.
-Webhook `album.image_removed`, uno per immagine rimossa.
 
 ### `GET /albums/:albumId/items` — lista item
 
@@ -286,19 +286,10 @@ Su `400` di validazione `errors` contiene l'array dei messaggi di `class-validat
 
 ---
 
-## Webhook
+## Notifiche
 
-Se il client ha i webhook attivi (fire-and-forget, vedi `CLAUDE.md`):
-
-| Evento | Quando |
-|---|---|
-| `album.created` | `POST /albums` |
-| `album.updated` | `PATCH` (per id o external) |
-| `album.deleted` | `DELETE /albums/:albumId` |
-| `album.image_added` | per ogni immagine passata a `POST …/items` (anche se già presente) |
-| `album.image_removed` | per ogni immagine effettivamente rimossa |
-
-Nessun evento per i video aggiunti o rimossi.
+Nessuna notifica in uscita: i webhook Discord per client sono stati rimossi (piano 10). Chi deve
+reagire a un cambiamento fa polling.
 
 ---
 

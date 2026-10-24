@@ -24,7 +24,6 @@ Multi-tenant NestJS 11 image management API. All data scoped by `clientId`. Auth
 | `avatar` | Single-avatar-per-creator lifecycle |
 | `album` | Collections, token-based private access |
 | `storage` | All disk I/O and Sharp image processing |
-| `webhook` | Fire-and-forget Discord webhook notifications |
 | `admin` | Admin console API: cross-client ops, scoped by tenant |
 | `bastion` | Everything Bastion, on `@heyatom/bastion-client`: the package verifies tokens and writes audit events; guards, console permissions and multi-app acceptance stay local (no controller) |
 | `prisma` | Database service wrapper |
@@ -68,15 +67,6 @@ Default fallback images live at `storage/defaults.fileharbor/`. `GET /images/:id
 
 All service responses shaped with `plainToInstance(..., { excludeExtraneousValues: true })`. Only `@Expose()` decorated properties are returned. Follow this for every new response DTO.
 
-## Webhook System
-
-Always call non-blocking:
-```typescript
-this.webhook.sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, payload)
-  .catch(error => this.logger.warn(...));
-```
-Webhooks are opt-in per client (`client.webhookEnabled` + `client.webhookUrl`). Failures must be swallowed — never let them propagate.
-
 ## Scheduled Jobs
 
 No `job` module: each cron lives next to the module it serves (`ScheduleModule.forRoot()` in `app.module.ts`). Live:
@@ -89,19 +79,41 @@ No `job` module: each cron lives next to the module it serves (`ScheduleModule.f
 | `AlbumCleanupJob.cleanExpiredAlbumTokens` | 04:00 | deletes expired album tokens |
 | `StorageCleanupJob.cleanOrphanedFiles` | 02:00 | **deletes** image/avatar/video dirs with no DB row (older than 1h) |
 | `TinifyResetJob.resetTinifyUsageCounters` | 1st of month | resets Tinify usage counters |
+| `TinifyAutoJob.compressLargeImages` | hourly at :30 | Tinify-compresses optimized images above the client's `tinifyAutoMinBytes`, largest first |
+| `StorageSnapshotJob.snapshotStorage` | 00:30 UTC (+ at boot if today has none) | upserts `storage_snapshots`: one row per client × kind (IMAGE/VIDEO/AVATAR), zeros included |
 
 Deletes remove the DB row first, then the files; a failed file delete only logs a `warn` and
 leaves the dir to this sweep (a row pointing at missing files would be worse than a stray dir).
 
 Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
-`MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
-`optimizeAttempts = 0` to retry. Storage dirs map back to clients by `domain` **or** `id`
+`MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch.
+`POST admin/images/:id/reoptimize` (or `admin/avatars/…`, or `…/reoptimize-failed` for every given-up row in
+scope) resets `optimizeAttempts` on unoptimized rows only (`409 ALREADY_OPTIMIZED` otherwise) and the next
+hourly run picks them up; SQL (`optimizeAttempts = 0`) still works. The reset moves `updatedAt` too (`@updatedAt`): a new
+ETag for images, and for avatars a fresh queued-at for `fileharbor_unoptimized_oldest_age_seconds`. Storage dirs map back to clients by `domain` **or** `id`
 (`client.domain || clientId`); a dir matching neither is left alone.
 
 Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
-`ORIGINAL_QUALITY` (default 100, uploads only). Every `@Cron` job runs inside
+`ORIGINAL_QUALITY` (default 100, uploads only), and write the new byte count to `size`
+(`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
+`src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
+`node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
+(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. `src/scripts/regenerate-thumbnails.ts`
+(same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
+which otherwise applies to new uploads only. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
+
+Tinify auto-compress is opt-in per client: `Client.tinifyAutoMinBytes` (`null` = off, set via
+`PATCH /admin/clients/:id`; 1048576 is the suggested start) is both flag and threshold, and still needs
+`tinifyActive` + a key. The job calls `ImageService.compressImageWithTinify`, so it shares the manual
+endpoint's quota (`currentTinifyUsage`/`currentTinifyLimit`, reserved atomically before the call, raised to
+Tinify's `Compression-Count`, set to the limit on a Tinify 429) and checks. At most
+`TINIFY_AUTO_BATCH` (default 20) images per client per run, so the month's quota is spread. A failure bumps
+`Image.tinifyAttempts` (skipped at `MAX_OPTIMIZE_ATTEMPTS`, reset by SQL); a 401, a 429, our own limit
+(`code: TINIFY_LIMIT_REACHED`) or Tinify unreachable (no response, 60s timeout, 5xx) stops that client for
+the run instead, so an outage never gives up on images. The manual endpoint refuses rows not yet `isOptimized`. A compression that saves nothing keeps
+our file but still counts. Only `isOptimized` rows: the optimize job would re-encode a Tinify output.
 
 ## Admin Module
 
@@ -123,8 +135,24 @@ Three parts:
   Bastion directly.
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
+- **Duplicates** (plan 03): `Image.dHash` is a 64-bit dHash of `original.webp` as 16 hex chars
+  (`StorageService.computeDHash`, set on upload, best-effort: a failure leaves it `null`). Text, not
+  `BigInt`, because raw image rows are spread into responses. `GET /admin/images/duplicates` groups by
+  `(clientId, dHash)` inside `allowedClientIds` (`crossClient=true` → `dHash` alone, `fullAccess` only),
+  `GET /admin/images?dHash=` lists one group, the show carries `dHash` + `duplicates`. The all-zero
+  hash (flat image) never counts as a duplicate. Never auto-delete: deleting is the bulk-delete.
+- **Optimize status** (plan 07): `GET /admin/images` and `/admin/avatars` take `optimizeStatus=optimized|pending|failed`,
+  mapped on `OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE` (the metric's own predicates); both DTOs
+  expose `optimizeAttempts`. Re-queue with `…/:id/reoptimize` / `…/reoptimize-failed` (see Scheduled Jobs).
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
   scoped totals, a 7-day trend and a per-day chart. `totalStorage` / `newStorage` sum image, video and avatar bytes.
+  **Storage report** (plan 04): `StorageSnapshot` is the only storage history (live rows rewrite the past on
+  delete/optimize), per client, never per creator. `storageByKind` + `dailyChart[].storage` (snapshot bytes,
+  `null` on a day with none) on `GET admin/stats`; `GET admin/stats/storage?from&to&clientId` (bare object,
+  ≤ 366 days, series `null` before `firstSnapshot`, `byClient` live); `GET admin/stats/storage/creators`
+  (`{ data, meta }`, live, **`library.manage`**). Every byte figure is the originals' `size`: no thumbs, no
+  cached variants. All live per-client sums go through `storageUsageByClient` (`statistics/storage-usage.ts`),
+  shared with `ClientService` — never a second copy of the query.
 
 ### Guard
 
@@ -277,12 +305,32 @@ Admin writes report to Bastion's audit log. Same mechanism as Herald and Beacon:
   allows exactly two segments and the nouns here (`image`, `client`, `creator`) would otherwise collide with
   other services'.
 - Metadata carries ids and **field names**, never field values — a client update body can hold a Tinify
-  API key and a webhook URL.
+  API key.
 - Without `BASTION_CLIENT_API_KEY` the service starts normally and skips every write, with a warning per
   skipped event.
 
 Bookmarks are deliberately **not** audited: they are per-actor console UI state, not a change to anyone's
 data, and one event per toggle would spend the `/events` budget on noise.
+
+#### Client surface (`X-API-Key`)
+
+Where the information is lost or visibility changes, client writes are audited too (plan 10), under the
+console's event names: `DELETE /images/:imageId`, `/videos/:id`, `/avatars/:externalUserId`,
+`/albums/:albumId` → `fh_{image,video,avatar,album}.deleted`; `PATCH /images/:imageId` and `/videos/:id`
+**only when the body carries `isPrivate`** → `fh_{image,video}.updated`. Nothing else: no uploads, no
+metadata or album edits, no share links (the row stays, or is temporary by design). There are no outgoing
+webhooks: the per-client Discord ones were removed.
+
+- `auditClientWrite()` (`common/client-audit.ts`) → `BastionAuditService.write()`, `void`, after the service
+  succeeded: a 403/404 writes nothing. Not `@Audit()`: `AuditInterceptor` takes `request.adminUser` as the
+  actor, and client routes have none.
+- **In the client controllers, never the services**: `ImageService.deleteImage` & co. are shared with the
+  admin routes, which `@Audit` already covers — writing in the service would double every console event.
+- Metadata: `via: 'api_key'`, `clientId`, `externalUserId` (the `X-User-Id` actor, `null` without one), the
+  resource id (`ownerExternalUserId` for the avatar's path). Never `userId`: an app's user id is not a
+  Bastion user.
+- The PATCH events add `fields: ['isPrivate']` **and the `isPrivate` boolean**: the one value allowed in
+  metadata, since it is the fact being tracked and not a secret.
 
 
 ## Self-Service Module (`/me`)
@@ -342,6 +390,9 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 - EXIF metadata removed during optimization
 - Sanitize file paths (handled by `StorageService`)
 - Rate limiting via `@nestjs/throttler` — configured by `THROTTLE_TTL` and `THROTTLE_LIMIT` env vars
+- The console surface (`admin/*`, every `BastionUserGuard` controller) is `@SkipThrottle()` at class level:
+  Meridian's BFF calls from one IP for every admin, so an IP-keyed bucket (10/min by default) 429'd bulk
+  actions. A new admin controller needs the decorator too.
 
 ## API Versioning
 
@@ -350,7 +401,7 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 (`src/utils/route.utils.ts`). Never concatenate a prefix by hand.
 
 `path()` gives the relative `url`/`thumbnailUrl`/`shareUrl`/album token `url` (`/{prefix}/...`);
-`fullUrl()` = `BASE_URL + path()` gives `fullPath`. Webhook links use `BASE_URL` directly.
+`fullUrl()` = `BASE_URL + path()` gives `fullPath`.
 
 **Prod (behind nginx)**: nginx serves `https://fileharbor.heyatom.dev/v2/...` and strips `/v2` before
 proxying, so `API_PREFIX` stays **empty** and the public prefix lives in `BASE_URL=https://fileharbor.heyatom.dev/v2`.
@@ -377,11 +428,18 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   keep working; close values share one cached file and one ETag (the controller snaps too).
 - **Cache**: at most `MAX_CACHED_VARIANTS` (20) files under `{imageDir}/variants/`; past that a variant is
   rendered but not stored.
+- **`srcset`** (`buildSrcset`, plan 09): `ImageResponseDto` and album image items carry a ready-made
+  `srcset` built on `fullPath` (absolute): the fixed `SRCSET_WIDTHS` (320/640/960/1280/1920) strictly below
+  the original width, then the original itself (no render, no cache slot). Omitted for private images.
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
   (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. Uploads and the optimize jobs
   don't use it.
+- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` from the stored original and
+  empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
+  without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
+  it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).
 
 ## DB Entities
 
@@ -432,8 +490,6 @@ this.config.get('throttle.ttl')      // nested key from config.schema.ts
 3. Use `@ClientId()` / `@CreatorExternalId()` for tenant/creator context
 4. Scope all Prisma queries with `where: { clientId }`
 5. Return responses via `plainToInstance(ResponseDto, data, { excludeExtraneousValues: true })`
-6. Fire webhooks non-blocking with `.catch()`
-7. Import `WebhookModule` if needed (already exported from `WebhookModule`)
 
 ## Key Commands
 
@@ -465,10 +521,12 @@ Swagger UI: `http://localhost:3000/docs` (when `ENABLE_SWAGGER` resolves to true
 - Isolation is the network's job: never publish `9091` on the container, nginx never proxies it. Prometheus scrapes `fileharbor:9091` on the internal Docker network.
 - `MetricsMiddleware` (all routes, applied by the package module) records `http_request_duration_seconds` (`method`/`route`/`status`). Middleware, not interceptor, so guard 401s and throttler 429s are counted. `route` is always the Nest route pattern (`/images/:id`), never the raw URL — media ids would explode cardinality; unmatched requests get `route="unmatched"`, requests the client abandons `status="499"`. `/health/*` is not instrumented.
 - `fileharbor_video_processing_failures_total{stage}` (counter, `stage` = `thumbnail` | `metadata`, both pre-initialized to 0): incremented by `VideoService.uploadVideo` when ffmpeg thumbnail or ffprobe metadata extraction fails. The upload still returns 2xx (no thumbnail, duration/width/height stored as null), so HTTP metrics stay green — a missing `ffmpeg-static`/`ffprobe-static` binary or the 30s timeout only shows here. Alert: `increase(fileharbor_video_processing_failures_total[1h]) > 0`.
+- `fileharbor_tinify_auto_total{result}` (counter, `result` = `compressed` | `skipped` | `failed`, pre-initialized to 0): `TinifyAutoJob` outcomes; `skipped` = the real file was already under the threshold. A day of `failed` with no `compressed` means a broken key. No alert rule.
 - Optimize backlog gauges (label `kind` = `image` | `avatar`, both always present), lazy `collect()` — no query until scraped; a DB error logs `warn` and keeps the previous value. Aggregates only (`count` / `_min`), same predicates as the optimize jobs (`OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE`, `storage.service.ts`):
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
   - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).
-  - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via manual `optimizeAttempts = 0`, deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
+  - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via a reset (`POST admin/{images,avatars}/:id/reoptimize`, `…/reoptimize-failed`, or SQL `optimizeAttempts = 0`), deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
+- `fileharbor_storage_bytes{client}` — bytes of originals per client (images + videos + avatars, no thumbs or cached variants: same number as the console's `totalStorage`, via `storageUsageByClient`). Label = `Client.id` (immutable; `domain`/`name` can change), personal clients included. Lazy like the gauges above, three `groupBy` per scrape; reset after each successful query, so deleted clients drop out, while a failed one keeps the previous values. Says who grows, not how much disk is left. Alert: `delta(fileharbor_storage_bytes[24h]) > 5 GiB` for 1h (threshold to tune on prod).
 - Alert rules for all of the above live in `monitoring/alerts.yml` (load it via `rule_files`). Change a metric or threshold → change it there too.
 
 ## Health

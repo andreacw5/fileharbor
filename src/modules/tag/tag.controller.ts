@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,6 +16,9 @@ import { PaginatedResult } from '@heyatom/nest-common';
 import { TagListItemDto } from './dto/tag-response.dto';
 
 @ApiTags('Admin - Tags')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/tags')
 export class TagController {
   constructor(private readonly tagAdminService: TagService) {}

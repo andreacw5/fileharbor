@@ -7,13 +7,10 @@ import {
 } from '@nestjs/common';
 import { AlbumResourceType } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { randomUUID } from 'crypto';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 import { RouteHelperService } from '@/utils/route.utils';
+import { buildSrcset } from '@/modules/image/image-variants';
 
 @Injectable()
 export class AlbumService {
@@ -21,7 +18,6 @@ export class AlbumService {
 
   constructor(
     private prisma: PrismaService,
-    private webhook: WebhookService,
     private route: RouteHelperService,
   ) {}
 
@@ -85,6 +81,7 @@ export class AlbumService {
       addedAt: item.addedAt,
     };
     if (item.resourceType === AlbumResourceType.IMAGE && item.image) {
+      const fullPath = this.route.fullUrl('images', item.image.id);
       return {
         ...base,
         image: {
@@ -95,7 +92,10 @@ export class AlbumService {
           height: item.image.height,
           size: item.image.size,
           tags: item.image.imageTags?.map((t: any) => t.tag.name) ?? [],
-          fullPath: this.route.fullUrl('images', item.image.id),
+          fullPath,
+          srcset: item.image.isPrivate
+            ? undefined
+            : buildSrcset(fullPath, item.image.width),
           // The thumbnail is a query on the unified image route, not a path
           // segment: `image.controller.ts` declares only `@Get()` and
           // `@Get(':imageId')`, so `/images/:id/thumb` is a 404. Appended as a
@@ -153,19 +153,6 @@ export class AlbumService {
         isPublic: dto.isPublic || false,
       },
     });
-
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.ALBUM_CREATED, {
-        albumId: album.id,
-        externalAlbumId: album.externalAlbumId,
-        name: album.name,
-        description: album.description,
-        isPublic: album.isPublic,
-        creatorId,
-      })
-      .catch((e) =>
-        this.logger.warn(`[createAlbum] Webhook failed: ${e.message}`),
-      );
 
     this.logger.log(`[createAlbum] Success - Album ID: ${album.id}`);
     return this.formatAlbumResponse(album);
@@ -293,20 +280,6 @@ export class AlbumService {
       data: updateData,
     });
 
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
-        albumId: updated.id,
-        externalAlbumId: updated.externalAlbumId,
-        name: updated.name,
-        description: updated.description,
-        isPublic: updated.isPublic,
-        coverImageId: updated.coverImageId,
-        creatorId,
-      })
-      .catch((e) =>
-        this.logger.warn(`[updateAlbum] Webhook failed: ${e.message}`),
-      );
-
     this.logger.log(`[updateAlbum] Success - Album ID: ${albumId}`);
     return this.formatAlbumResponse(updated);
   }
@@ -317,15 +290,6 @@ export class AlbumService {
       throw new ForbiddenException('You can only delete your own albums');
 
     await this.prisma.album.delete({ where: { id: albumId } });
-
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
-        id: albumId,
-        timestamp: new Date().toISOString(),
-      })
-      .catch((e) =>
-        this.logger.warn(`[deleteAlbum] Webhook failed: ${e.message}`),
-      );
 
     this.logger.log(`[deleteAlbum] Success - Album ID: ${albumId}`);
     return { success: true, message: 'Album deleted successfully' };
@@ -459,18 +423,6 @@ export class AlbumService {
       return wanted.map((w) => byResource.get(w.id)!);
     });
 
-    for (const imageId of imageIds) {
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.IMAGE_ADDED_TO_ALBUM, {
-          albumId,
-          imageId,
-          albumName: album.name,
-        })
-        .catch((e) =>
-          this.logger.warn(`[addItemsToAlbum] Webhook failed: ${e.message}`),
-        );
-    }
-
     this.logger.log(
       `[addItemsToAlbum] Album: ${albumId}, Added: ${records.length}`,
     );
@@ -514,26 +466,11 @@ export class AlbumService {
           { videoId: { in: ids(AlbumResourceType.VIDEO) } },
         ],
       },
-      select: { id: true, imageId: true },
+      select: { id: true },
     });
     const { count: removed } = await this.prisma.albumItem.deleteMany({
       where: { id: { in: present.map((p) => p.id) } },
     });
-
-    for (const { imageId } of present) {
-      if (!imageId) continue;
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.IMAGE_REMOVED_FROM_ALBUM, {
-          albumId,
-          imageId,
-          timestamp: new Date().toISOString(),
-        })
-        .catch((e) =>
-          this.logger.warn(
-            `[removeItemsFromAlbum] Webhook failed: ${e.message}`,
-          ),
-        );
-    }
 
     this.logger.log(
       `[removeItemsFromAlbum] Album: ${albumId}, Removed: ${removed}`,
@@ -574,6 +511,7 @@ export class AlbumService {
               width: true,
               height: true,
               size: true,
+              isPrivate: true,
               imageTags: { include: { tag: { select: { name: true } } } },
             },
           },
@@ -782,22 +720,6 @@ export class AlbumService {
       data: updateData,
     });
 
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.ALBUM_UPDATED, {
-        albumId: updated.id,
-        externalAlbumId: updated.externalAlbumId,
-        name: updated.name,
-        description: updated.description,
-        isPublic: updated.isPublic,
-        coverImageId: updated.coverImageId,
-        creatorId,
-      })
-      .catch((e) =>
-        this.logger.warn(
-          `[updateAlbumByExternalId] Webhook failed: ${e.message}`,
-        ),
-      );
-
     return this.formatAlbumResponse(updated);
   }
 
@@ -938,15 +860,6 @@ export class AlbumService {
     if (!album) throw new NotFoundException('Album not found');
 
     await this.prisma.album.delete({ where: { id: albumId } });
-
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.ALBUM_DELETED, {
-        id: albumId,
-        timestamp: new Date().toISOString(),
-      })
-      .catch((e) =>
-        this.logger.warn(`[forceDeleteAlbum] Webhook failed: ${e.message}`),
-      );
 
     return { success: true, message: 'Album deleted successfully' };
   }

@@ -34,7 +34,7 @@ groups:
 
       - alert: FileHarborOptimizeGivenUp
         # A standing count, not an event: fires until the rows are fixed, reset
-        # (optimizeAttempts = 0), deleted or (avatars) re-uploaded.
+        # (reoptimize endpoints or optimizeAttempts = 0), deleted or (avatars) re-uploaded.
         expr: fileharbor_optimize_given_up > 0
         labels:
           severity: info
@@ -42,4 +42,20 @@ groups:
           summary: 'FileHarbor {{ $labels.kind }} rows the optimize job gave up on'
           description: >-
             {{ $value }} {{ $labels.kind }} rows reached MAX_OPTIMIZE_ATTEMPTS.
-            Inspect the files, then set optimizeAttempts = 0 to retry or delete them.
+            Inspect the files in Meridian (filter optimizeStatus=failed), then retry
+            (reoptimize) or delete them.
+
+      - alert: FileHarborClientStorageGrowth
+        # Originals only (DB size), not the real disk: says who grows, not how much
+        # is left. Optimize/delete make delta negative, never a false positive.
+        # 5 GiB/day is a starting point: tune on prod volume size and growth.
+        expr: delta(fileharbor_storage_bytes[24h]) > 5 * 1024 * 1024 * 1024
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'FileHarbor client {{ $labels.client }} storage growing fast'
+          description: >-
+            Client {{ $labels.client }} grew by {{ $value | humanize1024 }}B in 24h
+            (threshold 5 GiB). Check free space (/health/ready, HEALTH_DISK_MIN_FREE_MB)
+            and what the client is uploading.

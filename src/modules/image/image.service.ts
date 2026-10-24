@@ -10,15 +10,14 @@ import { Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
+  FLAT_DHASH,
   MAX_OPTIMIZE_ATTEMPTS,
   OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
+import { Prisma } from '@prisma/client';
+import { paginate, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { lastValueFrom } from 'rxjs';
@@ -36,7 +35,7 @@ import {
   extractTagNames,
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
-import { snapQuality, snapSize } from './image-variants';
+import { buildSrcset, snapQuality, snapSize } from './image-variants';
 
 // On-demand resizes cached per image; past this many, new ones are served but
 // not stored, so arbitrary width/height/quality combinations can't fill the disk.
@@ -54,6 +53,32 @@ export interface ImageFileOptions {
   skipDiskRead?: boolean;
 }
 
+/** Previews per duplicate group. */
+const DUPLICATE_PREVIEWS = 6;
+
+export interface DuplicateImage {
+  id: string;
+  clientId: string;
+  originalName: string;
+  width: number;
+  height: number;
+  size: number;
+  createdAt: Date;
+  isPrivate: boolean;
+  creatorExternalId: string;
+}
+
+export interface DuplicateGroup {
+  dHash: string;
+  clientId: string | null;
+  count: number;
+  totalBytes: number;
+  images: DuplicateImage[];
+}
+
+/** `code` of the 400 thrown when the client's monthly Tinify slots are used up. */
+export const TINIFY_LIMIT_REACHED = 'TINIFY_LIMIT_REACHED';
+
 @Injectable()
 export class ImageService implements OnModuleDestroy {
   private readonly logger = new Logger(ImageService.name);
@@ -67,7 +92,6 @@ export class ImageService implements OnModuleDestroy {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private webhook: WebhookService,
     private httpService: HttpService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
@@ -195,6 +219,17 @@ export class ImageService implements OnModuleDestroy {
         `[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`,
       );
 
+      // Same input the backfill hashes (original.webp). Duplicate detection is
+      // best-effort: a failure leaves dHash null rather than failing the upload.
+      const dHash = await this.storage
+        .computeDHash(webpBuffer)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `[uploadImage] dHash failed - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
+          );
+          return null;
+        });
+
       // Save to database (storagePath is the base path without extension)
       this.logger.debug(
         `[uploadImage] Saving to database - ID: ${imageId}, Tags: ${tags?.length || 0}, Private: ${isPrivate}`,
@@ -212,6 +247,7 @@ export class ImageService implements OnModuleDestroy {
           height: metadata.height,
           size: webpBuffer.length,
           mimeType: 'image/webp',
+          dHash,
           isOptimized: false,
           isPrivate: isPrivate || false,
           description: description || null,
@@ -231,24 +267,6 @@ export class ImageService implements OnModuleDestroy {
           },
         },
       });
-
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, {
-          imageId: image.id,
-          originalName: image.originalName,
-          width: image.width,
-          height: image.height,
-          size: image.size,
-          format: image.format,
-          creatorId: creator.externalId,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[uploadImage] Failed to send webhook for image ${imageId}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
 
       // Add to album if specified
       if (albumId) {
@@ -525,19 +543,6 @@ export class ImageService implements OnModuleDestroy {
         );
       }
 
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.IMAGE_DELETED, {
-          id: imageId,
-          timestamp: new Date().toISOString(),
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[deleteImage] Failed to send webhook for image ${imageId}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
-
       this.logger.log(
         `[deleteImage] Success - ID: ${imageId}, Client: ${clientId}, Size: ${image.size} bytes`,
       );
@@ -608,14 +613,28 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
+   * Put unoptimized rows back in the optimize queue. Already optimized rows are
+   * never matched: re-encoding an optimized original only loses quality.
+   */
+  async resetOptimizeAttempts(where: Prisma.ImageWhereInput): Promise<number> {
+    const { count } = await this.prisma.image.updateMany({
+      where: { ...where, isOptimized: false },
+      data: { optimizeAttempts: 0 },
+    });
+    return count;
+  }
+
+  /**
    * Mark image as optimized
    */
-  async markAsOptimized(imageId: string) {
+  async markAsOptimized(imageId: string, size: number) {
     return this.prisma.image.update({
       where: { id: imageId },
       data: {
         isOptimized: true,
         optimizedAt: new Date(),
+        // The original was re-encoded: the upload-time size no longer holds
+        size,
       },
     });
   }
@@ -629,18 +648,13 @@ export class ImageService implements OnModuleDestroy {
     creatorId: string,
     tags?: string[],
     description?: string,
+    isPrivate?: boolean,
   ) {
     this.logger.debug(
       `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Tags: ${tags?.length || 0}`,
     );
 
-    const image = await this.prisma.image.findFirst({
-      where: {
-        id: imageId,
-        clientId,
-        creatorId,
-      },
-    });
+    const image = await this.findOwnedImage(imageId, clientId, creatorId);
 
     if (!image) {
       this.logger.warn(
@@ -655,6 +669,7 @@ export class ImageService implements OnModuleDestroy {
       where: { id: imageId },
       data: {
         ...(description !== undefined && { description }),
+        ...(isPrivate !== undefined && { isPrivate }),
         ...(imageTagsInput !== undefined && {
           imageTags: {
             deleteMany: {},
@@ -719,6 +734,34 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
+   * The internal Creator id behind an X-User-Id: `image.creatorId` holds the
+   * internal one, so an owner check never compares it with the external id.
+   */
+  private async ownerCreatorId(
+    clientId: string,
+    externalId: string,
+  ): Promise<string | null> {
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId } },
+      select: { id: true },
+    });
+    return creator?.id ?? null;
+  }
+
+  /** The image if X-User-Id owns it within the client, else null. */
+  private async findOwnedImage(
+    imageId: string,
+    clientId: string,
+    externalId: string,
+  ) {
+    const creatorId = await this.ownerCreatorId(clientId, externalId);
+    if (!creatorId) return null;
+    return this.prisma.image.findFirst({
+      where: { id: imageId, clientId, creatorId },
+    });
+  }
+
+  /**
    * Create share link for image
    */
   async createShareLink(
@@ -731,13 +774,7 @@ export class ImageService implements OnModuleDestroy {
       `[createShareLink] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
 
-    const image = await this.prisma.image.findFirst({
-      where: {
-        id: imageId,
-        clientId,
-        creatorId,
-      },
-    });
+    const image = await this.findOwnedImage(imageId, clientId, creatorId);
 
     if (!image) {
       this.logger.warn(
@@ -746,20 +783,22 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Image not found');
     }
 
-    const readToken = randomUUID();
-
-    const shareLink = await this.prisma.imageShareLink.create({
-      data: {
-        imageId,
-        readToken,
-        expiresAt: expiresAt || null,
-      },
-    });
+    const shareLink = await this.createShareLinkFor(imageId, expiresAt);
 
     this.logger.log(
       `[createShareLink] Success - ID: ${imageId}, Link: ${shareLink.id}, Expires: ${expiresAt?.toISOString() || 'never'}`,
     );
     return this.formatShareLinkResponse(shareLink);
+  }
+
+  /**
+   * Create the link row, no ownership check: callers authorize first
+   * (`findOwnedImage` on the client path, client scope on the admin one).
+   */
+  createShareLinkFor(imageId: string, expiresAt?: Date) {
+    return this.prisma.imageShareLink.create({
+      data: { imageId, readToken: randomUUID(), expiresAt: expiresAt || null },
+    });
   }
 
   /**
@@ -770,13 +809,7 @@ export class ImageService implements OnModuleDestroy {
     clientId: string,
     creatorId: string,
   ): Promise<ShareLinkResponseDto[]> {
-    const image = await this.prisma.image.findFirst({
-      where: {
-        id: imageId,
-        clientId,
-        creatorId,
-      },
-    });
+    const image = await this.findOwnedImage(imageId, clientId, creatorId);
 
     if (!image) {
       throw new NotFoundException('Image not found');
@@ -816,7 +849,8 @@ export class ImageService implements OnModuleDestroy {
 
     if (
       shareLink.image.clientId !== clientId ||
-      shareLink.image.creatorId !== creatorId
+      shareLink.image.creatorId !==
+        (await this.ownerCreatorId(clientId, creatorId))
     ) {
       this.logger.warn(
         `[deleteShareLink] Access denied - LinkID: ${shareLinkId}, Client: ${clientId}, Creator: ${creatorId}, ImageClient: ${shareLink.image.clientId}`,
@@ -983,6 +1017,7 @@ export class ImageService implements OnModuleDestroy {
   private formatImageResponse(image: any): ImageResponseDto {
     const url = this.route.path('images', image.id);
     const thumbnailUrl = this.route.path('images', image.id) + '?thumb=true';
+    const fullPath = this.route.fullUrl('images', image.id);
 
     return plainToInstance(
       ImageResponseDto,
@@ -991,7 +1026,11 @@ export class ImageService implements OnModuleDestroy {
         tags: extractTagNames(image),
         url,
         thumbnailUrl,
-        fullPath: this.route.fullUrl('images', image.id),
+        fullPath,
+        // Private images need a header or token, which `<img srcset>` can't send.
+        srcset: image.isPrivate
+          ? undefined
+          : buildSrcset(fullPath, image.width),
       },
       { excludeExtraneousValues: true },
     );
@@ -1131,6 +1170,104 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
+   * Images sharing `dHash` with this one in `clientIds`, itself excluded.
+   * 0 for an unhashed or flat image (flat ones "match" every other flat one).
+   */
+  async countDuplicates(
+    image: { id: string; dHash: string | null },
+    clientIds: string[],
+  ): Promise<number> {
+    if (!image.dHash || image.dHash === FLAT_DHASH) return 0;
+    return this.prisma.image.count({
+      where: {
+        dHash: image.dHash,
+        clientId: { in: clientIds },
+        id: { not: image.id },
+      },
+    });
+  }
+
+  /**
+   * Groups of images with the same dHash inside `clientIds`, biggest first.
+   * Key `(clientId, dHash)`, or `dHash` alone with `crossClient` (the caller
+   * checks who may ask for that). Nothing outside `clientIds` is ever read, so
+   * neither a group nor a count can reveal a copy the admin does not see.
+   */
+  async findDuplicateGroups(
+    clientIds: string[],
+    filter: { creatorId?: string; crossClient: boolean },
+    page: { page: number; limit: number; skip: number },
+  ): Promise<PaginatedResult<DuplicateGroup>> {
+    const scope = Prisma.sql`"clientId" = ANY(${clientIds}::text[]) AND "dHash" IS NOT NULL AND "dHash" <> ${FLAT_DHASH}${
+      filter.creatorId
+        ? Prisma.sql` AND "creatorId" = ${filter.creatorId}`
+        : Prisma.empty
+    }`;
+    const key = filter.crossClient
+      ? Prisma.sql`"dHash"`
+      : Prisma.sql`"clientId", "dHash"`;
+
+    const [groups, [{ total }]] = await Promise.all([
+      this.prisma.$queryRaw<
+        Omit<DuplicateGroup, 'images'>[]
+      >`SELECT ${filter.crossClient ? Prisma.sql`NULL::text` : Prisma.sql`"clientId"`} AS "clientId",
+          "dHash", count(*)::int AS count, sum(size)::float8 AS "totalBytes"
+        FROM images WHERE ${scope}
+        GROUP BY ${key} HAVING count(*) > 1
+        ORDER BY count DESC, "totalBytes" DESC, "dHash"
+        LIMIT ${page.limit} OFFSET ${page.skip}`,
+      this.prisma.$queryRaw<{ total: number }[]>`SELECT count(*)::int AS total
+        FROM (SELECT 1 FROM images WHERE ${scope} GROUP BY ${key} HAVING count(*) > 1) g`,
+    ]);
+
+    // ponytail: loads every member of the page's groups to keep 6 each; fine for
+    // tens of copies, a ROW_NUMBER() window if a group ever runs into thousands.
+    const members = groups.length
+      ? await this.prisma.image.findMany({
+          where: {
+            dHash: { in: groups.map((g) => g.dHash) },
+            clientId: { in: clientIds },
+            ...(filter.creatorId && { creatorId: filter.creatorId }),
+          },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            clientId: true,
+            dHash: true,
+            originalName: true,
+            width: true,
+            height: true,
+            size: true,
+            createdAt: true,
+            isPrivate: true,
+            creator: { select: { externalId: true } },
+          },
+        })
+      : [];
+
+    const groupKey = (clientId: string | null, dHash: string | null) =>
+      filter.crossClient ? `${dHash}` : `${clientId}:${dHash}`;
+    const previews = new Map<string, DuplicateImage[]>();
+    for (const { dHash, creator, ...image } of members) {
+      const k = groupKey(image.clientId, dHash);
+      const list = previews.get(k) ?? [];
+      if (list.length < DUPLICATE_PREVIEWS) {
+        list.push({ ...image, creatorExternalId: creator.externalId });
+      }
+      previews.set(k, list);
+    }
+
+    return paginate(
+      groups.map((g) => ({
+        ...g,
+        images: previews.get(groupKey(g.clientId, g.dHash)) ?? [],
+      })),
+      total,
+      page,
+    );
+  }
+
+  /**
    * Admin image update — accepts a fully-formed Prisma data object
    * (supports originalName, isPrivate, description, imageTags).
    * Returns the updated image with tags and creator for DTO mapping.
@@ -1160,6 +1297,39 @@ export class ImageService implements OnModuleDestroy {
     });
 
     return result.count;
+  }
+
+  /**
+   * Rebuild the thumbnail from the stored original and drop cached variants,
+   * keeping id and original. `updatedAt` moves last: it is in the ETag, and moving
+   * it first would let a GET in between pin the old thumb under the new tag.
+   */
+  async regenerateRenditions(image: {
+    id: string;
+    clientId: string;
+    client?: { domain: string | null } | null;
+  }): Promise<{ id: string; updatedAt: Date }> {
+    const domain = image.client?.domain || image.clientId;
+    const originalPath = this.storage.getImageFilePath(
+      domain,
+      image.id,
+      'original',
+    );
+    if (!(await this.storage.fileExists(originalPath))) {
+      throw new NotFoundException('Original file missing');
+    }
+    // 422 on an unreadable original, 500 on a failed thumb write (StorageService)
+    await this.storage.regenerateImageThumb(
+      domain,
+      image.id,
+      this.thumbnailSize,
+      this.thumbnailQuality,
+    );
+    return this.prisma.image.update({
+      where: { id: image.id },
+      data: { updatedAt: new Date() },
+      select: { id: true, updatedAt: true },
+    });
   }
 
   /**
@@ -1204,6 +1374,17 @@ export class ImageService implements OnModuleDestroy {
       );
     }
 
+    // The hourly optimize job would re-encode Tinify's output at OPTIMIZE_QUALITY,
+    // throwing away a compression we paid for
+    if (!image.isOptimized) {
+      throw new BadRequestException(
+        'This image has not been optimized yet, retry after the next optimize run',
+      );
+    }
+
+    // ponytail: no per-image claim, so a manual call racing TinifyAutoJob on the same
+    // image can pay Tinify twice. Rare (one console click vs. one hourly pick); accepted.
+
     // Get client to retrieve Tinify configuration
     const client = await this.prisma.client.findUnique({
       where: { id: image.clientId },
@@ -1237,15 +1418,9 @@ export class ImageService implements OnModuleDestroy {
       );
     }
 
-    // Check usage limit (configurable per client, default 500)
-    if (client.currentTinifyUsage >= client.currentTinifyLimit) {
-      this.logger.warn(
-        `[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Usage: ${client.currentTinifyUsage}/${client.currentTinifyLimit}`,
-      );
-      throw new BadRequestException(
-        `Monthly Tinify compression limit reached (${client.currentTinifyUsage}/${client.currentTinifyLimit}). Limit will reset next month.`,
-      );
-    }
+    // Quota slot taken (and not yet spent at Tinify): released if we fail before Tinify bills it
+    let reserved = false;
+    let billed = false;
 
     try {
       const domain = client.domain || image.clientId;
@@ -1270,6 +1445,29 @@ export class ImageService implements OnModuleDestroy {
         `[compressImageWithTinify] Original size: ${originalSize} bytes - ID: ${imageId}`,
       );
 
+      // Reserve a slot of the monthly limit (configurable per client, default 500) in one
+      // conditional UPDATE: a read-then-increment would let parallel requests (a whole
+      // console page selected at once) all pass the check and overshoot the limit.
+      const { count } = await this.prisma.client.updateMany({
+        where: {
+          id: client.id,
+          currentTinifyUsage: {
+            lt: this.prisma.client.fields.currentTinifyLimit,
+          },
+        },
+        data: { currentTinifyUsage: { increment: 1 } },
+      });
+      if (count === 0) {
+        this.logger.warn(
+          `[compressImageWithTinify] Monthly Tinify limit reached for client - ID: ${client.id}, Limit: ${client.currentTinifyLimit}`,
+        );
+        throw new BadRequestException({
+          code: TINIFY_LIMIT_REACHED,
+          message: `Monthly Tinify compression limit reached (${client.currentTinifyLimit}). Limit will reset next month.`,
+        });
+      }
+      reserved = true;
+
       // Prepare Basic Auth header (api:YOUR_API_KEY)
       const authString = Buffer.from(`api:${tinifyKey.trim()}`).toString(
         'base64',
@@ -1289,6 +1487,9 @@ export class ImageService implements OnModuleDestroy {
           responseType: 'json',
         }),
       );
+      // Any 2xx means Tinify counted it, even with a body we can't use: no refund from here
+      billed = true;
+      await this.syncTinifyUsage(client.id, uploadResponse.headers);
 
       // Check for successful upload
       if (
@@ -1303,7 +1504,11 @@ export class ImageService implements OnModuleDestroy {
       }
 
       const compressedUrl = uploadResponse.data.output.url;
-      const compressedSize = uploadResponse.data.output.size;
+      // No gain: keep our file. Still marked compressed (and counted): Tinify billed it.
+      const kept = uploadResponse.data.output.size >= originalSize;
+      const compressedSize = kept
+        ? originalSize
+        : uploadResponse.data.output.size;
       const savedBytes = originalSize - compressedSize;
       const savedPercentage = ((savedBytes / originalSize) * 100).toFixed(2);
 
@@ -1311,98 +1516,72 @@ export class ImageService implements OnModuleDestroy {
         `[compressImageWithTinify] Compressed size: ${compressedSize} bytes (saved ${savedBytes} bytes, ${savedPercentage}%) - ID: ${imageId}`,
       );
 
-      // Step 2: Download compressed image
-      this.logger.debug(
-        `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
-      );
-      const downloadResponse = await lastValueFrom(
-        this.httpService.get(compressedUrl, {
-          headers: {
-            Authorization: `Basic ${authString}`,
-          },
-          responseType: 'arraybuffer',
-        }),
-      );
+      if (kept) {
+        this.logger.debug(
+          `[compressImageWithTinify] No gain, original kept - ID: ${imageId}`,
+        );
+      } else {
+        // Step 2: Download compressed image
+        this.logger.debug(
+          `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
+        );
+        const downloadResponse = await lastValueFrom(
+          this.httpService.get(compressedUrl, {
+            headers: {
+              Authorization: `Basic ${authString}`,
+            },
+            responseType: 'arraybuffer',
+          }),
+        );
 
-      const compressedBuffer = Buffer.from(downloadResponse.data);
+        const compressedBuffer = Buffer.from(downloadResponse.data);
 
-      // Save compressed file, replacing the original
-      await this.storage.saveFile(originalPath, compressedBuffer);
-      await this.storage.clearImageVariants(domain, imageId);
-      this.logger.debug(
-        `[compressImageWithTinify] Compressed file saved - ID: ${imageId}`,
-      );
+        // Save compressed file, replacing the original
+        await this.storage.saveFile(originalPath, compressedBuffer);
+        await this.storage.clearImageVariants(domain, imageId);
+        this.logger.debug(
+          `[compressImageWithTinify] Compressed file saved - ID: ${imageId}`,
+        );
 
-      // Regenerate thumbnail from compressed image
-      this.logger.debug(
-        `[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`,
-      );
-      const thumbBuffer = await this.storage.createThumbnail(
-        compressedBuffer,
-        this.thumbnailSize,
-        this.thumbnailQuality,
-      );
-      const thumbnailPath = this.storage.getImageFilePath(
-        domain,
-        imageId,
-        'thumb',
-      );
-      await this.storage.saveFile(thumbnailPath, thumbBuffer);
-      this.logger.debug(
-        `[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`,
-      );
+        // Regenerate thumbnail from compressed image
+        this.logger.debug(
+          `[compressImageWithTinify] Regenerating thumbnail - ID: ${imageId}`,
+        );
+        const thumbBuffer = await this.storage.createThumbnail(
+          compressedBuffer,
+          this.thumbnailSize,
+          this.thumbnailQuality,
+        );
+        const thumbnailPath = this.storage.getImageFilePath(
+          domain,
+          imageId,
+          'thumb',
+        );
+        await this.storage.saveFile(thumbnailPath, thumbBuffer);
+        this.logger.debug(
+          `[compressImageWithTinify] Thumbnail regenerated - ID: ${imageId}`,
+        );
+      }
 
-      // Update database with new size, mark as Tinify-optimized, and increment usage counter
-      const [updatedImage] = await this.prisma.$transaction([
-        this.prisma.image.update({
-          where: { id: imageId },
-          data: {
-            size: compressedSize,
-            tinifyOptimized: true,
-          },
-          include: {
-            imageTags: {
-              include: {
-                tag: {
-                  select: {
-                    name: true,
-                  },
+      // Update database with new size and mark as Tinify-optimized (usage counted at reservation)
+      const updatedImage = await this.prisma.image.update({
+        where: { id: imageId },
+        data: {
+          size: compressedSize,
+          tinifyOptimized: true,
+        },
+        include: {
+          imageTags: {
+            include: {
+              tag: {
+                select: {
+                  name: true,
                 },
               },
             },
           },
-        }),
-        this.prisma.client.update({
-          where: { id: client.id },
-          data: {
-            currentTinifyUsage: {
-              increment: 1,
-            },
-          },
-        }),
-      ]);
-
-      this.logger.log(
-        `[compressImageWithTinify] Tinify usage updated for client ${client.id}: ${client.currentTinifyUsage + 1}/${client.currentTinifyLimit}`,
-      );
-
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(image.clientId, WebhookEvent.IMAGE_UPLOADED, {
-          imageId: image.id,
-          originalName: image.originalName,
-          action: 'tinify_compressed',
-          originalSize,
-          compressedSize,
-          savedBytes,
-          savedPercentage: `${savedPercentage}%`,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[compressImageWithTinify] Failed to send webhook for image ${imageId}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
+        },
+      });
 
       this.logger.log(
         `[compressImageWithTinify] Success - ID: ${imageId}, Saved: ${savedBytes} bytes (${savedPercentage}%)`,
@@ -1434,7 +1613,58 @@ export class ImageService implements OnModuleDestroy {
           `[compressImageWithTinify] Failed - ID: ${imageId}, Error: ${error.message}`,
         );
       }
+      // Tinify never compressed it: give the slot back. Once billed, it stays spent.
+      if (reserved && !billed) {
+        await this.prisma.client
+          .updateMany({
+            where: { id: client.id, currentTinifyUsage: { gt: 0 } },
+            data: { currentTinifyUsage: { decrement: 1 } },
+          })
+          .catch((releaseError) =>
+            this.logger.warn(
+              `[compressImageWithTinify] Failed to release Tinify slot for client ${client.id}: ${releaseError.message}`,
+            ),
+          );
+      }
+      if (error.response?.status === 429) {
+        // The key's account is out of compressions: nothing retries until the monthly reset
+        await this.prisma.client
+          .update({
+            where: { id: client.id },
+            data: { currentTinifyUsage: client.currentTinifyLimit },
+          })
+          .catch((syncError) =>
+            this.logger.warn(
+              `[compressImageWithTinify] Failed to exhaust Tinify usage for client ${client.id}: ${syncError.message}`,
+            ),
+          );
+      } else {
+        await this.syncTinifyUsage(client.id, error.response?.headers);
+      }
       throw error;
     }
+  }
+
+  /**
+   * Raise the local counter to Tinify's `Compression-Count` (the key's real count this
+   * calendar month): covers compressions made outside FileHarbor with the same key and a
+   * monthly reset out of step with theirs. Never lowers it.
+   */
+  private async syncTinifyUsage(
+    clientId: string,
+    headers?: Record<string, unknown>,
+  ): Promise<void> {
+    const count = Number(headers?.['compression-count']);
+    if (!Number.isInteger(count)) return;
+    await this.prisma.client
+      .updateMany({
+        where: { id: clientId, currentTinifyUsage: { lt: count } },
+        data: { currentTinifyUsage: count },
+      })
+      .catch((error) =>
+        this.logger.warn(
+          `[compressImageWithTinify] Failed to sync Tinify usage for client ${clientId}: ${error.message}`,
+        ),
+      );
   }
 }

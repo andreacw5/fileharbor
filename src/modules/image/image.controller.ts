@@ -39,7 +39,8 @@ import {
   ClientId,
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@heyatom/bastion-client/nest';
+import { BastionAuditService, Public } from '@heyatom/bastion-client/nest';
+import { auditClientWrite } from '@/common/client-audit';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadImageDto,
@@ -67,6 +68,7 @@ export class ImageController {
     private imageService: ImageService,
     private storageService: StorageService,
     private config: ConfigService,
+    private audit: BastionAuditService,
   ) {}
 
   @Post()
@@ -299,8 +301,8 @@ export class ImageController {
             query.format || 'webp',
             snapQuality(query.quality),
           ].join('-');
-      // updatedAt moves when the file is rewritten (optimize job, Tinify), never on
-      // a view or download (those counters skip it), so revalidation stays cheap.
+      // updatedAt moves when the file is rewritten (optimize job, Tinify, admin
+      // regenerate), never on a view or download (those counters skip it), so revalidation stays cheap.
       const etag = `"${imageId}-${variant}-${image.updatedAt.getTime()}"`;
       const headers: Record<string, string> = {
         'Cache-Control': restricted
@@ -415,7 +417,7 @@ export class ImageController {
   @ApiOperation({
     summary: 'Update image metadata',
     description:
-      'Update tags, description, or other metadata. Only owner can update.',
+      'Update tags, description or isPrivate. Only the owner (X-User-Id) can update.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
   @ApiResponse({
@@ -449,7 +451,14 @@ export class ImageController {
         validCreatorExternalId,
         dto.tags,
         dto.description,
+        dto.isPrivate,
       );
+      if (typeof dto.isPrivate === 'boolean')
+        auditClientWrite(this.audit, 'fh_image.updated', clientId, creatorId, {
+          imageId,
+          fields: ['isPrivate'],
+          isPrivate: dto.isPrivate,
+        });
 
       this.logger.log(
         `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
@@ -491,7 +500,7 @@ export class ImageController {
 
     const validCreatorExternalId =
       this.imageService.validateCreatorExternalId(creatorId);
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
+    const expiresAt = dto.expiresAt;
 
     try {
       const result = await this.imageService.createShareLink(
@@ -572,6 +581,7 @@ export class ImageController {
   @ApiResponse({ status: 404, description: 'Not found' })
   async deleteImage(
     @ClientId() clientId: string,
+    @CreatorExternalId() creatorId: string | undefined,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
@@ -580,6 +590,9 @@ export class ImageController {
 
     try {
       const result = await this.imageService.deleteImage(imageId, clientId);
+      auditClientWrite(this.audit, 'fh_image.deleted', clientId, creatorId, {
+        imageId,
+      });
 
       this.logger.log(`[DeleteImage] Success - ImageId: ${imageId}`);
 

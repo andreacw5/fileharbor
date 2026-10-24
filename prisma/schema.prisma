@@ -15,21 +15,20 @@ datasource db {
 
 // Multi-tenant Client
 model Client {
-  id             String   @id @default(uuid())
-  name           String
-  apiKey         String   @unique
-  domain         String?  @unique
-  active         Boolean  @default(true)
-  webhookEnabled Boolean  @default(false)
-  webhookUrl     String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  apiKey    String   @unique
+  domain    String?  @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Tinify credentials (optional, can be set per client for image optimization)
   tinifyActive       Boolean @default(false)
   tinifyApiKey       String?
   currentTinifyUsage Int     @default(0) // Track current month's usage for billing purposes
   currentTinifyLimit Int     @default(500) // Monthly compression limit (default: 500 for free tier)
+  tinifyAutoMinBytes Int? // null = auto-compress off; else TinifyAutoJob compresses images above this size
 
   // Bastion tenant this client is mapped to for self-service (user-JWT) endpoints,
   // e.g. /me/avatar. Bastion tenant slugs are immutable, so this is a safe key.
@@ -43,13 +42,14 @@ model Client {
   ownerPrincipalId String?
 
   // Relations
-  creators       Creator[]
-  images         Image[]
-  avatars        Avatar[]
-  albums         Album[]
-  tags           Tag[]
-  videos         Video[]
-  ownerPrincipal AdminPrincipal? @relation(fields: [ownerPrincipalId], references: [id], onDelete: Restrict)
+  creators         Creator[]
+  images           Image[]
+  avatars          Avatar[]
+  albums           Album[]
+  tags             Tag[]
+  videos           Video[]
+  storageSnapshots StorageSnapshot[]
+  ownerPrincipal   AdminPrincipal?   @relation(fields: [ownerPrincipalId], references: [id], onDelete: Restrict)
 
   @@index([ownerPrincipalId])
   @@map("clients")
@@ -99,10 +99,14 @@ model Image {
   optimizedAt      DateTime?
   optimizeAttempts Int       @default(0) // failed optimization runs; skipped at MAX_OPTIMIZE_ATTEMPTS
   tinifyOptimized  Boolean   @default(false) // Track if image was compressed with Tinify to avoid reprocessing
+  tinifyAttempts   Int       @default(0) // failed auto Tinify runs; skipped at MAX_OPTIMIZE_ATTEMPTS
   isPrivate        Boolean   @default(false)
   views            Int       @default(0)
   downloads        Int       @default(0)
   description      String?
+  // 64-bit dHash of original.webp as 16 hex chars (StorageService.computeDHash), null until
+  // computed. Text, not BigInt: raw rows are spread into responses and JSON.stringify throws on bigint.
+  dHash            String?   @db.Char(16)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -119,6 +123,10 @@ model Image {
   @@index([creatorId])
   // Serves the optimize queue (isOptimized = false, ordered by createdAt).
   @@index([isOptimized, createdAt])
+  // Duplicate lookup (GET /admin/images?dHash=, duplicates count on the show).
+  @@index([dHash])
+  // Serves TinifyAutoJob (per client, not yet compressed, largest first).
+  @@index([clientId, tinifyOptimized, size])
   @@map("images")
 }
 
@@ -391,4 +399,29 @@ model ImageShareLink {
 
   @@index([imageId])
   @@map("image_share_links")
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AVATAR
+}
+
+// Daily per-client storage (plan 04), written by StorageSnapshotJob at 00:30 UTC: the
+// only history of storage, since live rows rewrite the past on delete and optimize.
+// `bytes` sums the originals' `size`, like totalStorage (no thumbs, no cached variants).
+model StorageSnapshot {
+  id        String    @id @default(uuid())
+  day       DateTime  @db.Date // UTC day the snapshot was taken
+  clientId  String
+  kind      MediaKind
+  count     Int
+  bytes     BigInt
+  createdAt DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([day, clientId, kind])
+  @@index([clientId, day])
+  @@map("storage_snapshots")
 }

@@ -1,14 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ImageService } from './image.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { HttpService } from '@nestjs/axios';
+import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
@@ -97,6 +99,9 @@ describe('ImageService', () => {
     $executeRaw: jest.fn().mockResolvedValue(1),
     client: {
       findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      fields: { currentTinifyLimit: 'currentTinifyLimit-ref' },
     },
     creator: {
       findUnique: jest.fn(),
@@ -108,6 +113,7 @@ describe('ImageService', () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
     },
@@ -116,6 +122,7 @@ describe('ImageService', () => {
       findUnique: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
+      findMany: jest.fn(),
     },
     album: {
       findFirst: jest.fn(),
@@ -138,6 +145,7 @@ describe('ImageService', () => {
     deleteDirectory: jest.fn(),
     getImageMetadata: jest.fn(),
     encodeWebpWithThumbnail: jest.fn(),
+    computeDHash: jest.fn(),
     getDefaultImage: jest.fn(),
     resizeImage: jest.fn(),
     fileExists: jest.fn(),
@@ -146,7 +154,12 @@ describe('ImageService', () => {
     ),
     countEntries: jest.fn().mockResolvedValue(0),
     clearImageVariants: jest.fn(),
+    isAnimated: jest.fn(),
+    createThumbnail: jest.fn(),
+    regenerateImageThumb: jest.fn(),
   };
+
+  const mockHttpService = { post: jest.fn(), get: jest.fn() };
 
   const mockConfigService = {
     get: jest.fn((key: string) => {
@@ -157,10 +170,6 @@ describe('ImageService', () => {
       };
       return config[key];
     }),
-  };
-
-  const mockWebhookService = {
-    sendWebhook: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockCreatorServiceMock = {
@@ -185,12 +194,8 @@ describe('ImageService', () => {
           useValue: mockConfigService,
         },
         {
-          provide: WebhookService,
-          useValue: mockWebhookService,
-        },
-        {
           provide: HttpService,
-          useValue: { post: jest.fn() },
+          useValue: mockHttpService,
         },
         {
           provide: CreatorService,
@@ -231,6 +236,7 @@ describe('ImageService', () => {
         original: Buffer.from('webp-data'),
         thumb: Buffer.from('thumb-data'),
       });
+      mockStorageService.computeDHash.mockResolvedValue('00ff00ff00ff00ff');
       mockStorageService.getImagePath.mockReturnValue(
         `storage/${mockDomain}/images/${mockImageId}`,
       );
@@ -259,10 +265,31 @@ describe('ImageService', () => {
         1,
       );
       expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2); // original + thumbnail
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
-        mockClientId,
-        WebhookEvent.IMAGE_UPLOADED,
-        expect.any(Object),
+    });
+
+    it('hashes the stored original and saves the dHash', async () => {
+      await service.uploadImage(mockClientId, mockExternalUserId, mockFile);
+
+      expect(mockStorageService.computeDHash).toHaveBeenCalledWith(
+        Buffer.from('webp-data'),
+      );
+      expect(mockPrismaService.image.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dHash: '00ff00ff00ff00ff' }),
+        }),
+      );
+    });
+
+    it('still uploads when the dHash fails, with dHash null', async () => {
+      mockStorageService.computeDHash.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.uploadImage(mockClientId, mockExternalUserId, mockFile),
+      ).resolves.toBeDefined();
+      expect(mockPrismaService.image.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dHash: null }),
+        }),
       );
     });
 
@@ -486,11 +513,6 @@ describe('ImageService', () => {
         where: { id: mockImageId },
       });
       expect(mockStorageService.deleteDirectory).toHaveBeenCalled();
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
-        mockClientId,
-        WebhookEvent.IMAGE_DELETED,
-        expect.any(Object),
-      );
     });
 
     it('deletes the row before the files, and survives a failed file delete', async () => {
@@ -652,6 +674,7 @@ describe('ImageService', () => {
 
   describe('createShareLink', () => {
     beforeEach(() => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
     });
 
@@ -669,7 +692,7 @@ describe('ImageService', () => {
       const result = await service.createShareLink(
         mockImageId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         expiresAt,
       );
 
@@ -681,17 +704,30 @@ describe('ImageService', () => {
         `/images/${mockImageId}?token=test-token-123`,
       );
       expect(mockPrismaService.imageShareLink.create).toHaveBeenCalled();
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creatorId: mockCreator.id,
+        },
+      });
+    });
+
+    it('an unknown X-User-Id gets 404 and creates nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createShareLink(mockImageId, mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.image.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.imageShareLink.create).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when image not found', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.createShareLink(
-          mockImageId,
-          mockClientId,
-          mockCreatorExternalId,
-        ),
+        service.createShareLink(mockImageId, mockClientId, mockExternalUserId),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -708,10 +744,81 @@ describe('ImageService', () => {
       const result = await service.createShareLink(
         mockImageId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
       );
 
       expect(result.expiresAt).toBeNull();
+    });
+  });
+
+  describe('getShareLinks', () => {
+    it('lists the links for the owner, resolved from the external id', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+      mockPrismaService.imageShareLink.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.getShareLinks(mockImageId, mockClientId, mockExternalUserId),
+      ).resolves.toEqual([]);
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creatorId: mockCreator.id,
+        },
+      });
+    });
+
+    it('an unknown X-User-Id gets 404', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getShareLinks(mockImageId, mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.imageShareLink.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteShareLink', () => {
+    beforeEach(() => {
+      mockPrismaService.imageShareLink.findUnique.mockResolvedValue({
+        id: 'share-123',
+        imageId: mockImageId,
+        image: mockImage,
+      });
+    });
+
+    it('deletes for the owner, resolved from the external id', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+
+      await service.deleteShareLink(
+        'share-123',
+        mockClientId,
+        mockExternalUserId,
+      );
+      expect(mockPrismaService.imageShareLink.delete).toHaveBeenCalledWith({
+        where: { id: 'share-123' },
+      });
+    });
+
+    it('another creator gets 404 and deletes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue({
+        id: 'other-creator',
+      });
+
+      await expect(
+        service.deleteShareLink('share-123', mockClientId, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.imageShareLink.delete).not.toHaveBeenCalled();
+    });
+
+    it('an unknown X-User-Id gets 404 and deletes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.deleteShareLink('share-123', mockClientId, 'nobody'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.imageShareLink.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -732,26 +839,177 @@ describe('ImageService', () => {
     });
   });
 
+  describe('regenerateRenditions', () => {
+    const image = {
+      id: mockImageId,
+      clientId: mockClientId,
+      client: { domain: mockDomain },
+    };
+
+    // Once: these mocks are shared with the rest of the suite
+    beforeEach(() => {
+      mockStorageService.fileExists.mockResolvedValueOnce(true);
+      mockStorageService.regenerateImageThumb.mockResolvedValueOnce(undefined);
+      mockPrismaService.image.update.mockResolvedValueOnce({
+        id: mockImageId,
+        updatedAt: new Date(),
+      });
+    });
+
+    afterEach(() => {
+      mockStorageService.fileExists.mockReset();
+      mockStorageService.regenerateImageThumb.mockReset();
+      mockPrismaService.image.update.mockReset();
+    });
+
+    it('rebuilds the thumb with the configured size, then moves updatedAt', async () => {
+      await service.regenerateRenditions(image);
+
+      expect(mockStorageService.regenerateImageThumb).toHaveBeenCalledWith(
+        mockDomain,
+        mockImageId,
+        800,
+        70,
+      );
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith({
+        where: { id: mockImageId },
+        data: { updatedAt: expect.any(Date) },
+        select: { id: true, updatedAt: true },
+      });
+      expect(
+        mockStorageService.regenerateImageThumb.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockPrismaService.image.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('falls back to the clientId directory without a domain', async () => {
+      await service.regenerateRenditions({
+        ...image,
+        client: { domain: null },
+      });
+      expect(mockStorageService.regenerateImageThumb.mock.calls[0][0]).toBe(
+        mockClientId,
+      );
+    });
+
+    it('404s on a missing original without writing anything', async () => {
+      mockStorageService.fileExists.mockReset().mockResolvedValueOnce(false);
+      await expect(service.regenerateRenditions(image)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(mockStorageService.regenerateImageThumb).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an unreadable original', new UnprocessableEntityException()],
+      ['a failed thumb write', new InternalServerErrorException()],
+    ])('propagates %s, leaving updatedAt alone', async (_case, error) => {
+      mockStorageService.regenerateImageThumb
+        .mockReset()
+        .mockRejectedValueOnce(error);
+      await expect(service.regenerateRenditions(image)).rejects.toBe(error);
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetOptimizeAttempts', () => {
+    it('never matches an optimized row', async () => {
+      mockPrismaService.image.updateMany.mockResolvedValueOnce({ count: 2 });
+
+      await expect(
+        service.resetOptimizeAttempts({
+          clientId: mockClientId,
+          isOptimized: true,
+        }),
+      ).resolves.toBe(2);
+      expect(mockPrismaService.image.updateMany).toHaveBeenCalledWith({
+        where: { clientId: mockClientId, isOptimized: false },
+        data: { optimizeAttempts: 0 },
+      });
+    });
+  });
+
   describe('markAsOptimized', () => {
-    it('should mark image as optimized', async () => {
+    it('should mark image as optimized and store the re-encoded size', async () => {
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
         isOptimized: true,
       });
 
-      await service.markAsOptimized(mockImageId);
+      await service.markAsOptimized(mockImageId, 1234);
 
       expect(mockPrismaService.image.update).toHaveBeenCalledWith({
         where: { id: mockImageId },
         data: {
           isOptimized: true,
           optimizedAt: expect.any(Date),
+          size: 1234,
         },
       });
     });
   });
 
   describe('updateImageMetadata', () => {
+    beforeEach(() => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+    });
+
+    it('sets isPrivate for the owner, resolved from the external id', async () => {
+      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        isPrivate: true,
+        imageTags: [],
+      });
+
+      await service.updateImageMetadata(
+        mockImageId,
+        mockClientId,
+        mockExternalUserId,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
+        where: {
+          clientId_externalId: {
+            clientId: mockClientId,
+            externalId: mockExternalUserId,
+          },
+        },
+        select: { id: true },
+      });
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creatorId: mockCreator.id,
+        },
+      });
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isPrivate: true } }),
+      );
+    });
+
+    it('an unknown creator gets 404 and writes nothing', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateImageMetadata(
+          mockImageId,
+          mockClientId,
+          'someone-else',
+          undefined,
+          undefined,
+          true,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+    });
+
     it('should sync relational tags and description', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
       mockPrismaService.image.update.mockResolvedValue({
@@ -763,7 +1021,7 @@ describe('ImageService', () => {
       const result = await service.updateImageMetadata(
         mockImageId,
         mockClientId,
-        mockCreatorExternalId,
+        mockExternalUserId,
         ['nature', 'sunset'],
         'Updated description',
       );
@@ -874,6 +1132,207 @@ describe('ImageService', () => {
           },
         },
       });
+    });
+  });
+
+  describe('compressImageWithTinify', () => {
+    const tinifyClient = {
+      ...mockClient,
+      tinifyActive: true,
+      tinifyApiKey: 'tinify-key',
+      currentTinifyUsage: 499,
+      currentTinifyLimit: 500,
+    };
+
+    beforeEach(() => {
+      mockPrismaService.image.findUnique.mockResolvedValue({
+        ...mockImage,
+        isOptimized: true,
+        tinifyOptimized: false,
+      });
+      mockPrismaService.client.findUnique.mockResolvedValue(tinifyClient);
+      mockStorageService.getImageFilePath.mockReturnValue('original.webp');
+      mockStorageService.readFile.mockResolvedValue(Buffer.alloc(1000));
+      mockStorageService.isAnimated.mockResolvedValue(false);
+    });
+
+    it('reserves the quota slot in one conditional update', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+      );
+      mockHttpService.get.mockReturnValue(of({ data: Buffer.alloc(600) }));
+      mockStorageService.createThumbnail.mockResolvedValue(Buffer.alloc(10));
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        size: 600,
+        tinifyOptimized: true,
+        imageTags: [],
+      });
+
+      await service.compressImageWithTinify(mockImageId);
+
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: mockClientId,
+          currentTinifyUsage: { lt: 'currentTinifyLimit-ref' },
+        },
+        data: { currentTinifyUsage: { increment: 1 } },
+      });
+    });
+
+    it('refuses without calling Tinify when no slot is left', async () => {
+      // A parallel request took the last slot after our client row was read
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockHttpService.post).not.toHaveBeenCalled();
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives the slot back when Tinify never compressed the image', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        throwError(() => new Error('ECONNRESET')),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow('ECONNRESET');
+      expect(mockPrismaService.client.updateMany).toHaveBeenLastCalledWith({
+        where: { id: mockClientId, currentTinifyUsage: { gt: 0 } },
+        data: { currentTinifyUsage: { decrement: 1 } },
+      });
+    });
+
+    it('keeps the slot spent when failing after Tinify billed it', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+      );
+      mockHttpService.get.mockReturnValue(
+        throwError(() => new Error('download failed')),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow('download failed');
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the original, still marked compressed, when Tinify saves nothing', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({ data: { output: { url: 'https://t/x', size: 1200 } } }),
+      );
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        tinifyOptimized: true,
+        imageTags: [],
+      });
+
+      await service.compressImageWithTinify(mockImageId);
+
+      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { size: 1000, tinifyOptimized: true },
+        }),
+      );
+    });
+
+    it('raises the local usage to a higher Compression-Count', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({
+          headers: { 'compression-count': '42' },
+          data: { output: { url: 'https://t/x', size: 1200 } },
+        }),
+      );
+      mockPrismaService.image.update.mockResolvedValue({
+        ...mockImage,
+        imageTags: [],
+      });
+
+      await service.compressImageWithTinify(mockImageId);
+
+      expect(mockPrismaService.client.updateMany).toHaveBeenLastCalledWith({
+        where: { id: mockClientId, currentTinifyUsage: { lt: 42 } },
+        data: { currentTinifyUsage: 42 },
+      });
+    });
+
+    it('marks the quota exhausted on a Tinify 429', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockPrismaService.client.update.mockResolvedValue({});
+      mockHttpService.post.mockReturnValue(
+        throwError(() =>
+          Object.assign(new Error('Too many requests'), {
+            response: { status: 429, data: {} },
+          }),
+        ),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow('Too many requests');
+      expect(mockPrismaService.client.update).toHaveBeenCalledWith({
+        where: { id: mockClientId },
+        data: { currentTinifyUsage: 500 },
+      });
+      // refund first, so the decrement can't undo the exhausted mark
+      const refund =
+        mockPrismaService.client.updateMany.mock.invocationCallOrder;
+      const exhaust =
+        mockPrismaService.client.update.mock.invocationCallOrder[0];
+      expect(refund[refund.length - 1]).toBeLessThan(exhaust);
+    });
+
+    it('keeps the slot spent on a 2xx without a usable output', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(of({ data: {} }));
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      // the reservation only: no refund
+      expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses an image the optimize job has not re-encoded yet', async () => {
+      mockPrismaService.image.findUnique.mockResolvedValue({
+        ...mockImage,
+        isOptimized: false,
+        tinifyOptimized: false,
+      });
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.client.updateMany).not.toHaveBeenCalled();
+      expect(mockHttpService.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getImageMetadata srcset', () => {
+    it('offers a srcset built on fullPath for a public image', async () => {
+      const result = await service.getImageMetadata(mockImage);
+
+      expect(result.srcset?.startsWith(result.fullPath)).toBe(true);
+      expect(result.srcset?.endsWith(`${result.fullPath} 1920w`)).toBe(true);
+    });
+
+    it('omits srcset for a private image', async () => {
+      const result = await service.getImageMetadata({
+        ...mockImage,
+        isPrivate: true,
+      });
+
+      expect(result.srcset).toBeUndefined();
     });
   });
 

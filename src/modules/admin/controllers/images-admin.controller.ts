@@ -13,6 +13,8 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   HttpCode,
   StreamableFile,
 } from '@nestjs/common';
@@ -36,6 +38,7 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminUpdateImageDto } from '../dto/admin-update-image.dto';
 import { AdminUploadImageDto } from '../dto/admin-upload-image.dto';
 import { AdminBulkDeleteDto } from '../dto/admin-bulk-delete.dto';
+import { AdminReoptimizeFailedDto } from '../dto/admin-reoptimize-failed.dto';
 import {
   ImageResponseDto,
   TinifyCompressionResponseDto,
@@ -45,6 +48,7 @@ import {
   AdminDeleteResponseDto,
   AdminImageResponseDto,
   AdminImageListResponseDto,
+  RegenerateImageResponseDto,
 } from '../dto/admin-response.dto';
 import { ImageService } from '@/modules/image/image.service';
 import { plainToInstance } from 'class-transformer';
@@ -52,7 +56,21 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
-import { parseBooleanQuery } from '../helpers/admin-query.helper';
+import {
+  OPTIMIZE_STATUSES,
+  parseBooleanQuery,
+  parseOptimizeStatusQuery,
+} from '../helpers/admin-query.helper';
+import {
+  AdminDuplicateGroupDto,
+  AdminDuplicateListQuery,
+} from '../dto/admin-duplicates.dto';
+import { ApiPaginatedResponse, PaginatedResult } from '@heyatom/nest-common';
+import {
+  DHASH_PATTERN,
+  OPTIMIZE_GIVEN_UP_WHERE,
+} from '@/modules/storage/storage.service';
+import { DuplicateGroup } from '@/modules/image/image.service';
 import {
   buildImageTagCreateInput,
   extractTagNames,
@@ -63,6 +81,9 @@ import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
 import { contentDisposition } from '@/utils/content-disposition';
 
 @ApiTags('Admin - Images')
+// Every console call reaches us from Meridian's BFF, one IP for every admin: an
+// IP-keyed bucket would be shared by all of them. Bastion auth + permissions gate it.
+@SkipThrottle()
 @Controller('admin/images')
 @UseGuards(BastionUserGuard)
 @ApiBearerAuth()
@@ -178,6 +199,18 @@ export class ImagesAdminController {
     description: 'Only private (true) or only public (false) files',
   })
   @ApiQuery({
+    name: 'dHash',
+    required: false,
+    description: 'Only images with this dHash (16 hex chars)',
+  })
+  @ApiQuery({
+    name: 'optimizeStatus',
+    required: false,
+    enum: OPTIMIZE_STATUSES,
+    description:
+      'optimized, pending (the job will retry) or failed (the job gave up)',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
@@ -200,10 +233,12 @@ export class ImagesAdminController {
     @Query('name') name?: string,
     @Query('tags') tags?: string | string[],
     @Query('isPrivate') isPrivate?: string,
+    @Query('dHash') dHash?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('optimizeStatus') optimizeStatus?: string,
   ) {
     const tagsArray = tags
       ? Array.isArray(tags)
@@ -238,6 +273,14 @@ export class ImagesAdminController {
     if (name) where.originalName = { contains: name, mode: 'insensitive' };
     const privacy = parseBooleanQuery('isPrivate', isPrivate);
     if (privacy !== undefined) where.isPrivate = privacy;
+    if (dHash !== undefined && dHash !== '') {
+      if (!DHASH_PATTERN.test(dHash)) {
+        throw new BadRequestException('dHash must be 16 hex characters');
+      }
+      where.dHash = dHash;
+    }
+    // isOptimized / optimizeAttempts: no other filter sets them
+    Object.assign(where, parseOptimizeStatusQuery(optimizeStatus));
     if (tagsArray && tagsArray.length > 0) {
       where.imageTags = {
         some: { tag: { name: { in: normalizeTagNames(tagsArray) } } },
@@ -249,6 +292,31 @@ export class ImagesAdminController {
       { skip, take, page: pageNum },
       { field: validSortBy, order: validSortOrder },
       adminUser.actorId,
+    );
+  }
+
+  // Before @Get(':id'), or 'duplicates' would be taken for an id.
+  @Get('duplicates')
+  @ApiOperation({
+    summary:
+      'Groups of images with the same dHash (scoped to accessible clients)',
+    description:
+      'Key (clientId, dHash); dHash alone with crossClient=true, fullAccess only. Flat images (dHash 0) and unhashed ones are left out.',
+  })
+  @ApiPaginatedResponse(AdminDuplicateGroupDto)
+  @ApiResponse({ status: 403, description: 'crossClient without fullAccess' })
+  async listDuplicates(
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+    @Query() query: AdminDuplicateListQuery = new AdminDuplicateListQuery(),
+  ): Promise<PaginatedResult<DuplicateGroup>> {
+    if (query.crossClient && !adminUser.fullAccess) {
+      throw new ForbiddenException('crossClient requires full access');
+    }
+    if (query.clientId) assertClientAccess(adminUser, query.clientId);
+    return this.imageService.findDuplicateGroups(
+      query.clientId ? [query.clientId] : adminUser.allowedClientIds,
+      { creatorId: query.creatorId, crossClient: query.crossClient },
+      query,
     );
   }
 
@@ -270,6 +338,10 @@ export class ImagesAdminController {
 
     const albums = image.albumItems.map((ai) => ai.album);
     const activeShareLinks = image._count.shareLinks;
+    const duplicates = await this.imageService.countDuplicates(
+      image,
+      adminUser.allowedClientIds,
+    );
 
     return plainToInstance(
       AdminImageResponseDto,
@@ -279,6 +351,7 @@ export class ImagesAdminController {
         fullPath,
         albums,
         activeShareLinks,
+        duplicates,
       },
       { excludeExtraneousValues: true },
     );
@@ -350,7 +423,7 @@ export class ImagesAdminController {
     const deleted: string[] = [];
     const failed: { id: string; message: string }[] = [];
 
-    // Sequential: each delete touches disk and fires a webhook, no need to burst.
+    // Sequential: each delete touches disk, no need to burst.
     for (const id of dto.ids) {
       const clientId = clients.get(id);
       if (!clientId || !adminUser.allowedClientIds.includes(clientId)) {
@@ -369,6 +442,35 @@ export class ImagesAdminController {
     }
 
     return { deleted, failed };
+  }
+
+  @Post('reoptimize-failed')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Re-queue every image the optimize job gave up on',
+    description:
+      'Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: { properties: { count: { type: 'number' } } },
+  })
+  @ApiResponse({ status: 403, description: 'clientId outside your scope' })
+  @Audit('fh_image.reoptimize_queued', {
+    metadata: (r: { count: number }, req: AuditRequest) => ({
+      clientId: (req.body as { clientId?: string })?.clientId,
+      count: r?.count ?? 0,
+    }),
+  })
+  async reoptimizeFailedImages(
+    @Body() dto: AdminReoptimizeFailedDto,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<{ count: number }> {
+    const count = await this.imageService.resetOptimizeAttempts({
+      ...buildClientWhere(adminUser, dto.clientId), // 403 on a client out of scope
+      ...OPTIMIZE_GIVEN_UP_WHERE,
+    });
+    return { count };
   }
 
   @Delete(':id')
@@ -450,8 +552,6 @@ export class ImagesAdminController {
     });
   }
 
-  // Media for the console: a grid embeds dozens at once, like the public delivery.
-  @SkipThrottle()
   @Get(':id/file')
   @ApiOperation({
     summary: 'Serve image file inline (admin)',
@@ -500,6 +600,37 @@ export class ImagesAdminController {
     });
   }
 
+  @Post(':id/regenerate')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Regenerate thumbnail and drop cached variants',
+    description:
+      'Rebuilds thumb.webp from the stored original and empties the variant cache; id, original, size and optimize state are untouched. Public GETs are cached `immutable`: a cache holding the old thumb keeps it, reload with `?t=<updatedAt>`.',
+  })
+  @ApiResponse({ status: 200, type: RegenerateImageResponseDto })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Image or original file not found' })
+  @ApiResponse({
+    status: 422,
+    description: 'Original file is not a readable image',
+  })
+  @Audit('fh_image.regenerated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+  })
+  async regenerateImage(
+    @Param('id') id: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<RegenerateImageResponseDto> {
+    const image = await this.imageService.getImageById(id, undefined, false);
+    assertClientAccess(adminUser, image.clientId);
+
+    return plainToInstance(
+      RegenerateImageResponseDto,
+      await this.imageService.regenerateRenditions(image),
+      { excludeExtraneousValues: true },
+    );
+  }
+
   @Post(':id/tinify-compress')
   @ApiOperation({
     summary: 'Compress image with Tinify (TinyPNG)',
@@ -514,7 +645,7 @@ export class ImagesAdminController {
   @ApiResponse({
     status: 400,
     description:
-      'Tinify not enabled, API key not configured, monthly limit reached, or image already compressed with Tinify',
+      'Tinify not enabled, API key not configured, monthly limit reached, image not optimized yet, or already compressed with Tinify',
   })
   @ApiResponse({ status: 403, description: 'Access denied' })
   @ApiResponse({ status: 404, description: 'Image or client not found' })
@@ -529,5 +660,33 @@ export class ImagesAdminController {
     assertClientAccess(adminUser, image.clientId);
 
     return this.imageService.compressImageWithTinify(id);
+  }
+
+  @Post(':id/reoptimize')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Put an unoptimized image back in the optimize queue',
+    description:
+      'Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.',
+  })
+  @ApiResponse({ status: 204, description: 'Queued' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Image not found' })
+  @ApiResponse({ status: 409, description: 'Image already optimized' })
+  @Audit('fh_image.reoptimize_queued', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+  })
+  async reoptimizeImage(
+    @Param('id') id: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<void> {
+    const image = await this.imageService.getImageById(id, undefined, false);
+    assertClientAccess(adminUser, image.clientId);
+    if (!(await this.imageService.resetOptimizeAttempts({ id }))) {
+      throw new ConflictException({
+        code: 'ALREADY_OPTIMIZED',
+        message: 'Image already optimized',
+      });
+    }
   }
 }

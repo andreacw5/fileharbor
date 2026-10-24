@@ -3,7 +3,6 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AlbumResourceType } from '@prisma/client';
 import { AlbumService } from './album.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { WebhookService } from '@/modules/webhook/webhook.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 
@@ -104,10 +103,6 @@ describe('AlbumService', () => {
     $transaction: jest.fn(),
   };
 
-  const mockWebhookService = {
-    sendWebhook: jest.fn().mockResolvedValue(undefined),
-  };
-
   const mockRouteService = {
     fullUrl: jest.fn(
       (...segments: string[]) => `http://localhost:3000/${segments.join('/')}`,
@@ -120,14 +115,12 @@ describe('AlbumService', () => {
       providers: [
         AlbumService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: WebhookService, useValue: mockWebhookService },
         { provide: RouteHelperService, useValue: mockRouteService },
       ],
     }).compile();
 
     service = module.get<AlbumService>(AlbumService);
     jest.clearAllMocks();
-    mockWebhookService.sendWebhook.mockResolvedValue(undefined);
     // Album listings fold in per-album item counts; no rows means zero of each.
     mockPrismaService.albumItem.groupBy.mockResolvedValue([]);
   });
@@ -176,8 +169,6 @@ describe('AlbumService', () => {
           isPublic: false,
         },
       });
-
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should create a public album when isPublic is true', async () => {
@@ -384,7 +375,6 @@ describe('AlbumService', () => {
 
       expect(result.name).toBe('Updated Album');
       expect(result.description).toBe('Updated Description');
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -429,7 +419,6 @@ describe('AlbumService', () => {
       expect(mockPrismaService.album.delete).toHaveBeenCalledWith({
         where: { id: mockAlbumId },
       });
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -608,10 +597,9 @@ describe('AlbumService', () => {
       expect(mockPrismaService.albumItem.deleteMany).toHaveBeenCalledWith({
         where: { id: { in: ['album-item-123'] } },
       });
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledTimes(1);
     });
 
-    it('should remove a video from album without an image webhook', async () => {
+    it('should remove a video from album', async () => {
       mockPrismaService.albumItem.findMany.mockResolvedValue([
         { id: 'album-item-456', imageId: null },
       ]);
@@ -625,7 +613,6 @@ describe('AlbumService', () => {
       );
 
       expect(result.removed).toBe(1);
-      expect(mockWebhookService.sendWebhook).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -930,7 +917,6 @@ describe('AlbumService', () => {
       );
 
       expect(result.name).toBe('Updated Name');
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -1049,6 +1035,46 @@ describe('AlbumService', () => {
       expect(image.fullPath).toBe(
         `http://localhost:3000/images/${mockImageId}`,
       );
+    });
+
+    it('offers srcset on public image items and omits it on private ones', async () => {
+      const imageRow = (id: string, isPrivate: boolean) => ({
+        id: `item-${id}`,
+        resourceType: AlbumResourceType.IMAGE,
+        order: 0,
+        addedAt: new Date('2024-01-01'),
+        image: {
+          id,
+          originalName: 'test.jpg',
+          mimeType: 'image/jpeg',
+          width: 1000,
+          height: 800,
+          size: 1024000,
+          isPrivate,
+          imageTags: [],
+        },
+      });
+      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
+      mockPrismaService.$transaction.mockResolvedValue([
+        [imageRow('public-img', false), imageRow('private-img', true)],
+        2,
+      ]);
+
+      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
+        page: 1,
+        perPage: 20,
+      });
+
+      const [pub, priv] = result.data.map(
+        (item) => (item as { image: { srcset?: string } }).image,
+      );
+      expect(pub.srcset).toBe(
+        'http://localhost:3000/images/public-img?width=320 320w, ' +
+          'http://localhost:3000/images/public-img?width=640 640w, ' +
+          'http://localhost:3000/images/public-img?width=960 960w, ' +
+          'http://localhost:3000/images/public-img 1000w',
+      );
+      expect(priv.srcset).toBeUndefined();
     });
 
     it('keeps the video thumbnail on the path segment that does exist', async () => {
