@@ -650,6 +650,18 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
+   * Put unoptimized rows back in the optimize queue. Already optimized rows are
+   * never matched: re-encoding an optimized original only loses quality.
+   */
+  async resetOptimizeAttempts(where: Prisma.ImageWhereInput): Promise<number> {
+    const { count } = await this.prisma.image.updateMany({
+      where: { ...where, isOptimized: false },
+      data: { optimizeAttempts: 0 },
+    });
+    return count;
+  }
+
+  /**
    * Mark image as optimized
    */
   async markAsOptimized(imageId: string, size: number) {

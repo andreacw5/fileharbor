@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   HttpCode,
   StreamableFile,
@@ -37,6 +38,7 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminUpdateImageDto } from '../dto/admin-update-image.dto';
 import { AdminUploadImageDto } from '../dto/admin-upload-image.dto';
 import { AdminBulkDeleteDto } from '../dto/admin-bulk-delete.dto';
+import { AdminReoptimizeFailedDto } from '../dto/admin-reoptimize-failed.dto';
 import {
   ImageResponseDto,
   TinifyCompressionResponseDto,
@@ -54,13 +56,20 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
-import { parseBooleanQuery } from '../helpers/admin-query.helper';
+import {
+  OPTIMIZE_STATUSES,
+  parseBooleanQuery,
+  parseOptimizeStatusQuery,
+} from '../helpers/admin-query.helper';
 import {
   AdminDuplicateGroupDto,
   AdminDuplicateListQuery,
 } from '../dto/admin-duplicates.dto';
 import { ApiPaginatedResponse, PaginatedResult } from '@heyatom/nest-common';
-import { DHASH_PATTERN } from '@/modules/storage/storage.service';
+import {
+  DHASH_PATTERN,
+  OPTIMIZE_GIVEN_UP_WHERE,
+} from '@/modules/storage/storage.service';
 import { DuplicateGroup } from '@/modules/image/image.service';
 import {
   buildImageTagCreateInput,
@@ -195,6 +204,13 @@ export class ImagesAdminController {
     description: 'Only images with this dHash (16 hex chars)',
   })
   @ApiQuery({
+    name: 'optimizeStatus',
+    required: false,
+    enum: OPTIMIZE_STATUSES,
+    description:
+      'optimized, pending (the job will retry) or failed (the job gave up)',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
@@ -222,6 +238,7 @@ export class ImagesAdminController {
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('optimizeStatus') optimizeStatus?: string,
   ) {
     const tagsArray = tags
       ? Array.isArray(tags)
@@ -262,6 +279,8 @@ export class ImagesAdminController {
       }
       where.dHash = dHash;
     }
+    // isOptimized / optimizeAttempts: no other filter sets them
+    Object.assign(where, parseOptimizeStatusQuery(optimizeStatus));
     if (tagsArray && tagsArray.length > 0) {
       where.imageTags = {
         some: { tag: { name: { in: normalizeTagNames(tagsArray) } } },
@@ -423,6 +442,35 @@ export class ImagesAdminController {
     }
 
     return { deleted, failed };
+  }
+
+  @Post('reoptimize-failed')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Re-queue every image the optimize job gave up on',
+    description:
+      'Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: { properties: { count: { type: 'number' } } },
+  })
+  @ApiResponse({ status: 403, description: 'clientId outside your scope' })
+  @Audit('fh_image.reoptimize_queued', {
+    metadata: (r: { count: number }, req: AuditRequest) => ({
+      clientId: (req.body as { clientId?: string })?.clientId,
+      count: r?.count ?? 0,
+    }),
+  })
+  async reoptimizeFailedImages(
+    @Body() dto: AdminReoptimizeFailedDto,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<{ count: number }> {
+    const count = await this.imageService.resetOptimizeAttempts({
+      ...buildClientWhere(adminUser, dto.clientId), // 403 on a client out of scope
+      ...OPTIMIZE_GIVEN_UP_WHERE,
+    });
+    return { count };
   }
 
   @Delete(':id')
@@ -612,5 +660,33 @@ export class ImagesAdminController {
     assertClientAccess(adminUser, image.clientId);
 
     return this.imageService.compressImageWithTinify(id);
+  }
+
+  @Post(':id/reoptimize')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Put an unoptimized image back in the optimize queue',
+    description:
+      'Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.',
+  })
+  @ApiResponse({ status: 204, description: 'Queued' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Image not found' })
+  @ApiResponse({ status: 409, description: 'Image already optimized' })
+  @Audit('fh_image.reoptimize_queued', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
+  })
+  async reoptimizeImage(
+    @Param('id') id: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<void> {
+    const image = await this.imageService.getImageById(id, undefined, false);
+    assertClientAccess(adminUser, image.clientId);
+    if (!(await this.imageService.resetOptimizeAttempts({ id }))) {
+      throw new ConflictException({
+        code: 'ALREADY_OPTIMIZED',
+        message: 'Image already optimized',
+      });
+    }
   }
 }

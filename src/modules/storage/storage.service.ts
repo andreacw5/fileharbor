@@ -70,7 +70,8 @@ try {
 
 /**
  * Failed optimization runs after which an image/avatar is left unoptimized and
- * no longer retried by the hourly jobs. Reset `optimizeAttempts` to 0 to retry.
+ * no longer retried by the hourly jobs. Reset `optimizeAttempts` to 0 to retry
+ * (`POST admin/{images,avatars}/:id/reoptimize`, `…/reoptimize-failed`, or SQL).
  */
 export const MAX_OPTIMIZE_ATTEMPTS = 3;
 
@@ -83,7 +84,7 @@ export const OPTIMIZE_RETRYABLE_WHERE = {
   optimizeAttempts: { lt: MAX_OPTIMIZE_ATTEMPTS },
 };
 
-/** Rows the optimize jobs gave up on: only a manual reset retries them. */
+/** Rows the optimize jobs gave up on: only a manual reset (admin reoptimize or SQL) retries them. */
 export const OPTIMIZE_GIVEN_UP_WHERE = {
   isOptimized: false,
   optimizeAttempts: { gte: MAX_OPTIMIZE_ATTEMPTS },

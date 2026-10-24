@@ -130,3 +130,25 @@ describe('GetAvatarDto format validation', () => {
     );
   });
 });
+
+describe('AvatarService.resetOptimizeAttempts', () => {
+  it('never matches an optimized row', async () => {
+    const prisma = {
+      avatar: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const service = new AvatarService(
+      prisma as any,
+      {} as any,
+      { get: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(service.resetOptimizeAttempts({ id: 'a-1' })).resolves.toBe(1);
+    expect(prisma.avatar.updateMany).toHaveBeenCalledWith({
+      where: { id: 'a-1', isOptimized: false },
+      data: { optimizeAttempts: 0 },
+    });
+  });
+});

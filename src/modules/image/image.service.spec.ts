@@ -117,6 +117,7 @@ describe('ImageService', () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
     },
@@ -933,6 +934,23 @@ describe('ImageService', () => {
         UnprocessableEntityException,
       );
       expect(mockPrismaService.image.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetOptimizeAttempts', () => {
+    it('never matches an optimized row', async () => {
+      mockPrismaService.image.updateMany.mockResolvedValueOnce({ count: 2 });
+
+      await expect(
+        service.resetOptimizeAttempts({
+          clientId: mockClientId,
+          isOptimized: true,
+        }),
+      ).resolves.toBe(2);
+      expect(mockPrismaService.image.updateMany).toHaveBeenCalledWith({
+        where: { clientId: mockClientId, isOptimized: false },
+        data: { optimizeAttempts: 0 },
+      });
     });
   });
 
