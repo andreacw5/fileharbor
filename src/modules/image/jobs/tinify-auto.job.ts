@@ -149,10 +149,17 @@ export class TinifyAutoJob {
     );
   }
 
-  /** Bad key, account out of compressions, or our monthly limit reached. */
+  /**
+   * Bad key, account out of compressions, our monthly limit reached, or Tinify
+   * unreachable (no response, timeout, 5xx). Only per-image errors (another 4xx,
+   * an unreadable file) count an attempt: an outage must not give up on images.
+   */
   private stopsClient(error: any): boolean {
-    const status = error.response?.status;
-    if (status === 401 || status === 429) return true;
+    if (error.isAxiosError) {
+      const status = error.response?.status;
+      if (status === undefined || status >= 500) return true;
+      if (status === 401 || status === 429) return true;
+    }
     return (
       error instanceof BadRequestException &&
       (error.getResponse() as { code?: string }).code === TINIFY_LIMIT_REACHED

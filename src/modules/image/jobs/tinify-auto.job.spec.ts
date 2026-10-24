@@ -11,8 +11,11 @@ const client = {
   currentTinifyLimit: 500,
 };
 
-const tinifyError = (status: number) =>
-  Object.assign(new Error(`Tinify ${status}`), { response: { status } });
+const tinifyError = (status?: number) =>
+  Object.assign(new Error(`Tinify ${status ?? 'unreachable'}`), {
+    isAxiosError: true,
+    response: status === undefined ? undefined : { status },
+  });
 
 function setup({
   clients = [client],
@@ -151,7 +154,7 @@ describe('TinifyAutoJob.compressLargeImages', () => {
   it('counts a failure on the image and moves on', async () => {
     const { job, imageService, prisma } = setup();
     imageService.compressImageWithTinify
-      .mockRejectedValueOnce(tinifyError(500))
+      .mockRejectedValueOnce(tinifyError(415))
       .mockResolvedValueOnce({});
 
     await job.compressLargeImages();
@@ -163,9 +166,23 @@ describe('TinifyAutoJob.compressLargeImages', () => {
     expect(imageService.compressImageWithTinify).toHaveBeenCalledWith('b');
   });
 
+  it('counts an attempt for a local error, such as a missing file', async () => {
+    const { job, storage, prisma } = setup({ images: [{ id: 'a' }] });
+    storage.readFile.mockRejectedValueOnce(new Error('ENOENT'));
+
+    await job.compressLargeImages();
+
+    expect(prisma.image.updateMany).toHaveBeenCalledWith({
+      where: { id: 'a' },
+      data: { tinifyAttempts: { increment: 1 } },
+    });
+  });
+
   it.each([
     ['a 401 (bad key)', tinifyError(401)],
     ['a 429 (account out of compressions)', tinifyError(429)],
+    ['a Tinify 5xx', tinifyError(503)],
+    ['no response (timeout, ECONNRESET)', tinifyError()],
     [
       'our monthly limit',
       new BadRequestException({ code: TINIFY_LIMIT_REACHED, message: 'x' }),
