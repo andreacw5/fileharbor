@@ -1,10 +1,10 @@
 ---
 type: plan
 service: fileharbor
-status: in-progress
+status: done
 estimate: 1d
-updated: 2026-10-22
-verified: 3d6a9ad
+updated: 2026-10-24
+verified: ab856c6
 ---
 
 # 01 · Compressione Tinify automatica delle immagini grandi
