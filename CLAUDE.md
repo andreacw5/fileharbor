@@ -99,7 +99,8 @@ Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it
 `MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch.
 `POST admin/images/:id/reoptimize` (or `admin/avatars/…`, or `…/reoptimize-failed` for every given-up row in
 scope) resets `optimizeAttempts` on unoptimized rows only (`409 ALREADY_OPTIMIZED` otherwise) and the next
-hourly run picks them up; SQL (`optimizeAttempts = 0`) still works. Storage dirs map back to clients by `domain` **or** `id`
+hourly run picks them up; SQL (`optimizeAttempts = 0`) still works. The reset moves `updatedAt` too (`@updatedAt`): a new
+ETag for images, and for avatars a fresh queued-at for `fileharbor_unoptimized_oldest_age_seconds`. Storage dirs map back to clients by `domain` **or** `id`
 (`client.domain || clientId`); a dir matching neither is left alone.
 
 Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
