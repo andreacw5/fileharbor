@@ -115,8 +115,9 @@ Tinify auto-compress is opt-in per client: `Client.tinifyAutoMinBytes` (`null` =
 endpoint's quota (`currentTinifyUsage`/`currentTinifyLimit`, reserved atomically before the call, raised to
 Tinify's `Compression-Count`, set to the limit on a Tinify 429), checks and webhook. At most
 `TINIFY_AUTO_BATCH` (default 20) images per client per run, so the month's quota is spread. A failure bumps
-`Image.tinifyAttempts` (skipped at `MAX_OPTIMIZE_ATTEMPTS`, reset by SQL); a 401, a 429 or our own limit
-(`code: TINIFY_LIMIT_REACHED`) stops that client for the run instead. A compression that saves nothing keeps
+`Image.tinifyAttempts` (skipped at `MAX_OPTIMIZE_ATTEMPTS`, reset by SQL); a 401, a 429, our own limit
+(`code: TINIFY_LIMIT_REACHED`) or Tinify unreachable (no response, 60s timeout, 5xx) stops that client for
+the run instead, so an outage never gives up on images. The manual endpoint refuses rows not yet `isOptimized`. A compression that saves nothing keeps
 our file but still counts. Only `isOptimized` rows: the optimize job would re-encode a Tinify output.
 
 ## Admin Module
