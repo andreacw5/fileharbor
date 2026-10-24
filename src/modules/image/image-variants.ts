@@ -31,3 +31,19 @@ export function snapQuality(quality: number | undefined): number {
     Math.abs(step - quality) <= Math.abs(best - quality) ? step : best,
   );
 }
+
+/** Widths offered in `srcset`: a fixed subset of VARIANT_SIZES, so they share cache slots. */
+export const SRCSET_WIDTHS = [320, 640, 960, 1280, 1920] as const;
+
+/**
+ * `srcset` for a public image: each fixed width below the original, then the
+ * original itself (served from disk, no render, no cache slot).
+ */
+export function buildSrcset(fullPath: string, originalWidth: number): string {
+  return [
+    ...SRCSET_WIDTHS.filter((w) => w < originalWidth).map(
+      (w) => `${fullPath}?width=${w} ${w}w`,
+    ),
+    `${fullPath} ${originalWidth}w`,
+  ].join(', ');
+}
