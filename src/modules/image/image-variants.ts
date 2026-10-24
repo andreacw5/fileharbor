@@ -37,9 +37,14 @@ export const SRCSET_WIDTHS = [320, 640, 960, 1280, 1920] as const;
 
 /**
  * `srcset` for a public image: each fixed width below the original, then the
- * original itself (served from disk, no render, no cache slot).
+ * original itself (served from disk, no render, no cache slot). Undefined
+ * when the width is unknown (0): browsers reject a `0w` descriptor.
  */
-export function buildSrcset(fullPath: string, originalWidth: number): string {
+export function buildSrcset(
+  fullPath: string,
+  originalWidth: number,
+): string | undefined {
+  if (!(originalWidth > 0)) return undefined;
   return [
     ...SRCSET_WIDTHS.filter((w) => w < originalWidth).map(
       (w) => `${fullPath}?width=${w} ${w}w`,

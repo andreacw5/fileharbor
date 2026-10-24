@@ -67,6 +67,10 @@ describe('buildSrcset', () => {
     expect(buildSrcset(fullPath, 200)).toBe(`${fullPath} 200w`);
   });
 
+  it('is undefined when the width is unknown', () => {
+    expect(buildSrcset(fullPath, 0)).toBeUndefined();
+  });
+
   it('keeps a prefixed fullPath intact', () => {
     expect(buildSrcset('https://x/v2/images/id', 4000)).toMatch(
       /^https:\/\/x\/v2\/images\/id\?width=320 320w, /,

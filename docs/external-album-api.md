@@ -80,6 +80,7 @@ usa `coverImageId` quando è impostato; le altre route lo ignorano e prendono se
     tags: string[],
     fullPath: string,            // {BASE_URL}/images/{id}
     thumbnailPath: string,       // {BASE_URL}/images/{id}?thumb=true
+    srcset?: string,             // assoluto, solo immagini pubbliche (vedi ImageResponse.srcset)
   };
   video?: {                      // se VIDEO
     id, originalName, mimeType, duration?, width?, height?, size,
