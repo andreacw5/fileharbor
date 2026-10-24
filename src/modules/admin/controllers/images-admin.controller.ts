@@ -423,7 +423,7 @@ export class ImagesAdminController {
     const deleted: string[] = [];
     const failed: { id: string; message: string }[] = [];
 
-    // Sequential: each delete touches disk and fires a webhook, no need to burst.
+    // Sequential: each delete touches disk, no need to burst.
     for (const id of dto.ids) {
       const clientId = clients.get(id);
       if (!clientId || !adminUser.allowedClientIds.includes(clientId)) {

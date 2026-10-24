@@ -3,7 +3,6 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AlbumResourceType } from '@prisma/client';
 import { AlbumService } from './album.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { WebhookService } from '@/modules/webhook/webhook.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 
@@ -104,10 +103,6 @@ describe('AlbumService', () => {
     $transaction: jest.fn(),
   };
 
-  const mockWebhookService = {
-    sendWebhook: jest.fn().mockResolvedValue(undefined),
-  };
-
   const mockRouteService = {
     fullUrl: jest.fn(
       (...segments: string[]) => `http://localhost:3000/${segments.join('/')}`,
@@ -120,14 +115,12 @@ describe('AlbumService', () => {
       providers: [
         AlbumService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: WebhookService, useValue: mockWebhookService },
         { provide: RouteHelperService, useValue: mockRouteService },
       ],
     }).compile();
 
     service = module.get<AlbumService>(AlbumService);
     jest.clearAllMocks();
-    mockWebhookService.sendWebhook.mockResolvedValue(undefined);
     // Album listings fold in per-album item counts; no rows means zero of each.
     mockPrismaService.albumItem.groupBy.mockResolvedValue([]);
   });
@@ -176,8 +169,6 @@ describe('AlbumService', () => {
           isPublic: false,
         },
       });
-
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should create a public album when isPublic is true', async () => {
@@ -384,7 +375,6 @@ describe('AlbumService', () => {
 
       expect(result.name).toBe('Updated Album');
       expect(result.description).toBe('Updated Description');
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -429,7 +419,6 @@ describe('AlbumService', () => {
       expect(mockPrismaService.album.delete).toHaveBeenCalledWith({
         where: { id: mockAlbumId },
       });
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -608,10 +597,9 @@ describe('AlbumService', () => {
       expect(mockPrismaService.albumItem.deleteMany).toHaveBeenCalledWith({
         where: { id: { in: ['album-item-123'] } },
       });
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledTimes(1);
     });
 
-    it('should remove a video from album without an image webhook', async () => {
+    it('should remove a video from album', async () => {
       mockPrismaService.albumItem.findMany.mockResolvedValue([
         { id: 'album-item-456', imageId: null },
       ]);
@@ -625,7 +613,6 @@ describe('AlbumService', () => {
       );
 
       expect(result.removed).toBe(1);
-      expect(mockWebhookService.sendWebhook).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {
@@ -930,7 +917,6 @@ describe('AlbumService', () => {
       );
 
       expect(result.name).toBe('Updated Name');
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when creator is not owner', async () => {

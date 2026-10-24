@@ -34,7 +34,6 @@ describe('AvatarService.getAvatarFile format', () => {
     storage as any,
     config as any,
     {} as any,
-    {} as any,
     new RouteHelperService({
       get: (key: string) =>
         key === 'BASE_URL' ? 'https://cdn.test' : undefined,
@@ -140,7 +139,6 @@ describe('AvatarService.resetOptimizeAttempts', () => {
       prisma as any,
       {} as any,
       { get: jest.fn() } as any,
-      {} as any,
       {} as any,
       {} as any,
     );

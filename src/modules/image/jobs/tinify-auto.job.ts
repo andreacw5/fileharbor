@@ -23,7 +23,7 @@ type AutoClient = {
 /**
  * Compresses large images with Tinify for the clients that opted in
  * (`tinifyAutoMinBytes` set). Goes through `compressImageWithTinify`, so the
- * quota, checks and webhook are the manual endpoint's.
+ * quota and checks are the manual endpoint's.
  */
 @Injectable()
 export class TinifyAutoJob {
