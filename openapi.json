@@ -2902,7 +2902,7 @@
             }
           },
           "400": {
-            "description": "Tinify not enabled, API key not configured, monthly limit reached, or image already compressed with Tinify"
+            "description": "Tinify not enabled, API key not configured, monthly limit reached, image not optimized yet, or already compressed with Tinify"
           },
           "403": {
             "description": "Access denied"
