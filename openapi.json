@@ -6239,6 +6239,11 @@
             "description": "Monthly Tinify compression limit (default: 500 for free tier)",
             "default": 500
           },
+          "tinifyAutoMinBytes": {
+            "type": "number",
+            "description": "Images above this size (bytes) are auto-compressed with Tinify; null = off",
+            "nullable": true
+          },
           "bastionTenantSlug": {
             "type": "string",
             "description": "Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar",
@@ -6352,6 +6357,11 @@
             "description": "Monthly Tinify compression limit (default: 500 for free tier)",
             "default": 500
           },
+          "tinifyAutoMinBytes": {
+            "type": "number",
+            "description": "Images above this size (bytes) are auto-compressed with Tinify; null = off",
+            "nullable": true
+          },
           "bastionTenantSlug": {
             "type": "string",
             "description": "Bastion tenant slug mapped to this client for self-service (user-JWT) endpoints like /me/avatar",
@@ -6435,6 +6445,12 @@
           "currentTinifyLimit": {
             "type": "number",
             "description": "Monthly Tinify compression limit (default: 500 for free tier)"
+          },
+          "tinifyAutoMinBytes": {
+            "type": "number",
+            "description": "Auto-compress with Tinify the images above this size, in bytes (1048576 = 1 MB is a sensible start). null turns auto-compression off. Spends the same monthly quota as manual compression.",
+            "example": 1048576,
+            "nullable": true
           },
           "bastionTenantSlug": {
             "type": "string",
