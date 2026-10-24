@@ -398,6 +398,9 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   keep working; close values share one cached file and one ETag (the controller snaps too).
 - **Cache**: at most `MAX_CACHED_VARIANTS` (20) files under `{imageDir}/variants/`; past that a variant is
   rendered but not stored.
+- **`srcset`** (`buildSrcset`, plan 09): `ImageResponseDto` and album image items carry a ready-made
+  `srcset` built on `fullPath` (absolute): the fixed `SRCSET_WIDTHS` (320/640/960/1280/1920) strictly below
+  the original width, then the original itself (no render, no cache slot). Omitted for private images.
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
