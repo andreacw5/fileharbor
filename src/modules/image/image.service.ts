@@ -5,7 +5,6 @@ import {
   ForbiddenException,
   Logger,
   OnModuleDestroy,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
@@ -1350,23 +1349,13 @@ export class ImageService implements OnModuleDestroy {
     if (!(await this.storage.fileExists(originalPath))) {
       throw new NotFoundException('Original file missing');
     }
-    try {
-      await this.storage.regenerateImageThumb(
-        domain,
-        image.id,
-        this.thumbnailSize,
-        this.thumbnailQuality,
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Failed to regenerate renditions of image ${image.id}: ${error instanceof Error ? error.message : error}`,
-      );
-      // ponytail: any storage error reads as "unreadable original"; a full disk on
-      // the thumb write lands here too (logged above), split it if that ever matters
-      throw new UnprocessableEntityException(
-        'Original file is not a readable image',
-      );
-    }
+    // 422 on an unreadable original, 500 on a failed thumb write (StorageService)
+    await this.storage.regenerateImageThumb(
+      domain,
+      image.id,
+      this.thumbnailSize,
+      this.thumbnailQuality,
+    );
     return this.prisma.image.update({
       where: { id: image.id },
       data: { updatedAt: new Date() },

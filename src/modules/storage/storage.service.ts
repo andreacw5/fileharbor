@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
@@ -239,20 +240,35 @@ export class StorageService {
     await this.deleteDirectory(this.getImageVariantsPath(domain, imageId));
   }
 
-  /** Rebuilds thumb.webp from the stored original and drops cached variants. The original is untouched. */
+  /**
+   * Rebuilds thumb.webp from the stored original and drops cached variants. The original
+   * is untouched. Only reading/decoding the original is a 422 (re-upload needed); a failed
+   * thumb write stays a 500, and a failed variants clear only warns: the new thumb is
+   * already on disk, so the caller must still move updatedAt.
+   */
   async regenerateImageThumb(
     domain: string,
     imageId: string,
     size: number,
     quality: number,
   ): Promise<void> {
-    const original = await this.readFile(
-      this.getImageFilePath(domain, imageId, 'original'),
-    );
-    const thumb = await this.createThumbnail(original, size, quality);
-    // Thumb first: if clearing the variants fails, the new thumb is still good
+    let thumb: Buffer;
+    try {
+      const original = await this.readFile(
+        this.getImageFilePath(domain, imageId, 'original'),
+      );
+      thumb = await this.createThumbnail(original, size, quality);
+    } catch {
+      throw new UnprocessableEntityException(
+        'Original file is not a readable image',
+      );
+    }
     await this.saveFile(this.getImageFilePath(domain, imageId, 'thumb'), thumb);
-    await this.clearImageVariants(domain, imageId);
+    await this.clearImageVariants(domain, imageId).catch((error: unknown) =>
+      this.logger.warn(
+        `[regenerateImageThumb] Variants of ${imageId} not cleared: ${error instanceof Error ? error.message : error}`,
+      ),
+    );
   }
 
   /** Number of entries in a directory, 0 when it doesn't exist. */

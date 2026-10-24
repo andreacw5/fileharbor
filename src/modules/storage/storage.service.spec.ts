@@ -1,4 +1,8 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -315,5 +319,49 @@ describe('StorageService.regenerateImageThumb', () => {
     expect([thumb.width, thumb.height]).toEqual([100, 50]);
     await expect(stat(variants)).rejects.toThrow();
     expect((await readFile(originalPath)).equals(original)).toBe(true);
+  });
+
+  const seed = async () => {
+    const original = await sharp({
+      create: { width: 40, height: 20, channels: 3, background: '#3c3' },
+    })
+      .webp()
+      .toBuffer();
+    await mkdir(storage.getImagePath('d', 'img'), { recursive: true });
+    await writeFile(storage.getImageFilePath('d', 'img', 'original'), original);
+  };
+
+  it('422s on an original that is not an image, writing nothing', async () => {
+    await mkdir(storage.getImagePath('d', 'img'), { recursive: true });
+    await writeFile(storage.getImageFilePath('d', 'img', 'original'), 'junk');
+    await expect(
+      storage.regenerateImageThumb('d', 'img', 100, 70),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await expect(
+      stat(storage.getImageFilePath('d', 'img', 'thumb')),
+    ).rejects.toThrow();
+  });
+
+  it('keeps a thumb write failure a 500', async () => {
+    await seed();
+    jest
+      .spyOn(storage, 'saveFile')
+      .mockRejectedValueOnce(new InternalServerErrorException('ENOSPC'));
+    await expect(
+      storage.regenerateImageThumb('d', 'img', 100, 70),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('only warns when the variants cannot be cleared', async () => {
+    await seed();
+    jest
+      .spyOn(storage, 'clearImageVariants')
+      .mockRejectedValueOnce(new InternalServerErrorException('EBUSY'));
+    await expect(
+      storage.regenerateImageThumb('d', 'img', 100, 70),
+    ).resolves.toBeUndefined();
+    await expect(
+      stat(storage.getImageFilePath('d', 'img', 'thumb')),
+    ).resolves.toBeDefined();
   });
 });

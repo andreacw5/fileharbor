@@ -924,15 +924,14 @@ describe('ImageService', () => {
       expect(mockPrismaService.image.update).not.toHaveBeenCalled();
     });
 
-    it('422s on an unreadable original, leaving updatedAt alone', async () => {
+    it.each([
+      ['an unreadable original', new UnprocessableEntityException()],
+      ['a failed thumb write', new InternalServerErrorException()],
+    ])('propagates %s, leaving updatedAt alone', async (_case, error) => {
       mockStorageService.regenerateImageThumb
         .mockReset()
-        .mockRejectedValueOnce(
-          new InternalServerErrorException('Failed to create thumbnail'),
-        );
-      await expect(service.regenerateRenditions(image)).rejects.toBeInstanceOf(
-        UnprocessableEntityException,
-      );
+        .mockRejectedValueOnce(error);
+      await expect(service.regenerateRenditions(image)).rejects.toBe(error);
       expect(mockPrismaService.image.update).not.toHaveBeenCalled();
     });
   });
