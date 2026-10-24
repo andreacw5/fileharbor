@@ -137,7 +137,6 @@ poi tolto).
   dell'immagine (lì è `select`, non `include`: senza, i campi escono `undefined`) e copiarli in
   `mapAlbumItem`. Le gallerie di puma-arts e portfolio leggono gli album: senza questo il piano
   serve a metà.
-- Webhook `image.uploaded`: invariato (Discord).
 
 > **Coordinare con il piano 09** (`srcset` nella risposta `info`): tocca gli stessi file
 > (`ImageResponseDto`, `formatImageResponse`, forse `AlbumItemImageDataDto`/`mapAlbumItem`) e la

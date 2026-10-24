@@ -39,7 +39,8 @@ import {
   ClientId,
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@heyatom/bastion-client/nest';
+import { BastionAuditService, Public } from '@heyatom/bastion-client/nest';
+import { auditClientWrite } from '@/common/client-audit';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadImageDto,
@@ -67,6 +68,7 @@ export class ImageController {
     private imageService: ImageService,
     private storageService: StorageService,
     private config: ConfigService,
+    private audit: BastionAuditService,
   ) {}
 
   @Post()
@@ -451,6 +453,12 @@ export class ImageController {
         dto.description,
         dto.isPrivate,
       );
+      if (typeof dto.isPrivate === 'boolean')
+        auditClientWrite(this.audit, 'fh_image.updated', clientId, creatorId, {
+          imageId,
+          fields: ['isPrivate'],
+          isPrivate: dto.isPrivate,
+        });
 
       this.logger.log(
         `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
@@ -573,6 +581,7 @@ export class ImageController {
   @ApiResponse({ status: 404, description: 'Not found' })
   async deleteImage(
     @ClientId() clientId: string,
+    @CreatorExternalId() creatorId: string | undefined,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
@@ -581,6 +590,9 @@ export class ImageController {
 
     try {
       const result = await this.imageService.deleteImage(imageId, clientId);
+      auditClientWrite(this.audit, 'fh_image.deleted', clientId, creatorId, {
+        imageId,
+      });
 
       this.logger.log(`[DeleteImage] Success - ImageId: ${imageId}`);
 

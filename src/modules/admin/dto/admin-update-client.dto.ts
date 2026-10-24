@@ -10,7 +10,6 @@ import {
   Max,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { DISCORD_WEBHOOK_URL } from '@/modules/webhook/webhook.service';
 
 export class AdminUpdateClientDto {
   @ApiPropertyOptional({ description: 'Client display name' })
@@ -23,23 +22,6 @@ export class AdminUpdateClientDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
-
-  @ApiPropertyOptional({
-    description: 'Enable or disable webhook notifications',
-  })
-  @IsOptional()
-  @IsBoolean()
-  webhookEnabled?: boolean;
-
-  @ApiPropertyOptional({
-    description:
-      'Discord webhook URL, https://discord.com/api/webhooks/<id>/<token> (set to null to remove)',
-  })
-  @IsOptional()
-  @Matches(DISCORD_WEBHOOK_URL, {
-    message: 'webhookUrl must be a Discord webhook URL',
-  })
-  webhookUrl?: string | null;
 
   @ApiPropertyOptional({
     description: 'Enable or disable Tinify compression for this client',

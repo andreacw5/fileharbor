@@ -1,10 +1,10 @@
 ---
 type: plan
 service: fileharbor
-status: open
+status: done
 estimate: 0.5d
 updated: 2026-10-24
-verified: bd2eba5
+verified: fdf5420
 ---
 
 # 10 · Via i webhook Discord, audit sulle cancellazioni della superficie client
@@ -133,7 +133,7 @@ Chiamarlo **dopo** la risposta positiva del servizio, nei controller:
 | `image.controller.ts` | `PATCH :imageId`, solo con `'isPrivate' in dto` | `fh_image.updated` | `imageId`, `fields: ['isPrivate']`, `isPrivate` |
 | `video.controller.ts` | `DELETE :id` | `fh_video.deleted` | `videoId` |
 | `video.controller.ts` | `PATCH :id`, solo con `'isPrivate' in dto` | `fh_video.updated` | `videoId`, `fields: ['isPrivate']`, `isPrivate` |
-| `avatar.controller.ts` | `DELETE :externalUserId` | `fh_avatar.deleted` | `externalUserId` del path |
+| `avatar.controller.ts` | `DELETE :externalUserId` | `fh_avatar.deleted` | `ownerExternalUserId` = `externalUserId` del path (la chiave `externalUserId` è già l'attore) |
 | `album.controller.ts` | `DELETE :albumId` | `fh_album.deleted` | `albumId` |
 
 `externalUserId` (l'attore) viene da `@CreatorExternalId()`. PATCH immagine/video e delete album lo

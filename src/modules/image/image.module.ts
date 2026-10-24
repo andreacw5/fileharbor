@@ -3,7 +3,6 @@ import { HttpModule } from '@nestjs/axios';
 import { ImageService } from './image.service';
 import { ImageController } from './image.controller';
 import { ClientModule } from '../client/client.module';
-import { WebhookModule } from '../webhook/webhook.module';
 import { StorageModule } from '../storage/storage.module';
 import { CreatorModule } from '../creator/creator.module';
 import { ImageCleanupJob } from '@/modules/image/jobs/image.cleanup.job';
@@ -14,7 +13,6 @@ import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.mo
 @Module({
   imports: [
     ClientModule,
-    WebhookModule,
     StorageModule,
     // Tinify: a hung call would hold TinifyAutoJob's advisory lock (and the job) forever.
     // A timeout has no response, so its quota slot is refunded.

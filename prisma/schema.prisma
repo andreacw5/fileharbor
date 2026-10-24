@@ -15,15 +15,13 @@ datasource db {
 
 // Multi-tenant Client
 model Client {
-  id             String   @id @default(uuid())
-  name           String
-  apiKey         String   @unique
-  domain         String?  @unique
-  active         Boolean  @default(true)
-  webhookEnabled Boolean  @default(false)
-  webhookUrl     String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  apiKey    String   @unique
+  domain    String?  @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Tinify credentials (optional, can be set per client for image optimization)
   tinifyActive       Boolean @default(false)

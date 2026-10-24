@@ -24,8 +24,12 @@ import {
 import { Response } from 'express';
 import { AvatarService } from './avatar.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
-import { ClientId } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@heyatom/bastion-client/nest';
+import {
+  ClientId,
+  CreatorExternalId,
+} from '@/modules/client/decorators/client.decorator';
+import { BastionAuditService, Public } from '@heyatom/bastion-client/nest';
+import { auditClientWrite } from '@/common/client-audit';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   UploadAvatarDto,
@@ -43,7 +47,10 @@ import { contentDisposition } from '@/utils/content-disposition';
 export class AvatarController {
   private readonly logger = new Logger(AvatarController.name);
 
-  constructor(private avatarService: AvatarService) {}
+  constructor(
+    private avatarService: AvatarService,
+    private audit: BastionAuditService,
+  ) {}
 
   @Post()
   @ApiOperation({
@@ -248,6 +255,8 @@ export class AvatarController {
   async deleteAvatar(
     @ClientId() clientId: string,
     @Param('externalUserId') externalUserId: string,
+    // Who deletes, not whose avatar it is: that one is the path.
+    @CreatorExternalId() actorId: string | undefined,
   ): Promise<DeleteAvatarResponseDto> {
     if (!externalUserId) {
       this.logger.warn(
@@ -265,6 +274,9 @@ export class AvatarController {
         clientId,
         externalUserId,
       );
+      auditClientWrite(this.audit, 'fh_avatar.deleted', clientId, actorId, {
+        ownerExternalUserId: externalUserId,
+      });
       this.logger.log(
         `[deleteAvatar] Success - Client: ${clientId}, Creator: ${externalUserId}`,
       );

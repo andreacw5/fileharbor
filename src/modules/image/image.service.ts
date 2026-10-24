@@ -18,10 +18,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { paginate, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { lastValueFrom } from 'rxjs';
@@ -96,7 +92,6 @@ export class ImageService implements OnModuleDestroy {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private webhook: WebhookService,
     private httpService: HttpService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
@@ -272,24 +267,6 @@ export class ImageService implements OnModuleDestroy {
           },
         },
       });
-
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.IMAGE_UPLOADED, {
-          imageId: image.id,
-          originalName: image.originalName,
-          width: image.width,
-          height: image.height,
-          size: image.size,
-          format: image.format,
-          creatorId: creator.externalId,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[uploadImage] Failed to send webhook for image ${imageId}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
 
       // Add to album if specified
       if (albumId) {
@@ -565,19 +542,6 @@ export class ImageService implements OnModuleDestroy {
           `[deleteImage] Files left for the orphan sweep - ID: ${imageId}: ${error.message}`,
         );
       }
-
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.IMAGE_DELETED, {
-          id: imageId,
-          timestamp: new Date().toISOString(),
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[deleteImage] Failed to send webhook for image ${imageId}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
 
       this.logger.log(
         `[deleteImage] Success - ID: ${imageId}, Client: ${clientId}, Size: ${image.size} bytes`,
@@ -1618,24 +1582,6 @@ export class ImageService implements OnModuleDestroy {
           },
         },
       });
-
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(image.clientId, WebhookEvent.IMAGE_UPLOADED, {
-          imageId: image.id,
-          originalName: image.originalName,
-          action: 'tinify_compressed',
-          originalSize,
-          compressedSize,
-          savedBytes,
-          savedPercentage: `${savedPercentage}%`,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[compressImageWithTinify] Failed to send webhook for image ${imageId}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
 
       this.logger.log(
         `[compressImageWithTinify] Success - ID: ${imageId}, Saved: ${savedBytes} bytes (${savedPercentage}%)`,

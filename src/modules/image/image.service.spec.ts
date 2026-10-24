@@ -9,10 +9,6 @@ import { ImageService } from './image.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
@@ -176,10 +172,6 @@ describe('ImageService', () => {
     }),
   };
 
-  const mockWebhookService = {
-    sendWebhook: jest.fn().mockResolvedValue(undefined),
-  };
-
   const mockCreatorServiceMock = {
     resolveCreator: jest.fn(),
     findOrCreate: jest.fn(),
@@ -200,10 +192,6 @@ describe('ImageService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
-        },
-        {
-          provide: WebhookService,
-          useValue: mockWebhookService,
         },
         {
           provide: HttpService,
@@ -277,11 +265,6 @@ describe('ImageService', () => {
         1,
       );
       expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2); // original + thumbnail
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
-        mockClientId,
-        WebhookEvent.IMAGE_UPLOADED,
-        expect.any(Object),
-      );
     });
 
     it('hashes the stored original and saves the dHash', async () => {
@@ -530,11 +513,6 @@ describe('ImageService', () => {
         where: { id: mockImageId },
       });
       expect(mockStorageService.deleteDirectory).toHaveBeenCalled();
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
-        mockClientId,
-        WebhookEvent.IMAGE_DELETED,
-        expect.any(Object),
-      );
     });
 
     it('deletes the row before the files, and survives a failed file delete', async () => {

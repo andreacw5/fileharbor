@@ -21,8 +21,7 @@ prod (`services/fileharbor/config/fileharbor.env` nel repo `server-backup`, giti
     (`^/v2(.*)$ → $1`): con `v2` l'app servirebbe `/v2/*` e tutto risponderebbe 404, mentre `/health/*`
     (escluso dal prefisso) resta verde.
   - `BASE_URL=https://fileharbor.heyatom.dev/v2` — il prefisso pubblico sta qui. `fullPath` resta uguale a
-    oggi; i link dei webhook diventano corretti (oggi senza `/v2`); i campi relativi (`url`,
-    `thumbnailUrl`, `shareUrl`, `url` del token album) perdono `/v2` (`/images/<id>`).
+    oggi; i campi relativi (`url`, `thumbnailUrl`, `shareUrl`, `url` del token album) perdono `/v2` (`/images/<id>`).
   - `TRUST_PROXY_HOPS=1` — obbligatorio con `NODE_ENV=production` (un nginx davanti).
   - `CORS_ORIGIN=<origini>` (o `*`) — da `50ae9c9` obbligatorio con `NODE_ENV=production`, e il
     Dockerfile lo imposta sempre. Senza, il container va in crash-loop.
@@ -90,7 +89,7 @@ Le prime quattro servono ai siti Nuxt (portfolio, puma-arts, sgweb, Articuno) ch
 | 2b.3  | **Focal point** (`focusX`/`focusY` 0–1 su `Image`, settabile da PATCH e Meridian), usato da `fit=cover` (§2.3)                                         | Senza, `cover` taglia al centro e decapita i ritratti. Va fatto insieme a §2.3                                                                                                              | XS (sopra 2.3) |
 | 2b.4  | **`format=auto` / AVIF**: negoziazione su `Accept` (avif → webp → jpeg) con `Vary: Accept`; `avif` aggiunto a `GetImageDto` (oggi `webp`/`jpeg`/`png`) | 20–30% di byte in meno sulle foto. Attenzione: AVIF costa CPU in encoding → passa dal semaforo e conta nel limite di 20 varianti                                                            | S              |
 | 2b.5  | **Throttle per API key** invece che per IP sulle route client autenticate (key = `clientId`, store in memoria come oggi)                               | Almanac si autolimita a 10/60s (`FILEHARBOR_MIN_INTERVAL_MS`) perché il bucket è per IP: un servizio fidato dietro la stessa rete paga per tutti. Non è lo "store condiviso" scartato in §3 | XS             |
-| 2b.6  | **Webhook mancanti**: `image.updated` (privacy, descrizione, tag), `video.updated`, item video negli album                                             | Oggi un cambio di `isPrivate` via PATCH (`d7151a5`) non arriva a nessuno                                                                                                                    | XS             |
+| 2b.6 ✅ | ~~**Webhook mancanti**: `image.updated` (privacy, descrizione, tag), `video.updated`, item video negli album~~ → [10](plans/10-webhooks-to-audit.md): webhook rimossi, audit di delete e `isPrivate`                                             | Oggi un cambio di `isPrivate` via PATCH (`d7151a5`) non arriva a nessuno                                                                                                                    | XS             |
 | 2b.7 ✅ | **Riprova ottimizzazione da Meridian**: `POST admin/images/:id/reoptimize` (azzera `optimizeAttempts`) + filtro "falliti" (§2.5)                       | L'alert `fileharbor_optimize_given_up > 0` oggi si risolve solo in SQL                                                                                                                      | XS             |
 | 2b.8 ✅ | **Rigenera thumbnail/varianti** (`POST admin/images/:id/regenerate`, svuota `variants/`)                                                               | Dopo un cambio di `THUMBNAIL_SIZE`/qualità, o un thumb corrotto; oggi l'unica via è cancellare e ricaricare (id nuovo, URL rotti)                                                           | S              |
 | 2b.9  | **Poster video a scelta**: `?t=<sec>` sul thumbnail all'upload o `PATCH admin/videos/:id/poster`                                                       | Il frame fisso iniziale è spesso nero/dissolvenza                                                                                                                                           | S              |
@@ -110,7 +109,7 @@ Escluse di proposito: upload da URL lato server (SSRF; Almanac scarica già da s
 Motivo comune: nessun consumer oggi. Si riconsiderano se cambia il contesto.
 
 - Storage S3/R2 pluggable · Pipeline video HLS/transcoding · ~~SDK TypeScript~~ (fatto: `@heyatom/client`)
-- Webhook HTTP firmati con retry (nessun ricevitore oltre Discord) · Upload diretto da browser
+- Webhook HTTP firmati con retry (nessun ricevitore; i Discord sono stati rimossi, piano 10) · Upload diretto da browser
 - Dedup sha256 / integrity scrub · Moderazione / ClamAV (tutti gli uploader sono servizi fidati)
 - Soft delete / cestino (c'è il backup) · Quote per client (un solo owner)
 - Rate limit per client con store condiviso (sostituito da snapping + semaforo) · Idempotency-Key / replace atomico

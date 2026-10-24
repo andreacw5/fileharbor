@@ -12,10 +12,6 @@ import {
 } from '@/modules/storage/storage.service';
 import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { AvatarResponseDto, DeleteAvatarResponseDto } from './dto';
@@ -33,7 +29,6 @@ export class AvatarService {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private webhook: WebhookService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
   ) {
@@ -194,22 +189,6 @@ export class AvatarService {
         },
       });
 
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.AVATAR_UPLOADED, {
-          avatarId: avatar.id,
-          creatorId: externalId,
-          width: avatar.width,
-          height: avatar.height,
-          size: avatar.size,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[uploadAvatar] Failed to send webhook for avatar ${avatar.id}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
-
       this.logger.log(
         `[uploadAvatar] Success - Client: ${clientId}, Creator: ${externalId}, Size: ${webpBuffer.length} bytes`,
       );
@@ -334,19 +313,6 @@ export class AvatarService {
           `[deleteAvatar] Files left for the orphan sweep - Creator: ${creator.id}: ${error.message}`,
         );
       }
-
-      // Send webhook notification (non-blocking)
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.AVATAR_DELETED, {
-          id: avatar.id,
-          timestamp: new Date().toISOString(),
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `[deleteAvatar] Failed to send webhook for avatar ${avatar.id}:`,
-            error instanceof Error ? error.message : error,
-          );
-        });
 
       this.logger.log(
         `[deleteAvatar] Success - Client: ${clientId}, Creator: ${externalId}, Size: ${avatar.size} bytes`,

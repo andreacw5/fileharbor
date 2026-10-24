@@ -9,10 +9,6 @@ import * as fs from 'fs/promises';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
@@ -38,7 +34,6 @@ export class VideoService {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private webhook: WebhookService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private metrics: FileharborMetrics,
@@ -160,19 +155,6 @@ export class VideoService {
         );
         await this.addVideoToAlbum(videoId, albumId, clientId);
       }
-
-      this.webhook
-        .sendWebhook(clientId, WebhookEvent.VIDEO_UPLOADED, {
-          videoId: video.id,
-          originalName: video.originalName,
-          size: Number(video.size),
-          creatorId: creator.externalId,
-        })
-        .catch((err) =>
-          this.logger.warn(
-            `[uploadVideo] Webhook failed: ${err instanceof Error ? err.message : err}`,
-          ),
-        );
 
       this.logger.log(
         `[uploadVideo] Success - ID: ${videoId}, Client: ${clientId}`,
@@ -316,17 +298,6 @@ export class VideoService {
         `[deleteVideo] Files left for the orphan sweep - ID: ${videoId}: ${err instanceof Error ? err.message : err}`,
       );
     }
-
-    this.webhook
-      .sendWebhook(clientId, WebhookEvent.VIDEO_DELETED, {
-        id: videoId,
-        timestamp: new Date().toISOString(),
-      })
-      .catch((err) =>
-        this.logger.warn(
-          `[deleteVideo] Webhook failed: ${err instanceof Error ? err.message : err}`,
-        ),
-      );
 
     return plainToInstance(
       DeleteVideoResponseDto,

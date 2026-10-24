@@ -9,10 +9,6 @@ import { VideoService } from './video.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  WebhookService,
-  WebhookEvent,
-} from '@/modules/webhook/webhook.service';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { MetricsService } from '@heyatom/nest-common/metrics';
@@ -142,10 +138,6 @@ describe('VideoService', () => {
     }),
   };
 
-  const mockWebhookService = {
-    sendWebhook: jest.fn().mockResolvedValue(undefined),
-  };
-
   const mockCreatorService = {
     resolveCreator: jest.fn(),
   };
@@ -166,7 +158,6 @@ describe('VideoService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: StorageService, useValue: mockStorageService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: WebhookService, useValue: mockWebhookService },
         { provide: CreatorService, useValue: mockCreatorService },
         { provide: RouteHelperService, useValue: mockRouteHelperService },
         FileharborMetrics,
@@ -231,16 +222,6 @@ describe('VideoService', () => {
       expect(mockPrismaService.video.create).toHaveBeenCalled();
       expect(await failures('thumbnail')).toBe(0);
       expect(await failures('metadata')).toBe(0);
-    });
-
-    it('should fire VIDEO_UPLOADED webhook (non-blocking)', async () => {
-      await service.uploadVideo(mockClientId, mockExternalUserId, mockFile);
-
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
-        mockClientId,
-        WebhookEvent.VIDEO_UPLOADED,
-        expect.objectContaining({ videoId: mockVideoId }),
-      );
     });
 
     it('should always unlink temp file even on error', async () => {
@@ -581,22 +562,6 @@ describe('VideoService', () => {
       expect(mockPrismaService.video.delete).toHaveBeenCalledWith({
         where: { id: mockVideoId },
       });
-    });
-
-    it('should fire VIDEO_DELETED webhook', async () => {
-      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockStorageService.getVideoPath.mockReturnValue('storage/path');
-      mockStorageService.deleteDirectory.mockResolvedValue(undefined);
-      mockPrismaService.video.delete.mockResolvedValue(mockVideo);
-
-      await service.deleteVideo(mockVideoId, mockClientId);
-
-      expect(mockWebhookService.sendWebhook).toHaveBeenCalledWith(
-        mockClientId,
-        WebhookEvent.VIDEO_DELETED,
-        expect.objectContaining({ id: mockVideoId }),
-      );
     });
 
     it('deletes the row before the files, and survives a failed file delete', async () => {
