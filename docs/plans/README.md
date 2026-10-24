@@ -11,3 +11,4 @@
 | 07 | [Riprova ottimizzazione dalla console](07-retry-optimize-admin.md) | done |
 | 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | open |
 | 09 | [`srcset` nelle risposte immagine](09-srcset.md) | done |
+| 10 | [Via i webhook, audit sulla superficie client](10-webhooks-to-audit.md) | open |

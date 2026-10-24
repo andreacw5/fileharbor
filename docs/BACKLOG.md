@@ -100,7 +100,7 @@ Le prime quattro servono ai siti Nuxt (portfolio, puma-arts, sgweb, Articuno) ch
 
 Pianificate: 2b.1 → [piano 08](plans/08-image-placeholders.md) · 2b.2 → [09](plans/09-srcset.md) ·
 2b.7 → [07](plans/07-retry-optimize-admin.md) · 2b.8 → [06](plans/06-regenerate-renditions.md) ·
-2b.11 → [05](plans/05-storage-bytes-metric.md). Da implementare 08 e 09 uno dopo l'altro (stessi DTO), 05 prima di 04.
+2b.11 → [05](plans/05-storage-bytes-metric.md) · 2b.6 → [10](plans/10-webhooks-to-audit.md) (i webhook spariscono, al loro posto audit delle cancellazioni). Da implementare 08 e 09 uno dopo l'altro (stessi DTO), 05 prima di 04.
 
 Escluse di proposito: upload da URL lato server (SSRF; Almanac scarica già da sé), signed URL stateless
 (gli share link coprono il caso), gestione `AdminPrincipal` via API (scelta di sicurezza, vedi CLAUDE.md).
