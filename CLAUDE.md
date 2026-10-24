@@ -96,8 +96,11 @@ Deletes remove the DB row first, then the files; a failed file delete only logs 
 leaves the dir to this sweep (a row pointing at missing files would be worse than a stray dir).
 
 Optimize jobs: a failed row increments `optimizeAttempts` and is skipped once it reaches
-`MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch. Set
-`optimizeAttempts = 0` to retry. Storage dirs map back to clients by `domain` **or** `id`
+`MAX_OPTIMIZE_ATTEMPTS` (3, `storage.service.ts`), so broken files can't fill every batch.
+`POST admin/images/:id/reoptimize` (or `admin/avatars/…`, or `…/reoptimize-failed` for every given-up row in
+scope) resets `optimizeAttempts` on unoptimized rows only (`409 ALREADY_OPTIMIZED` otherwise) and the next
+hourly run picks them up; SQL (`optimizeAttempts = 0`) still works. The reset moves `updatedAt` too (`@updatedAt`): a new
+ETag for images, and for avatars a fresh queued-at for `fileharbor_unoptimized_oldest_age_seconds`. Storage dirs map back to clients by `domain` **or** `id`
 (`client.domain || clientId`); a dir matching neither is left alone.
 
 Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
@@ -105,7 +108,9 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 (`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
 `src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
 `node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
-(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. Every `@Cron` job runs inside
+(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. `src/scripts/regenerate-thumbnails.ts`
+(same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
+which otherwise applies to new uploads only. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
 
@@ -146,6 +151,9 @@ Three parts:
   `(clientId, dHash)` inside `allowedClientIds` (`crossClient=true` → `dHash` alone, `fullAccess` only),
   `GET /admin/images?dHash=` lists one group, the show carries `dHash` + `duplicates`. The all-zero
   hash (flat image) never counts as a duplicate. Never auto-delete: deleting is the bulk-delete.
+- **Optimize status** (plan 07): `GET /admin/images` and `/admin/avatars` take `optimizeStatus=optimized|pending|failed`,
+  mapped on `OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE` (the metric's own predicates); both DTOs
+  expose `optimizeAttempts`. Re-queue with `…/:id/reoptimize` / `…/reoptimize-failed` (see Scheduled Jobs).
 - `src/modules/statistics/` — `GET admin/stats`, guarded the same way but living outside `admin/`:
   scoped totals, a 7-day trend and a per-day chart. `totalStorage` / `newStorage` sum image, video and avatar bytes.
   **Storage report** (plan 04): `StorageSnapshot` is the only storage history (live rows rewrite the past on
@@ -418,6 +426,10 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
   (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. Uploads and the optimize jobs
   don't use it.
+- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` from the stored original and
+  empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
+  without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
+  it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).
 
 ## DB Entities
 
@@ -505,7 +517,7 @@ Swagger UI: `http://localhost:3000/docs` (when `ENABLE_SWAGGER` resolves to true
 - Optimize backlog gauges (label `kind` = `image` | `avatar`, both always present), lazy `collect()` — no query until scraped; a DB error logs `warn` and keeps the previous value. Aggregates only (`count` / `_min`), same predicates as the optimize jobs (`OPTIMIZE_RETRYABLE_WHERE` / `OPTIMIZE_GIVEN_UP_WHERE`, `storage.service.ts`):
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
   - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).
-  - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via manual `optimizeAttempts = 0`, deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
+  - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via a reset (`POST admin/{images,avatars}/:id/reoptimize`, `…/reoptimize-failed`, or SQL `optimizeAttempts = 0`), deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
 - `fileharbor_storage_bytes{client}` — bytes of originals per client (images + videos + avatars, no thumbs or cached variants: same number as the console's `totalStorage`, via `storageUsageByClient`). Label = `Client.id` (immutable; `domain`/`name` can change), personal clients included. Lazy like the gauges above, three `groupBy` per scrape; reset after each successful query, so deleted clients drop out, while a failed one keeps the previous values. Says who grows, not how much disk is left. Alert: `delta(fileharbor_storage_bytes[24h]) > 5 GiB` for 1h (threshold to tune on prod).
 - Alert rules for all of the above live in `monitoring/alerts.yml` (load it via `rule_files`). Change a metric or threshold → change it there too.
 

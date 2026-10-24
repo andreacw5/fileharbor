@@ -1,9 +1,13 @@
 import { SkipThrottle } from '@nestjs/throttler';
 import {
+  Body,
+  ConflictException,
   Controller,
   Get,
   Delete,
+  HttpCode,
   Param,
+  Post,
   Query,
   UseGuards,
   NotFoundException,
@@ -31,6 +35,12 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
+import {
+  OPTIMIZE_STATUSES,
+  parseOptimizeStatusQuery,
+} from '../helpers/admin-query.helper';
+import { AdminReoptimizeFailedDto } from '../dto/admin-reoptimize-failed.dto';
+import { OPTIMIZE_GIVEN_UP_WHERE } from '@/modules/storage/storage.service';
 import { RouteHelperService, clientRef } from '@/utils/route.utils';
 
 @ApiTags('Admin - Avatars')
@@ -56,6 +66,13 @@ export class AvatarsAdminController {
     required: false,
     description: "Creator's externalId or username, contains, case-insensitive",
   })
+  @ApiQuery({
+    name: 'optimizeStatus',
+    required: false,
+    enum: OPTIMIZE_STATUSES,
+    description:
+      'optimized, pending (the job will retry) or failed (the job gave up)',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiResponse({ status: 200, type: AdminAvatarListResponseDto })
@@ -66,6 +83,7 @@ export class AvatarsAdminController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('optimizeStatus') optimizeStatus?: string,
   ) {
     const pageNum = Number(page) || 1;
     const take = Math.min(Number(perPage) || 20, 100);
@@ -86,6 +104,8 @@ export class AvatarsAdminController {
         }),
       };
     }
+
+    Object.assign(where, parseOptimizeStatusQuery(optimizeStatus));
 
     const { avatars, total } = await this.avatarService.findAdminAvatars(
       where,
@@ -113,6 +133,35 @@ export class AvatarsAdminController {
         totalPages: Math.ceil(total / take),
       },
     };
+  }
+
+  @Post('reoptimize-failed')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Re-queue every avatar the optimize job gave up on',
+    description:
+      'Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: { properties: { count: { type: 'number' } } },
+  })
+  @ApiResponse({ status: 403, description: 'clientId outside your scope' })
+  @Audit('fh_avatar.reoptimize_queued', {
+    metadata: (r: { count: number }, req: AuditRequest) => ({
+      clientId: (req.body as { clientId?: string })?.clientId,
+      count: r?.count ?? 0,
+    }),
+  })
+  async reoptimizeFailedAvatars(
+    @Body() dto: AdminReoptimizeFailedDto,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<{ count: number }> {
+    const count = await this.avatarService.resetOptimizeAttempts({
+      ...buildClientWhere(adminUser, dto.clientId), // 403 on a client out of scope
+      ...OPTIMIZE_GIVEN_UP_WHERE,
+    });
+    return { count };
   }
 
   @Get(':id')
@@ -164,5 +213,34 @@ export class AvatarsAdminController {
       { success: true, message: 'Avatar deleted successfully' },
       { excludeExtraneousValues: true },
     );
+  }
+
+  @Post(':id/reoptimize')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Put an unoptimized avatar back in the optimize queue',
+    description:
+      'Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.',
+  })
+  @ApiResponse({ status: 204, description: 'Queued' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Avatar not found' })
+  @ApiResponse({ status: 409, description: 'Avatar already optimized' })
+  @Audit('fh_avatar.reoptimize_queued', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ avatarId: req.params.id }),
+  })
+  async reoptimizeAvatar(
+    @Param('id') id: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<void> {
+    const avatar = await this.avatarService.getAvatarById(id);
+    if (!avatar) throw new NotFoundException('Avatar not found');
+    assertClientAccess(adminUser, avatar.clientId);
+    if (!(await this.avatarService.resetOptimizeAttempts({ id }))) {
+      throw new ConflictException({
+        code: 'ALREADY_OPTIMIZED',
+        message: 'Avatar already optimized',
+      });
+    }
   }
 }

@@ -136,7 +136,7 @@ export class FileharborMetrics {
 
     this.lazyGauge(
       'fileharbor_optimize_given_up',
-      'Unoptimized images/avatars the optimize job stopped retrying (MAX_OPTIMIZE_ATTEMPTS reached) — need a manual optimizeAttempts reset',
+      'Unoptimized images/avatars the optimize job stopped retrying (MAX_OPTIMIZE_ATTEMPTS reached) — reset via POST admin/{images,avatars}/:id/reoptimize',
       (kind) => this.delegate(kind).count({ where: OPTIMIZE_GIVEN_UP_WHERE }),
     );
   }

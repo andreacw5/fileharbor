@@ -649,6 +649,18 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
+   * Put unoptimized rows back in the optimize queue. Already optimized rows are
+   * never matched: re-encoding an optimized original only loses quality.
+   */
+  async resetOptimizeAttempts(where: Prisma.ImageWhereInput): Promise<number> {
+    const { count } = await this.prisma.image.updateMany({
+      where: { ...where, isOptimized: false },
+      data: { optimizeAttempts: 0 },
+    });
+    return count;
+  }
+
+  /**
    * Mark image as optimized
    */
   async markAsOptimized(imageId: string, size: number) {
@@ -1321,6 +1333,39 @@ export class ImageService implements OnModuleDestroy {
     });
 
     return result.count;
+  }
+
+  /**
+   * Rebuild the thumbnail from the stored original and drop cached variants,
+   * keeping id and original. `updatedAt` moves last: it is in the ETag, and moving
+   * it first would let a GET in between pin the old thumb under the new tag.
+   */
+  async regenerateRenditions(image: {
+    id: string;
+    clientId: string;
+    client?: { domain: string | null } | null;
+  }): Promise<{ id: string; updatedAt: Date }> {
+    const domain = image.client?.domain || image.clientId;
+    const originalPath = this.storage.getImageFilePath(
+      domain,
+      image.id,
+      'original',
+    );
+    if (!(await this.storage.fileExists(originalPath))) {
+      throw new NotFoundException('Original file missing');
+    }
+    // 422 on an unreadable original, 500 on a failed thumb write (StorageService)
+    await this.storage.regenerateImageThumb(
+      domain,
+      image.id,
+      this.thumbnailSize,
+      this.thumbnailQuality,
+    );
+    return this.prisma.image.update({
+      where: { id: image.id },
+      data: { updatedAt: new Date() },
+      select: { id: true, updatedAt: true },
+    });
   }
 
   /**

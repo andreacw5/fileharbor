@@ -2498,6 +2498,20 @@
             }
           },
           {
+            "name": "optimizeStatus",
+            "required": false,
+            "in": "query",
+            "description": "optimized, pending (the job will retry) or failed (the job gave up)",
+            "schema": {
+              "enum": [
+                "optimized",
+                "pending",
+                "failed"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "name": "tags",
             "required": false,
             "in": "query",
@@ -2786,6 +2800,51 @@
         ]
       }
     },
+    "/admin/images/reoptimize-failed": {
+      "post": {
+        "description": "Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.",
+        "operationId": "ImagesAdminController_reoptimizeFailedImages",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReoptimizeFailedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "clientId outside your scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Re-queue every image the optimize job gave up on",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
     "/admin/images/{id}/download": {
       "get": {
         "description": "Download the original image file for any image. Admin JWT replaces the API key. Increments the download counter.",
@@ -2876,6 +2935,52 @@
         ]
       }
     },
+    "/admin/images/{id}/regenerate": {
+      "post": {
+        "description": "Rebuilds thumb.webp from the stored original and empties the variant cache; id, original, size and optimize state are untouched. Public GETs are cached `immutable`: a cache holding the old thumb keeps it, reload with `?t=<updatedAt>`.",
+        "operationId": "ImagesAdminController_regenerateImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegenerateImageResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Image or original file not found"
+          },
+          "422": {
+            "description": "Original file is not a readable image"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Regenerate thumbnail and drop cached variants",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
     "/admin/images/{id}/tinify-compress": {
       "post": {
         "description": "Sends the existing image to Tinify API for additional compression, replaces the original, and regenerates the thumbnail. Returns compression statistics along with the updated image. Requires the client to have Tinify enabled (tinifyActive=true) and a valid API key configured. The compression limit is configurable per client (default: 500/month for free tier).",
@@ -2917,6 +3022,45 @@
           }
         ],
         "summary": "Compress image with Tinify (TinyPNG)",
+        "tags": [
+          "Admin - Images"
+        ]
+      }
+    },
+    "/admin/images/{id}/reoptimize": {
+      "post": {
+        "description": "Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.",
+        "operationId": "ImagesAdminController_reoptimizeImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Queued"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Image not found"
+          },
+          "409": {
+            "description": "Image already optimized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put an unoptimized image back in the optimize queue",
         "tags": [
           "Admin - Images"
         ]
@@ -2966,6 +3110,20 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "optimizeStatus",
+            "required": false,
+            "in": "query",
+            "description": "optimized, pending (the job will retry) or failed (the job gave up)",
+            "schema": {
+              "enum": [
+                "optimized",
+                "pending",
+                "failed"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2986,6 +3144,51 @@
           }
         ],
         "summary": "List avatars (scoped to accessible clients)",
+        "tags": [
+          "Admin - Avatars"
+        ]
+      }
+    },
+    "/admin/avatars/reoptimize-failed": {
+      "post": {
+        "description": "Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.",
+        "operationId": "AvatarsAdminController_reoptimizeFailedAvatars",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReoptimizeFailedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "clientId outside your scope"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Re-queue every avatar the optimize job gave up on",
         "tags": [
           "Admin - Avatars"
         ]
@@ -3056,6 +3259,45 @@
           }
         ],
         "summary": "Force delete an avatar (admin)",
+        "tags": [
+          "Admin - Avatars"
+        ]
+      }
+    },
+    "/admin/avatars/{id}/reoptimize": {
+      "post": {
+        "description": "Resets optimizeAttempts; the hourly optimize job picks it up within the hour. Rows with 1-2 failed attempts can be reset too.",
+        "operationId": "AvatarsAdminController_reoptimizeAvatar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Queued"
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Avatar not found"
+          },
+          "409": {
+            "description": "Avatar already optimized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put an unoptimized avatar back in the optimize queue",
         "tags": [
           "Admin - Avatars"
         ]
@@ -6528,6 +6770,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "tinifyOptimized": {
             "type": "boolean",
             "description": "Whether image was compressed with Tinify API"
@@ -6595,6 +6841,7 @@
           "mimeType",
           "isPrivate",
           "isOptimized",
+          "optimizeAttempts",
           "tinifyOptimized",
           "tags",
           "views",
@@ -6847,6 +7094,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "tinifyOptimized": {
             "type": "boolean",
             "description": "Whether image was compressed with Tinify API"
@@ -6926,6 +7177,7 @@
           "mimeType",
           "isPrivate",
           "isOptimized",
+          "optimizeAttempts",
           "tinifyOptimized",
           "tags",
           "views",
@@ -7014,6 +7266,16 @@
           "failed"
         ]
       },
+      "AdminReoptimizeFailedDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Limit to one client; omitted = every client you can see"
+          }
+        }
+      },
       "AdminDeleteResponseDto": {
         "type": "object",
         "properties": {
@@ -7027,6 +7289,23 @@
         "required": [
           "success",
           "message"
+        ]
+      },
+      "RegenerateImageResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "New value, use it as the ?t= cache-buster"
+          }
+        },
+        "required": [
+          "id",
+          "updatedAt"
         ]
       },
       "CompressionStatsDto": {
@@ -7115,6 +7394,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "storagePath": {
             "type": "string"
           },
@@ -7152,6 +7435,7 @@
           "size",
           "mimeType",
           "isOptimized",
+          "optimizeAttempts",
           "storagePath",
           "createdAt",
           "updatedAt",
@@ -7208,6 +7492,10 @@
           "isOptimized": {
             "type": "boolean"
           },
+          "optimizeAttempts": {
+            "type": "number",
+            "description": "Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)"
+          },
           "storagePath": {
             "type": "string"
           },
@@ -7243,6 +7531,7 @@
           "size",
           "mimeType",
           "isOptimized",
+          "optimizeAttempts",
           "storagePath",
           "createdAt",
           "updatedAt"

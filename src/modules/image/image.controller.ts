@@ -299,8 +299,8 @@ export class ImageController {
             query.format || 'webp',
             snapQuality(query.quality),
           ].join('-');
-      // updatedAt moves when the file is rewritten (optimize job, Tinify), never on
-      // a view or download (those counters skip it), so revalidation stays cheap.
+      // updatedAt moves when the file is rewritten (optimize job, Tinify, admin
+      // regenerate), never on a view or download (those counters skip it), so revalidation stays cheap.
       const etag = `"${imageId}-${variant}-${image.updatedAt.getTime()}"`;
       const headers: Record<string, string> = {
         'Cache-Control': restricted

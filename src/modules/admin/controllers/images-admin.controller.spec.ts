@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { ImagesAdminController } from './images-admin.controller';
 import { ImageService } from '@/modules/image/image.service';
@@ -158,6 +162,19 @@ describe('ImagesAdminController.listImages', () => {
     });
   });
 
+  it('filters on optimize status inside the scope', async () => {
+    await controller.listImages(
+      admin,
+      ...(Array(11).fill(undefined) as []),
+      'failed',
+    );
+    expect(where()).toEqual({
+      clientId: { in: ['client-1'] },
+      isOptimized: false,
+      optimizeAttempts: { gte: 3 },
+    });
+  });
+
   it('rejects a malformed dHash before querying', async () => {
     await expect(byHash('00FF')).rejects.toThrow(
       'dHash must be 16 hex characters',
@@ -264,5 +281,120 @@ describe('ImagesAdminController.bulkDeleteImages', () => {
         { id: 'img-4', message: 'Image not found' },
       ],
     });
+  });
+});
+
+describe('ImagesAdminController.regenerateImage', () => {
+  const image = { id: 'img-1', clientId: 'client-1' };
+  const imageService = {
+    getImageById: jest.fn(),
+    regenerateRenditions: jest.fn(),
+  };
+  const controller = new ImagesAdminController(
+    imageService as unknown as ImageService,
+    {} as RouteHelperService,
+  );
+  const admin = (allowedClientIds: string[]) =>
+    ({ allowedClientIds }) as AdminJwtPayload;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    imageService.getImageById.mockResolvedValue(image);
+  });
+
+  it('returns the new updatedAt', async () => {
+    const updatedAt = new Date();
+    imageService.regenerateRenditions.mockResolvedValue({
+      id: 'img-1',
+      updatedAt,
+    });
+    await expect(
+      controller.regenerateImage('img-1', admin(['client-1'])),
+    ).resolves.toEqual({ id: 'img-1', updatedAt });
+    expect(imageService.regenerateRenditions).toHaveBeenCalledWith(image);
+  });
+
+  it('refuses a client out of scope before touching the files', async () => {
+    await expect(
+      controller.regenerateImage('img-1', admin(['client-2'])),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(imageService.regenerateRenditions).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImagesAdminController reoptimize', () => {
+  const imageService = {
+    getImageById: jest.fn(),
+    resetOptimizeAttempts: jest.fn(),
+  };
+  const controller = new ImagesAdminController(
+    imageService as unknown as ImageService,
+    {} as RouteHelperService,
+  );
+  const admin = {
+    allowedClientIds: ['client-1', 'client-2'],
+  } as AdminJwtPayload;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    imageService.getImageById.mockResolvedValue({
+      id: 'img-1',
+      clientId: 'client-1',
+    });
+  });
+
+  it('re-queues one image', async () => {
+    imageService.resetOptimizeAttempts.mockResolvedValue(1);
+    await expect(
+      controller.reoptimizeImage('img-1', admin),
+    ).resolves.toBeUndefined();
+    expect(imageService.resetOptimizeAttempts).toHaveBeenCalledWith({
+      id: 'img-1',
+    });
+  });
+
+  it('409s on an image already optimized', async () => {
+    imageService.resetOptimizeAttempts.mockResolvedValue(0);
+    await expect(
+      controller.reoptimizeImage('img-1', admin),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('refuses a client out of scope without touching the row', async () => {
+    imageService.getImageById.mockResolvedValue({
+      id: 'img-1',
+      clientId: 'client-9',
+    });
+    await expect(
+      controller.reoptimizeImage('img-1', admin),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(imageService.resetOptimizeAttempts).not.toHaveBeenCalled();
+  });
+
+  it('re-queues every failed image in scope', async () => {
+    imageService.resetOptimizeAttempts.mockResolvedValue(7);
+    await expect(controller.reoptimizeFailedImages({}, admin)).resolves.toEqual(
+      { count: 7 },
+    );
+    expect(imageService.resetOptimizeAttempts).toHaveBeenCalledWith({
+      clientId: { in: ['client-1', 'client-2'] },
+      isOptimized: false,
+      optimizeAttempts: { gte: 3 },
+    });
+  });
+
+  it('narrows the bulk to one client in scope', async () => {
+    imageService.resetOptimizeAttempts.mockResolvedValue(1);
+    await controller.reoptimizeFailedImages({ clientId: 'client-2' }, admin);
+    expect(imageService.resetOptimizeAttempts.mock.calls[0][0].clientId).toBe(
+      'client-2',
+    );
+  });
+
+  it('refuses a bulk on a client out of scope', async () => {
+    await expect(
+      controller.reoptimizeFailedImages({ clientId: 'client-9' }, admin),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(imageService.resetOptimizeAttempts).not.toHaveBeenCalled();
   });
 });

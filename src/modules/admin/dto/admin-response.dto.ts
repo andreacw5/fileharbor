@@ -221,6 +221,14 @@ export class AdminBulkDeleteResponseDto {
   failed: AdminBulkDeleteFailureDto[];
 }
 
+export class RegenerateImageResponseDto {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty({ description: 'New value, use it as the ?t= cache-buster' })
+  @Expose()
+  @Type(() => Date)
+  updatedAt: Date;
+}
+
 export class AdminImageCreatorDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() externalId: string;
@@ -245,6 +253,12 @@ export class AdminImageResponseDto {
   @ApiProperty() @Expose() mimeType: string;
   @ApiProperty() @Expose() isPrivate: boolean;
   @ApiProperty() @Expose() isOptimized: boolean;
+  @ApiProperty({
+    description:
+      'Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)',
+  })
+  @Expose()
+  optimizeAttempts: number;
   @ApiProperty({ description: 'Whether image was compressed with Tinify API' })
   @Expose()
   tinifyOptimized: boolean;
@@ -314,6 +328,12 @@ export class AdminAvatarResponseDto {
   @ApiProperty() @Expose() size: number;
   @ApiProperty() @Expose() mimeType: string;
   @ApiProperty() @Expose() isOptimized: boolean;
+  @ApiProperty({
+    description:
+      'Failed optimize runs; the job gives up at 3 (failed = !isOptimized && optimizeAttempts >= 3)',
+  })
+  @Expose()
+  optimizeAttempts: number;
   @ApiProperty() @Expose() storagePath: string;
   @ApiProperty() @Expose() @Type(() => Date) createdAt: Date;
   @ApiProperty() @Expose() @Type(() => Date) updatedAt: Date;

@@ -10,6 +10,7 @@ import {
   OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
+import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import {
   WebhookService,
@@ -444,6 +445,18 @@ export class AvatarService {
       select: { optimizeAttempts: true },
     });
     return !!avatar && avatar.optimizeAttempts >= MAX_OPTIMIZE_ATTEMPTS;
+  }
+
+  /**
+   * Put unoptimized rows back in the optimize queue. Already optimized rows are
+   * never matched: re-encoding an optimized original only loses quality.
+   */
+  async resetOptimizeAttempts(where: Prisma.AvatarWhereInput): Promise<number> {
+    const { count } = await this.prisma.avatar.updateMany({
+      where: { ...where, isOptimized: false },
+      data: { optimizeAttempts: 0 },
+    });
+    return count;
   }
 
   /**
