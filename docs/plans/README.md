@@ -9,6 +9,6 @@
 | 05 | [Metrica storage bytes per client](05-storage-bytes-metric.md) | done |
 | 06 | [Rigenera thumbnail e varianti](06-regenerate-renditions.md) | done |
 | 07 | [Riprova ottimizzazione dalla console](07-retry-optimize-admin.md) | done |
-| 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | open |
+| 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | deferred |
 | 09 | [`srcset` nelle risposte immagine](09-srcset.md) | done |
 | 10 | [Via i webhook, audit sulla superficie client](10-webhooks-to-audit.md) | done |

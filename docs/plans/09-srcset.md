@@ -11,6 +11,12 @@ verified: 4774bd3
 
 Backlog §2b.2.
 
+> **Nota (2026-10-24): fatto, ma oggi senza consumer.** Le premesse sotto (puma-arts, portfolio)
+> non reggono: quei siti non leggono le risposte API, hanno gli URL nei file dati e il proprio
+> `srcset()` in `app/utils/img.ts`. Meridian non lo riceve (`AdminImageResponseDto`) e non potrebbe
+> usarlo così: niente `?t=` per la cache `immutable`, assente sulle private. Resta per il primo
+> consumer che renderizza dalle risposte (item album via API).
+
 ## Problema
 
 Le risposte immagine danno un solo URL (`fullPath`) e ogni sito si costruisce i `?width=` a mano.
