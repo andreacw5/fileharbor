@@ -1145,6 +1145,24 @@ describe('ImageService', () => {
     });
   });
 
+  describe('getImageMetadata srcset', () => {
+    it('offers a srcset built on fullPath for a public image', async () => {
+      const result = await service.getImageMetadata(mockImage);
+
+      expect(result.srcset?.startsWith(result.fullPath)).toBe(true);
+      expect(result.srcset?.endsWith(`${result.fullPath} 1920w`)).toBe(true);
+    });
+
+    it('omits srcset for a private image', async () => {
+      const result = await service.getImageMetadata({
+        ...mockImage,
+        isPrivate: true,
+      });
+
+      expect(result.srcset).toBeUndefined();
+    });
+  });
+
   describe('configuration', () => {
     it('should load quality settings from config', () => {
       // The service is already created in beforeEach with the config mock

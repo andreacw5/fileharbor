@@ -148,4 +148,13 @@ export class ImageResponseDto {
   })
   @Expose()
   fullPath: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Ready-made srcset (absolute URLs, WebP q85): 320/640/960/1280/1920w below the original width, then the original. Omitted for private images',
+    example:
+      'http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423?width=320 320w, http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423 400w',
+  })
+  @Expose()
+  srcset?: string;
 }
