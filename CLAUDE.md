@@ -105,7 +105,9 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 (`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
 `src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
 `node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
-(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. Every `@Cron` job runs inside
+(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. `src/scripts/regenerate-thumbnails.ts`
+(same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
+which otherwise applies to new uploads only. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
 
@@ -414,6 +416,10 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
   (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. Uploads and the optimize jobs
   don't use it.
+- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` from the stored original and
+  empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
+  without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
+  it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).
 
 ## DB Entities
 
