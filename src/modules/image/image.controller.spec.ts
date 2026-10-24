@@ -1,4 +1,6 @@
 import { ConfigService } from '@nestjs/config';
+import { NotFoundException } from '@nestjs/common';
+import type { BastionAuditService } from '@heyatom/bastion-client/nest';
 import { Response, Request } from 'express';
 import { ImageController } from './image.controller';
 import { ImageService } from './image.service';
@@ -27,6 +29,7 @@ describe('ImageController.getImage counters', () => {
     imageService as unknown as ImageService,
     {} as StorageService,
     { get: jest.fn() } as unknown as ConfigService,
+    { write: jest.fn() } as unknown as BastionAuditService,
   );
   const res = {
     set: jest.fn().mockReturnThis(),
@@ -55,5 +58,75 @@ describe('ImageController.getImage counters', () => {
       controller.getImage('img-1', { width: 800 } as GetImageDto, res, req),
     ).rejects.toBeInstanceOf(RenderBusyException);
     expect(imageService.incrementViews).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImageController client-surface audit', () => {
+  const imageService = {
+    deleteImage: jest.fn(),
+    updateImageMetadata: jest.fn(),
+    validateCreatorExternalId: jest.fn((id: string) => id),
+  };
+  const audit = { write: jest.fn().mockResolvedValue(undefined) };
+  const controller = new ImageController(
+    imageService as unknown as ImageService,
+    {} as StorageService,
+    { get: jest.fn() } as unknown as ConfigService,
+    audit as unknown as BastionAuditService,
+  );
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('audits a successful delete', async () => {
+    imageService.deleteImage.mockResolvedValue({ success: true });
+
+    await controller.deleteImage('client-1', 'user-1', 'img-1');
+
+    expect(audit.write).toHaveBeenCalledWith('fh_image.deleted', {
+      metadata: {
+        via: 'api_key',
+        clientId: 'client-1',
+        externalUserId: 'user-1',
+        imageId: 'img-1',
+      },
+    });
+  });
+
+  it('does not audit a failed delete', async () => {
+    imageService.deleteImage.mockRejectedValue(new NotFoundException());
+
+    await expect(
+      controller.deleteImage('client-1', undefined, 'img-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(audit.write).not.toHaveBeenCalled();
+  });
+
+  it('audits a PATCH that sets isPrivate, with the value', async () => {
+    imageService.updateImageMetadata.mockResolvedValue({ id: 'img-1' });
+
+    await controller.updateImage('client-1', 'user-1', 'img-1', {
+      isPrivate: false,
+    });
+
+    expect(audit.write).toHaveBeenCalledWith('fh_image.updated', {
+      metadata: {
+        via: 'api_key',
+        clientId: 'client-1',
+        externalUserId: 'user-1',
+        imageId: 'img-1',
+        fields: ['isPrivate'],
+        isPrivate: false,
+      },
+    });
+  });
+
+  it('does not audit a PATCH without isPrivate', async () => {
+    imageService.updateImageMetadata.mockResolvedValue({ id: 'img-1' });
+
+    await controller.updateImage('client-1', 'user-1', 'img-1', {
+      description: 'x',
+    });
+
+    expect(audit.write).not.toHaveBeenCalled();
   });
 });

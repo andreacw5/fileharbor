@@ -25,7 +25,8 @@ import {
   ClientId,
   CreatorExternalId,
 } from '@/modules/client/decorators/client.decorator';
-import { Public } from '@heyatom/bastion-client/nest';
+import { BastionAuditService, Public } from '@heyatom/bastion-client/nest';
+import { auditClientWrite } from '@/common/client-audit';
 import {
   CreateAlbumDto,
   UpdateAlbumDto,
@@ -50,7 +51,10 @@ import { AlbumResourceType } from '@prisma/client';
 export class AlbumController {
   private readonly logger = new Logger(AlbumController.name);
 
-  constructor(private albumService: AlbumService) {}
+  constructor(
+    private albumService: AlbumService,
+    private audit: BastionAuditService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new album' })
@@ -133,7 +137,15 @@ export class AlbumController {
       throw new BadRequestException(
         'Creator ID is required (X-User-Id header)',
       );
-    return this.albumService.deleteAlbum(albumId, clientId, creatorId);
+    const result = await this.albumService.deleteAlbum(
+      albumId,
+      clientId,
+      creatorId,
+    );
+    auditClientWrite(this.audit, 'fh_album.deleted', clientId, creatorId, {
+      albumId,
+    });
+    return result;
   }
 
   // ---------------------------------------------------------------------------

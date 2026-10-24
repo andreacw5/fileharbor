@@ -32,6 +32,8 @@ import { VideoService } from './video.service';
 import { sendVideo, videoMulterOptions } from './video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
+import { BastionAuditService } from '@heyatom/bastion-client/nest';
+import { auditClientWrite } from '@/common/client-audit';
 import {
   ClientId,
   CreatorExternalId,
@@ -56,6 +58,7 @@ export class VideoController {
     private readonly videoService: VideoService,
     private readonly storageService: StorageService,
     private readonly config: ConfigService,
+    private readonly audit: BastionAuditService,
   ) {}
 
   @Post('upload')
@@ -198,7 +201,7 @@ export class VideoController {
   ): Promise<VideoResponseDto> {
     const validCreatorExternalId =
       this.videoService.validateCreatorExternalId(creatorId);
-    return this.videoService.updateVideoMetadata(
+    const result = await this.videoService.updateVideoMetadata(
       id,
       clientId,
       validCreatorExternalId,
@@ -206,6 +209,13 @@ export class VideoController {
       dto.description,
       dto.isPrivate,
     );
+    if ('isPrivate' in dto)
+      auditClientWrite(this.audit, 'fh_video.updated', clientId, creatorId, {
+        videoId: id,
+        fields: ['isPrivate'],
+        isPrivate: dto.isPrivate,
+      });
+    return result;
   }
 
   @Delete(':id')
@@ -215,7 +225,12 @@ export class VideoController {
   async deleteVideo(
     @Param('id') id: string,
     @ClientId() clientId: string,
+    @CreatorExternalId() creatorId: string | undefined,
   ): Promise<DeleteVideoResponseDto> {
-    return this.videoService.deleteVideo(id, clientId);
+    const result = await this.videoService.deleteVideo(id, clientId);
+    auditClientWrite(this.audit, 'fh_video.deleted', clientId, creatorId, {
+      videoId: id,
+    });
+    return result;
   }
 }
