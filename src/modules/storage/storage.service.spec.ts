@@ -166,6 +166,36 @@ describe('StorageService animated images', () => {
   });
 });
 
+describe('StorageService JPEG decoder warnings', () => {
+  const storage = new StorageService({
+    get: () => undefined,
+  } as unknown as ConfigService);
+
+  it('encodes a JPEG libjpeg only warns about', async () => {
+    // Progressive scans under a baseline SOF0 marker: libjpeg warns
+    // "Invalid SOS parameters for sequential JPEG" but still decodes it.
+    const jpeg = Buffer.from(
+      await sharp({
+        create: { width: 64, height: 64, channels: 3, background: '#c33' },
+      })
+        .jpeg({ progressive: true })
+        .toBuffer(),
+    );
+    jpeg[jpeg.indexOf(Buffer.from([0xff, 0xc2])) + 1] = 0xc0;
+
+    const { original } = await storage.encodeWebpWithThumbnail(
+      jpeg,
+      90,
+      20,
+      80,
+    );
+    await expect(sharp(original).metadata()).resolves.toMatchObject({
+      format: 'webp',
+      width: 64,
+    });
+  });
+});
+
 describe('StorageService.validatePath', () => {
   const storage = new StorageService({
     get: () => '/srv/storage',

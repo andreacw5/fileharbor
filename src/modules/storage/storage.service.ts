@@ -34,8 +34,14 @@ export const IMAGE_UPLOAD_LIMITS = {
 // Animated GIF/WebP keep every frame (WebP output stays animated). The pixel
 // cap then counts all frames together. JPEG/PNG outputs take the first frame
 // only: an animated input would otherwise come out as a strip of frames.
+// failOn 'error': sharp's default ('warning') rejects files browsers render
+// fine, e.g. libjpeg's "Invalid SOS parameters for sequential JPEG".
 function openImage(input: Buffer, animated = true) {
-  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated });
+  return sharp(input, {
+    limitInputPixels: MAX_INPUT_PIXELS,
+    animated,
+    failOn: 'error',
+  });
 }
 import * as os from 'os';
 import { randomUUID } from 'crypto';
