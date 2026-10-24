@@ -6,6 +6,10 @@ import {
   OPTIMIZE_GIVEN_UP_WHERE,
   OPTIMIZE_RETRYABLE_WHERE,
 } from '@/modules/storage/storage.service';
+import {
+  storageUsageByClient,
+  totalBytes,
+} from '@/modules/statistics/storage-usage';
 
 const MEDIA_KINDS = ['image', 'avatar'] as const;
 type MediaKind = (typeof MEDIA_KINDS)[number];
@@ -36,8 +40,8 @@ const QUEUED_AT: Record<MediaKind, AgeField> = {
  * (which owns `app="fileharbor"`, the default metrics, the HTTP histogram and the
  * `/metrics` server on METRICS_PORT).
  *
- * The optimize backlog gauges are computed lazily in `collect()`: no query
- * runs until something scrapes. A failed query logs a warning and leaves the
+ * The optimize backlog and storage gauges are computed lazily in `collect()`:
+ * no query runs until something scrapes. A failed query logs a warning and leaves the
  * gauge at its previous value instead of failing the whole scrape.
  */
 @Injectable()
@@ -64,6 +68,7 @@ export class FileharborMetrics {
     }
 
     this.registerOptimizeGauges();
+    this.registerStorageGauge();
   }
 
   private delegate(kind: MediaKind): OptimizeQueueDelegate {
@@ -122,5 +127,30 @@ export class FileharborMetrics {
       'Unoptimized images/avatars the optimize job stopped retrying (MAX_OPTIMIZE_ATTEMPTS reached) — need a manual optimizeAttempts reset',
       (kind) => this.delegate(kind).count({ where: OPTIMIZE_GIVEN_UP_WHERE }),
     );
+  }
+
+  // Label = Client.id: immutable, unlike domain/name. Same bytes as the
+  // console's totalStorage (originals only), so it says who grows, not how
+  // much disk is left. Reset after the query, so clients deleted since the last
+  // scrape drop out, and a failed query keeps the previous values.
+  private registerStorageGauge(): void {
+    const name = 'fileharbor_storage_bytes';
+    const gauge = new Gauge({
+      name,
+      help: 'Bytes of stored originals (images + videos + avatars) per client; excludes thumbnails and cached variants',
+      labelNames: ['client'],
+      registers: [this.metrics.registry],
+      collect: async () => {
+        try {
+          const usage = await storageUsageByClient(this.prisma);
+          gauge.reset();
+          for (const [client, u] of usage) gauge.set({ client }, totalBytes(u));
+        } catch (err) {
+          this.logger.warn(
+            `${name} collection failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      },
+    });
   }
 }
