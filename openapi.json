@@ -2447,7 +2447,7 @@
             "name": "dHash",
             "required": false,
             "in": "query",
-            "description": "Only images with this dHash (16 hex chars)",
+            "description": "Only images with this dHash (64 hex chars)",
             "schema": {
               "type": "string"
             }
@@ -5183,7 +5183,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "3.6.0",
+    "version": "3.6.1",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
@@ -6785,7 +6785,7 @@
           "dHash": {
             "type": "string",
             "nullable": true,
-            "description": "Perceptual hash (16 hex chars), null until computed"
+            "description": "Perceptual hash (64 hex chars), null until computed"
           },
           "fullPath": {
             "type": "string"
@@ -6943,7 +6943,7 @@
         "properties": {
           "dHash": {
             "type": "string",
-            "example": "3c3e1e0f0f1e3c3c"
+            "example": "3c3e1e0f0f1e3c3c3c3e1e0f0f1e3c3c3c3e1e0f0f1e3c3c3c3e1e0f0f1e3c3c"
           },
           "clientId": {
             "type": "string",
@@ -7109,7 +7109,7 @@
           "dHash": {
             "type": "string",
             "nullable": true,
-            "description": "Perceptual hash (16 hex chars), null until computed"
+            "description": "Perceptual hash (64 hex chars), null until computed"
           },
           "fullPath": {
             "type": "string"

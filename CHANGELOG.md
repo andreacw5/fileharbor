@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.6.1] – 2026-10-25
+
+Deploy **FileHarbor first**, then Meridian (Meridian's `?dHash=` filter now expects 64 hex chars). One
+migration runs at boot and empties every `dHash`: until `backfill-image-dhash.js --apply` has run, the
+duplicates page is empty.
+
+### Fixed
+- **Duplicate detection grouped different images.** `dHash` went from 64 to 256 bits (17x16 grid, 64 hex
+  chars): at 9x8, icons sharing a frame (e.g. game perks) all hashed alike. Column `CHAR(64)`,
+  `?dHash=` and the 400 message follow. `backfill-image-dhash.js` gains `--rehash` (every row, not only
+  `NULL` ones).
+- **Security**: body-parser and multer bumped for HIGH CVEs (CVE-2026-111181, CVE-2026-113872); multer
+  through a pnpm override until `@nestjs/platform-express` bumps it.
+
+---
+
 ## [3.6.0] – 2026-10-24
 
 Deploy **Meridian first**, then FileHarbor (see Removed). Four migrations run at boot. After the
