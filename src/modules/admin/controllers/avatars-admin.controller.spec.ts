@@ -7,6 +7,10 @@ import { AvatarsAdminController } from './avatars-admin.controller';
 import { AvatarService } from '@/modules/avatar/avatar.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
+import { AdminAvatarListQuery } from '../dto/admin-list-query.dto';
+
+const query = (q: Partial<AdminAvatarListQuery>) =>
+  Object.assign(new AdminAvatarListQuery(), q);
 
 describe('AvatarsAdminController.listAvatars', () => {
   const avatarService = {
@@ -22,7 +26,7 @@ describe('AvatarsAdminController.listAvatars', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('matches search on the creator username or external id', async () => {
-    await controller.listAvatars(admin, undefined, undefined, ' Kaish ');
+    await controller.listAvatars(admin, query({ search: ' Kaish ' }));
     expect(whereOf()).toEqual({
       clientId: { in: ['client-1'] },
       creator: {
@@ -35,21 +39,16 @@ describe('AvatarsAdminController.listAvatars', () => {
   });
 
   it('keeps creatorId an exact external id match next to search', async () => {
-    await controller.listAvatars(admin, undefined, 'ext-1', 'k');
+    await controller.listAvatars(
+      admin,
+      query({ creatorId: 'ext-1', search: 'k' }),
+    );
     expect(whereOf().creator).toMatchObject({ externalId: 'ext-1' });
     expect(whereOf().creator.OR).toHaveLength(2);
   });
 
   it('filters on optimize status inside the scope', async () => {
-    await controller.listAvatars(
-      admin,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      'pending',
-    );
+    await controller.listAvatars(admin, query({ optimizeStatus: 'pending' }));
     expect(whereOf()).toEqual({
       clientId: { in: ['client-1'] },
       isOptimized: false,
@@ -58,7 +57,7 @@ describe('AvatarsAdminController.listAvatars', () => {
   });
 
   it('adds no creator filter without creatorId or search', async () => {
-    await controller.listAvatars(admin, undefined, undefined, '  ');
+    await controller.listAvatars(admin, query({ search: '  ' }));
     expect(whereOf()).toEqual({ clientId: { in: ['client-1'] } });
   });
 });

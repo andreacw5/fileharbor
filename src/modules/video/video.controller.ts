@@ -23,7 +23,6 @@ import {
   ApiConsumes,
   ApiBody,
   ApiSecurity,
-  ApiResponse,
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
@@ -42,10 +41,16 @@ import {
   UploadVideoDto,
   VideoResponseDto,
   ListVideosDto,
-  ListVideosResponseDto,
   UpdateVideoDto,
   DeleteVideoResponseDto,
 } from './dto';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  NoTransform,
+  PaginatedResult,
+} from '@heyatom/nest-common';
 
 @ApiTags('Videos')
 @ApiSecurity('api-key')
@@ -76,7 +81,7 @@ export class VideoController {
       },
     },
   })
-  @ApiResponse({ status: 201, type: VideoResponseDto })
+  @ApiCreatedData(VideoResponseDto)
   @UseInterceptors(FileInterceptor('file', videoMulterOptions))
   async uploadVideo(
     @ClientId() clientId: string,
@@ -100,20 +105,18 @@ export class VideoController {
 
   @Get()
   @ApiOperation({ summary: 'List videos (paginated)' })
-  @ApiResponse({ status: 200, type: ListVideosResponseDto })
+  @ApiPaginatedResponse(VideoResponseDto)
   async listVideos(
     @ClientId() clientId: string,
     @Query() query: ListVideosDto,
-  ): Promise<ListVideosResponseDto> {
-    return this.videoService.listVideos({
-      clientId,
-      creatorId: query.creatorId,
-      tag: query.tag,
-      page: query.page,
-      perPage: query.perPage,
-    });
+  ): Promise<PaginatedResult<VideoResponseDto>> {
+    return this.videoService.listVideos(
+      { clientId, creatorId: query.creatorId, tag: query.tag },
+      query,
+    );
   }
 
+  @NoTransform()
   @Get(':id/thumb')
   @ApiOperation({ summary: 'Get video thumbnail (WebP)' })
   @ApiParam({ name: 'id', description: 'Video UUID' })
@@ -146,7 +149,7 @@ export class VideoController {
   @Get(':id')
   @ApiOperation({ summary: 'Get video metadata' })
   @ApiParam({ name: 'id', description: 'Video UUID' })
-  @ApiResponse({ status: 200, type: VideoResponseDto })
+  @ApiOkData(VideoResponseDto)
   async getVideoInfo(
     @Param('id') id: string,
     @ClientId() clientId: string,
@@ -154,6 +157,7 @@ export class VideoController {
     return this.videoService.getVideoMetadata(id, clientId);
   }
 
+  @NoTransform()
   @Get(':id/stream')
   @ApiOperation({
     summary: 'Stream video (X-Accel-Redirect in prod, createReadStream in dev)',
@@ -192,7 +196,7 @@ export class VideoController {
     summary: 'Update video metadata (tags, description, isPrivate)',
   })
   @ApiParam({ name: 'id', description: 'Video UUID' })
-  @ApiResponse({ status: 200, type: VideoResponseDto })
+  @ApiOkData(VideoResponseDto)
   async updateVideo(
     @Param('id') id: string,
     @ClientId() clientId: string,
@@ -222,7 +226,7 @@ export class VideoController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete video' })
   @ApiParam({ name: 'id', description: 'Video UUID' })
-  @ApiResponse({ status: 200, type: DeleteVideoResponseDto })
+  @ApiOkData(DeleteVideoResponseDto)
   async deleteVideo(
     @Param('id') id: string,
     @ClientId() clientId: string,

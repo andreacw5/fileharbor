@@ -51,11 +51,17 @@ import {
   ShareLinkResponseDto,
   ListImagesDto,
   DeleteResponseDto,
-  ListImagesResponseDto,
 } from './dto';
 import { Readable } from 'node:stream';
 import { contentDisposition } from '@/utils/content-disposition';
 import { snapQuality, snapSize } from './image-variants';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  NoTransform,
+  PaginatedResult,
+} from '@heyatom/nest-common';
 
 @ApiTags('Images')
 @ApiSecurity('api-key')
@@ -96,11 +102,7 @@ export class ImageController {
       },
     },
   })
-  @ApiResponse({
-    status: 201,
-    description: 'Uploaded successfully',
-    type: ImageResponseDto,
-  })
+  @ApiCreatedData(ImageResponseDto, 'Uploaded successfully')
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
   @UseInterceptors(
@@ -157,32 +159,23 @@ export class ImageController {
     summary: 'List images',
     description: 'Paginated list of images with optional creator filter.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Retrieved successfully',
-    type: ListImagesResponseDto,
-  })
+  @ApiPaginatedResponse(ImageResponseDto)
   async listImages(
     @ClientId() clientId: string,
     @Query() query: ListImagesDto,
-  ): Promise<ListImagesResponseDto> {
-    // Always use the authenticated client's ID
-    const filters = {
-      clientId: clientId,
-      creatorId: query.creatorId,
-      albumId: query.albumId,
-      page: query.page,
-      perPage: query.perPage,
-    };
-
+  ): Promise<PaginatedResult<ImageResponseDto>> {
     this.logger.debug(
-      `[ListImages] Client: ${clientId}, Creator: ${query.creatorId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page || 1}, PerPage: ${query.perPage || 20}`,
+      `[ListImages] Client: ${clientId}, Creator: ${query.creatorId || 'all'}, Album: ${query.albumId || 'all'}, Page: ${query.page}, Limit: ${query.limit}`,
     );
 
-    const result = await this.imageService.listImages(filters);
+    // Always use the authenticated client's ID
+    const result = await this.imageService.listImages(
+      { clientId, creatorId: query.creatorId, albumId: query.albumId },
+      query,
+    );
 
     this.logger.log(
-      `[ListImages] Success - Client: ${clientId}, Total: ${result.pagination.total}, Returned: ${result.data.length}`,
+      `[ListImages] Success - Client: ${clientId}, Total: ${result.meta.total}, Returned: ${result.data.length}`,
     );
 
     return result;
@@ -191,6 +184,8 @@ export class ImageController {
   @Public()
   // Media delivery: one page can embed dozens of these.
   @SkipThrottle()
+  // Serves files; the ?info JSON is wrapped below so clients still read .data
+  @NoTransform()
   @Get(':imageId')
   @ApiOperation({
     summary: 'Get image',
@@ -204,8 +199,13 @@ export class ImageController {
       'image/webp': {},
       'image/jpeg': {},
       'image/png': {},
+      // ?info=true: the one JSON branch, enveloped by hand (@NoTransform)
       'application/json': {
-        schema: { $ref: '#/components/schemas/ImageResponseDto' },
+        schema: {
+          properties: {
+            data: { $ref: '#/components/schemas/ImageResponseDto' },
+          },
+        },
       },
     },
   })
@@ -276,7 +276,7 @@ export class ImageController {
       if (query.info) {
         const metadata = await this.imageService.getImageMetadata(image);
         this.logger.log(`[GetImage] metadata | ${imageId} | ${image.clientId}`);
-        return metadata;
+        return { data: metadata };
       }
 
       // Counters: views are buffered in memory, downloads are one UPDATE.
@@ -420,11 +420,7 @@ export class ImageController {
       'Update tags, description or isPrivate. Only the owner (X-User-Id) can update.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Updated successfully',
-    type: ImageResponseDto,
-  })
+  @ApiOkData(ImageResponseDto, 'Updated successfully')
   @ApiResponse({
     status: 400,
     description: 'Invalid data or missing Creator ID',
@@ -480,11 +476,7 @@ export class ImageController {
       'Generate shareable link with optional expiration. Only owner can create.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
-  @ApiResponse({
-    status: 201,
-    description: 'Share link created',
-    type: ShareLinkResponseDto,
-  })
+  @ApiCreatedData(ShareLinkResponseDto, 'Share link created')
   @ApiResponse({ status: 400, description: 'Missing Creator ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -529,11 +521,7 @@ export class ImageController {
     description: 'Delete/revoke share link. Only owner can revoke.',
   })
   @ApiParam({ name: 'shareId', description: 'Share link UUID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Revoked successfully',
-    type: DeleteResponseDto,
-  })
+  @ApiOkData(DeleteResponseDto, 'Revoked successfully')
   @ApiResponse({ status: 400, description: 'Missing Creator ID' })
   @ApiResponse({ status: 403, description: 'Not the owner' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -573,11 +561,7 @@ export class ImageController {
     description: 'Permanently delete image and files.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Deleted successfully',
-    type: DeleteResponseDto,
-  })
+  @ApiOkData(DeleteResponseDto, 'Deleted successfully')
   @ApiResponse({ status: 404, description: 'Not found' })
   async deleteImage(
     @ClientId() clientId: string,

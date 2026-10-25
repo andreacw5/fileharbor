@@ -20,7 +20,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
   ApiBearerAuth,
   ApiQuery,
   ApiConsumes,
@@ -47,11 +46,18 @@ import { VideoService } from '@/modules/video/video.service';
 import { sendVideo, videoMulterOptions } from '@/modules/video/video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { RouteHelperService } from '@/utils/route.utils';
+import { AdminVideoListQuery } from '../dto/admin-list-query.dto';
 import {
   AdminDeleteResponseDto,
   AdminVideoResponseDto,
-  AdminVideoListResponseDto,
 } from '../dto/admin-response.dto';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  NoTransform,
+  paginate,
+} from '@heyatom/nest-common';
 
 @ApiTags('Admin - Videos')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -86,7 +92,7 @@ export class VideosAdminController {
       },
     },
   })
-  @ApiResponse({ status: 201, type: AdminVideoResponseDto })
+  @ApiCreatedData(AdminVideoResponseDto)
   @UseInterceptors(FileInterceptor('file', videoMulterOptions))
   @Audit('fh_video.uploaded', {
     metadata: (r: { id?: string }, req: AuditRequest) => ({
@@ -134,39 +140,12 @@ export class VideosAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List videos (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'creatorId', required: false })
-  @ApiQuery({ name: 'albumId', required: false })
-  @ApiQuery({ name: 'name', required: false })
-  @ApiQuery({ name: 'tags', required: false, isArray: true })
-  @ApiQuery({
-    name: 'isPrivate',
-    required: false,
-    enum: ['true', 'false'],
-    description: 'Only private (true) or only public (false) files',
-  })
-  @ApiQuery({
-    name: 'sortBy',
-    required: false,
-    enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
-  })
-  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminVideoListResponseDto })
+  @ApiPaginatedResponse(AdminVideoResponseDto)
   async listVideos(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('creatorId') creatorId?: string,
-    @Query('albumId') albumId?: string,
-    @Query('name') name?: string,
-    @Query('tags') tags?: string | string[],
-    @Query('isPrivate') isPrivate?: string,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
+    @Query() query: AdminVideoListQuery,
   ) {
+    const { clientId, creatorId, albumId, name, tags, isPrivate } = query;
     const tagsArray = tags
       ? Array.isArray(tags)
         ? tags
@@ -175,22 +154,6 @@ export class VideosAdminController {
             .map((t) => t.trim())
             .filter(Boolean)
       : undefined;
-
-    const pageNum = Number(page) || 1;
-    const take = Math.min(Number(perPage) || 20, 100);
-    const skip = (pageNum - 1) * take;
-
-    const allowedSortFields = [
-      'createdAt',
-      'size',
-      'originalName',
-      'views',
-      'downloads',
-    ];
-    const validSortBy =
-      sortBy && allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    const validSortOrder =
-      sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
     const where: any = buildClientWhere(adminUser, clientId);
     if (creatorId) where.creator = { id: creatorId };
@@ -207,14 +170,13 @@ export class VideosAdminController {
 
     const result = await this.videoService.findAdminVideos(
       where,
-      { skip, take, page: pageNum },
-      { field: validSortBy, order: validSortOrder },
+      query,
+      { field: query.sortBy, order: query.sortOrder },
       adminUser.actorId,
     );
 
-    return {
-      ...result,
-      data: result.data.map((v) =>
+    return paginate(
+      result.data.map((v) =>
         plainToInstance(
           AdminVideoResponseDto,
           {
@@ -230,12 +192,14 @@ export class VideosAdminController {
           { excludeExtraneousValues: true },
         ),
       ),
-    };
+      result.meta.total,
+      query,
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get video details (admin)' })
-  @ApiResponse({ status: 200, type: AdminVideoResponseDto })
+  @ApiOkData(AdminVideoResponseDto)
   async getVideo(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -277,7 +241,7 @@ export class VideosAdminController {
       },
     },
   })
-  @ApiResponse({ status: 200, type: AdminVideoResponseDto })
+  @ApiOkData(AdminVideoResponseDto)
   @Audit('fh_video.updated', {
     metadata: (_r: unknown, req: AuditRequest) => ({
       videoId: req.params.id,
@@ -331,6 +295,7 @@ export class VideosAdminController {
     );
   }
 
+  @NoTransform()
   @Get(':id/thumb')
   @ApiOperation({ summary: 'Get video thumbnail (admin, JWT auth)' })
   async getThumb(
@@ -359,6 +324,7 @@ export class VideosAdminController {
     res.end(buffer);
   }
 
+  @NoTransform()
   @Get(':id/stream')
   @ApiOperation({ summary: 'Stream video (admin, JWT auth, Range support)' })
   @ApiQuery({ name: 'download', required: false, type: Boolean })
@@ -388,7 +354,7 @@ export class VideosAdminController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Force delete a video (admin)' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @Audit('fh_video.deleted', {
     metadata: (_r: unknown, req: AuditRequest) => ({ videoId: req.params.id }),
   })

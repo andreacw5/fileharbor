@@ -15,20 +15,17 @@ import {
   normalizeTagNames,
 } from '@/modules/tag/tag.utils';
 import { RouteHelperService } from '@/utils/route.utils';
+import { paginate, PageParams } from '@heyatom/nest-common';
 
 export type AdminVideoBookmarksListParams = {
   clientId?: string;
   search?: string;
-  page?: number;
-  perPage?: number;
 };
 
 export type AdminBookmarksListParams = {
   clientId?: string;
   search?: string;
   tags?: string[];
-  page?: number;
-  perPage?: number;
 };
 
 @Injectable()
@@ -41,10 +38,8 @@ export class BookmarksService {
   async listBookmarks(
     adminUser: AdminJwtPayload,
     params: AdminBookmarksListParams,
+    page: PageParams,
   ) {
-    const page = Math.max(Number(params.page) || 1, 1);
-    const perPage = Math.min(Math.max(Number(params.perPage) || 20, 1), 100);
-    const skip = (page - 1) * perPage;
     const now = new Date();
 
     const where: any = {
@@ -77,21 +72,17 @@ export class BookmarksService {
         where,
         include: this.buildBookmarkInclude(now),
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: perPage,
+        skip: page.skip,
+        take: page.limit,
       }),
       prisma.adminImageBookmark.count({ where }),
     ]);
 
-    return {
-      data: rows.map((bookmark) => this.mapBookmark(bookmark)),
-      pagination: {
-        page,
-        perPage,
-        total,
-        totalPages: Math.ceil(total / perPage),
-      },
-    };
+    return paginate(
+      rows.map((bookmark) => this.mapBookmark(bookmark)),
+      total,
+      page,
+    );
   }
 
   async bookmarkImage(adminUser: AdminJwtPayload, imageId: string) {
@@ -328,11 +319,8 @@ export class BookmarksService {
   async listVideoBookmarks(
     adminUser: AdminJwtPayload,
     params: AdminVideoBookmarksListParams,
+    page: PageParams,
   ) {
-    const page = Math.max(Number(params.page) || 1, 1);
-    const perPage = Math.min(Math.max(Number(params.perPage) || 20, 1), 100);
-    const skip = (page - 1) * perPage;
-
     const where: any = {
       actorId: adminUser.actorId,
       video: buildClientWhere(adminUser, params.clientId),
@@ -352,21 +340,17 @@ export class BookmarksService {
         where,
         include: this.buildVideoBookmarkInclude(),
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: perPage,
+        skip: page.skip,
+        take: page.limit,
       }),
       prisma.adminVideoBookmark.count({ where }),
     ]);
 
-    return {
-      data: rows.map((b: any) => this.mapVideoBookmark(b)),
-      pagination: {
-        page,
-        perPage,
-        total,
-        totalPages: Math.ceil(total / perPage),
-      },
-    };
+    return paginate(
+      rows.map((b: any) => this.mapVideoBookmark(b)),
+      total,
+      page,
+    );
   }
 
   async bookmarkVideo(adminUser: AdminJwtPayload, videoId: string) {

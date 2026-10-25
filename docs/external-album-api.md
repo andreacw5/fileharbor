@@ -93,11 +93,15 @@ usa `coverImageId` quando è impostato; le altre route lo ignorano e prendono se
 
 Gli URL seguono `API_PREFIX` (vedi `RouteHelperService`): non costruirli a mano.
 
-### Paginazione
+### Envelope e paginazione
+
+Ogni risposta JSON è `{ data: T }`; le liste paginate sono:
 
 ```ts
-{ data: T[]; pagination: { page: number; perPage: number; total: number; totalPages: number } }
+{ data: T[]; meta: { total: number; page: number; limit: number; totalPages: number } }
 ```
+
+Le forme `Album`, `AlbumItem` ecc. di questa pagina sono il contenuto di `data`.
 
 ---
 
@@ -120,9 +124,9 @@ Gli URL seguono `API_PREFIX` (vedi `RouteHelperService`): non costruirli a mano.
 ### `GET /albums` — lista
 
 Query: `creatorId` (id interno), `public` (`true`/`false`), `search` (contiene nel nome,
-case-insensitive), `page` (default 1), `perPage` (default 20, max 100). Ordine: `createdAt` desc.
+case-insensitive), `page` (default 1), `limit` (default 20, max 100). Ordine: `createdAt` desc.
 
-`200` → `{ data: Album[], pagination }`, con contatori e `coverUrl`.
+`200` → `{ data: Album[], meta }`, con contatori e `coverUrl`.
 
 ### `GET /albums/:albumId` — dettaglio
 
@@ -180,8 +184,8 @@ cancellati.
 
 ### `GET /albums/:albumId/items` — lista item
 
-Query: `resourceType` (`IMAGE` | `VIDEO`), `page` (default 1), `perPage` (default 20, max 100).
-Ordine: `order` asc. `200` → `{ data: AlbumItem[], pagination }`.
+Query: `resourceType` (`IMAGE` | `VIDEO`), `page` (default 1), `limit` (default 20, max 100).
+Ordine: `order` asc. `200` → `{ data: AlbumItem[], meta }`.
 
 ---
 

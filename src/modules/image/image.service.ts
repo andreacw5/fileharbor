@@ -16,7 +16,7 @@ import {
   StorageService,
 } from '@/modules/storage/storage.service';
 import { Prisma } from '@prisma/client';
-import { paginate, PaginatedResult } from '@heyatom/nest-common';
+import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
@@ -26,8 +26,6 @@ import {
   ImageResponseDto,
   ShareLinkResponseDto,
   DeleteResponseDto,
-  ListImagesResponseDto,
-  PaginationMetaDto,
   TinifyCompressionResponseDto,
 } from './dto';
 import {
@@ -398,17 +396,14 @@ export class ImageService implements OnModuleDestroy {
   /**
    * List images with filtering
    */
-  async listImages(filters: {
-    clientId?: string;
-    creatorId?: string;
-    albumId?: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<ListImagesResponseDto> {
-    const page = filters.page || 1;
-    const perPage = Math.min(filters.perPage || 20, 100);
-    const skip = (page - 1) * perPage;
-
+  async listImages(
+    filters: {
+      clientId?: string;
+      creatorId?: string;
+      albumId?: string;
+    },
+    params: PageParams,
+  ): Promise<PaginatedResult<ImageResponseDto>> {
     const where: any = {};
     if (filters.clientId) {
       where.clientId = filters.clientId;
@@ -431,8 +426,8 @@ export class ImageService implements OnModuleDestroy {
         orderBy: {
           createdAt: 'desc',
         },
-        skip,
-        take: perPage,
+        skip: params.skip,
+        take: params.limit,
         include: {
           imageTags: {
             include: {
@@ -462,22 +457,10 @@ export class ImageService implements OnModuleDestroy {
       this.prisma.image.count({ where }),
     ]);
 
-    const data = images.map((img) => this.formatImageResponse(img));
-    const pagination = plainToInstance(
-      PaginationMetaDto,
-      {
-        page,
-        perPage,
-        total,
-        totalPages: Math.ceil(total / perPage),
-      },
-      { excludeExtraneousValues: true },
-    );
-
-    return plainToInstance(
-      ListImagesResponseDto,
-      { data, pagination },
-      { excludeExtraneousValues: true },
+    return paginate(
+      images.map((img) => this.formatImageResponse(img)),
+      total,
+      params,
     );
   }
 
@@ -1065,11 +1048,10 @@ export class ImageService implements OnModuleDestroy {
   /**
    * Admin paginated image listing — accepts a pre-built Prisma where clause
    * and adds admin-specific includes (creator, client join).
-   * The caller is responsible for computing skip and take.
    */
   async findAdminImages(
     where: any,
-    options: { skip: number; take: number; page: number },
+    params: PageParams,
     sort?: { field: string; order: 'asc' | 'desc' },
     actorId?: string,
   ) {
@@ -1081,8 +1063,8 @@ export class ImageService implements OnModuleDestroy {
       this.prisma.image.findMany({
         where,
         orderBy,
-        skip: options.skip,
-        take: options.take,
+        skip: params.skip,
+        take: params.limit,
         include: {
           imageTags: { include: { tag: { select: { name: true } } } },
           creator: { select: { externalId: true, username: true } },
@@ -1108,15 +1090,7 @@ export class ImageService implements OnModuleDestroy {
       isBookmarked: bookmarkedIds.has(image.id),
     }));
 
-    return {
-      data,
-      pagination: {
-        page: options.page,
-        perPage: options.take,
-        total,
-        totalPages: Math.ceil(total / options.take),
-      },
-    };
+    return paginate(data, total, params);
   }
 
   /**

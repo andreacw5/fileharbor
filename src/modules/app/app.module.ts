@@ -4,7 +4,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
-import { AllExceptionsFilter, loggerParams } from '@heyatom/nest-common';
+import {
+  AllExceptionsFilter,
+  loggerParams,
+  TransformInterceptor,
+} from '@heyatom/nest-common';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { StorageModule } from '@/modules/storage/storage.module';
 import { ClientModule } from '@/modules/client/client.module';
@@ -117,6 +121,10 @@ import { sanitizeLoggedUrl } from '@/common/share-tokens';
   providers: [
     // Rate limiting applies to every route; opt out with `@SkipThrottle()`.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // api.md §2: `{ data }` envelope; paginate() results pass through as
+    // `{ data, meta }`, @NoTransform() handlers (files, streams, health) untouched.
+    { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+    // After TransformInterceptor, so inner: sees the handler's raw result.
     // Writes the Bastion audit event declared by `@Audit()` on an admin handler.
     // Registered globally rather than per controller so a new admin route cannot
     // silently skip auditing: a handler with no `@Audit()` is a no-op here.

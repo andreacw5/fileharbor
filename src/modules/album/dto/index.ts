@@ -1,7 +1,6 @@
 export * from './create-album.dto';
 export * from './update-album.dto';
 export * from './list-albums.dto';
-export * from './list-albums-response.dto';
 export * from './album-response.dto';
 export * from './album-item.dto';
 export * from './add-album-items.dto';

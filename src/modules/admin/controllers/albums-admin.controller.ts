@@ -14,15 +14,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiQuery,
-  ApiBody,
-} from '@nestjs/swagger';
-import { AlbumResourceType } from '@prisma/client';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
@@ -34,7 +26,7 @@ import { AdminCreateAlbumDto } from '../dto/admin-create-album.dto';
 import {
   AdminDeleteResponseDto,
   AdminAlbumResponseDto,
-  AdminAlbumListResponseDto,
+  AdminAlbumListItemDto,
   AdminRemoveImagesFromAlbumResponseDto,
 } from '../dto/admin-response.dto';
 import {
@@ -42,7 +34,7 @@ import {
   AddAlbumItemsResponseDto,
   RemoveAlbumItemsDto,
   ListAlbumItemsDto,
-  AlbumItemListResponseDto,
+  AlbumItemDto,
 } from '@/modules/album/dto';
 import { AlbumService } from '@/modules/album/album.service';
 import { ClientService } from '@/modules/client/client.service';
@@ -51,6 +43,14 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  paginate,
+  PaginatedResult,
+} from '@heyatom/nest-common';
+import { AdminAlbumListQuery } from '../dto/admin-list-query.dto';
 
 @ApiTags('Admin - Albums')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -72,7 +72,7 @@ export class AlbumsAdminController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create an album on behalf of a client' })
-  @ApiResponse({ status: 201, type: AdminAlbumResponseDto })
+  @ApiCreatedData(AdminAlbumResponseDto)
   @Audit('fh_album.created', {
     metadata: (r: AdminAlbumResponseDto) => ({
       albumId: r.id,
@@ -123,26 +123,12 @@ export class AlbumsAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List albums (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'creatorId', required: false })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'public', required: false, type: Boolean })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminAlbumListResponseDto })
+  @ApiPaginatedResponse(AdminAlbumListItemDto)
   async listAlbums(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('creatorId') creatorId?: string,
-    @Query('search') search?: string,
-    @Query('public') publicFilter?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
+    @Query() query: AdminAlbumListQuery,
   ) {
-    const pageNum = Number(page) || 1;
-    const take = Math.min(Number(perPage) || 20, 100);
-    const skip = (pageNum - 1) * take;
-
+    const { clientId, creatorId, search, public: publicFilter } = query;
     const where: any = buildClientWhere(adminUser, clientId);
     if (creatorId) where.creator = { externalId: creatorId };
     if (search) where.name = { contains: search, mode: 'insensitive' };
@@ -156,12 +142,12 @@ export class AlbumsAdminController {
     }
 
     const { albums, total } = await this.albumService.findAdminAlbums(where, {
-      skip,
-      take,
+      skip: query.skip,
+      take: query.limit,
     });
 
-    return {
-      data: albums.map((a) => ({
+    return paginate(
+      albums.map((a) => ({
         ...a,
         totalItems: a._count.albumItems,
         activeTokens: a._count.albumTokens,
@@ -169,18 +155,14 @@ export class AlbumsAdminController {
           ? this.buildImageFullPath(a.coverImageId)
           : undefined,
       })),
-      pagination: {
-        page: pageNum,
-        perPage: take,
-        total,
-        totalPages: Math.ceil(total / take),
-      },
-    };
+      total,
+      query,
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get album details' })
-  @ApiResponse({ status: 200, type: AdminAlbumResponseDto })
+  @ApiOkData(AdminAlbumResponseDto)
   async getAlbum(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -205,7 +187,7 @@ export class AlbumsAdminController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update album name, description or visibility' })
-  @ApiResponse({ status: 200, type: AdminAlbumResponseDto })
+  @ApiOkData(AdminAlbumResponseDto)
   @Audit('fh_album.updated', {
     metadata: (_r: unknown, req: AuditRequest) => ({
       albumId: req.params.id,
@@ -255,7 +237,7 @@ export class AlbumsAdminController {
   @ApiOperation({
     summary: 'Add images and/or videos to album (admin, bypasses ownership)',
   })
-  @ApiResponse({ status: 200, type: AddAlbumItemsResponseDto })
+  @ApiOkData(AddAlbumItemsResponseDto)
   @Audit('fh_album.items_added', {
     metadata: (r: AddAlbumItemsResponseDto, req: AuditRequest) => ({
       albumId: req.params.id,
@@ -285,7 +267,7 @@ export class AlbumsAdminController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove images and/or videos from album (admin)' })
   @ApiBody({ type: RemoveAlbumItemsDto })
-  @ApiResponse({ status: 200, type: AdminRemoveImagesFromAlbumResponseDto })
+  @ApiOkData(AdminRemoveImagesFromAlbumResponseDto)
   @Audit('fh_album.items_removed', {
     metadata: (r: { removed?: number }, req: AuditRequest) => ({
       albumId: req.params.id,
@@ -315,24 +297,17 @@ export class AlbumsAdminController {
 
   @Get(':id/items')
   @ApiOperation({ summary: 'List album items ordered (admin)' })
-  @ApiQuery({ name: 'resourceType', required: false, enum: AlbumResourceType })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AlbumItemListResponseDto })
+  @ApiPaginatedResponse(AlbumItemDto)
   async listItems(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query() query: ListAlbumItemsDto,
-  ): Promise<AlbumItemListResponseDto> {
+  ): Promise<PaginatedResult<AlbumItemDto>> {
     const album = await this.albumService.getAlbumByIdUnscoped(id);
     if (!album) throw new NotFoundException('Album not found');
     assertClientAccess(adminUser, album.clientId);
 
-    return this.albumService.listAlbumItems(album.id, album.clientId, {
-      resourceType: query.resourceType,
-      page: query.page ?? 1,
-      perPage: query.perPage ?? 20,
-    });
+    return this.albumService.listAlbumItems(album.id, album.clientId, query);
   }
 
   // ---------------------------------------------------------------------------
@@ -341,7 +316,7 @@ export class AlbumsAdminController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Force delete an album (admin)' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @Audit('fh_album.deleted', {
     metadata: (_r: unknown, req: AuditRequest) => ({ albumId: req.params.id }),
   })

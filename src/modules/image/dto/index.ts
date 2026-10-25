@@ -6,7 +6,5 @@ export * from './update-image-metadata.dto';
 export * from './create-share-link.dto';
 export * from './share-link-response.dto';
 export * from './list-images.dto';
-export * from './list-images-response.dto';
-export * from './pagination-meta.dto';
 export * from './delete-response.dto';
 export * from './tinify-compression-response.dto';

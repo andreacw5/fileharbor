@@ -9,6 +9,7 @@ import { ImageService } from '@/modules/image/image.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { AdminDuplicateListQuery } from '../dto/admin-duplicates.dto';
+import { AdminImageListQuery } from '../dto/admin-list-query.dto';
 
 describe('ImagesAdminController.getImageFile', () => {
   const image = {
@@ -103,16 +104,10 @@ describe('ImagesAdminController.listImages', () => {
     {} as RouteHelperService,
   );
   const admin = { allowedClientIds: ['client-1'] } as AdminJwtPayload;
+  const query = (q: Partial<AdminImageListQuery>) =>
+    Object.assign(new AdminImageListQuery(), q);
   const list = (isPrivate?: string) =>
-    controller.listImages(
-      admin,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      isPrivate,
-    );
+    controller.listImages(admin, query({ isPrivate }));
   const where = () => imageService.findAdminImages.mock.calls[0][0];
 
   beforeEach(() => jest.clearAllMocks());
@@ -143,16 +138,7 @@ describe('ImagesAdminController.listImages', () => {
   });
 
   const byHash = (dHash: string) =>
-    controller.listImages(
-      admin,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      dHash,
-    );
+    controller.listImages(admin, query({ dHash }));
 
   it('filters on dHash inside the scope', async () => {
     await byHash('00ff'.repeat(16));
@@ -163,11 +149,7 @@ describe('ImagesAdminController.listImages', () => {
   });
 
   it('filters on optimize status inside the scope', async () => {
-    await controller.listImages(
-      admin,
-      ...(Array(11).fill(undefined) as []),
-      'failed',
-    );
+    await controller.listImages(admin, query({ optimizeStatus: 'failed' }));
     expect(where()).toEqual({
       clientId: { in: ['client-1'] },
       isOptimized: false,
