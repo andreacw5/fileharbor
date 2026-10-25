@@ -98,7 +98,7 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 (`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
 `src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
 `node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
-(same shape, resumable on `dHash IS NULL`) fills `dHash` for images uploaded before plan 03. `src/scripts/regenerate-thumbnails.ts`
+(same shape, resumable on `dHash IS NULL`, `--rehash` redoes every row) fills `dHash` for images uploaded before plan 03 or emptied by the 256-bit migration. `src/scripts/regenerate-thumbnails.ts`
 (same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
 which otherwise applies to new uploads only. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
@@ -135,7 +135,7 @@ Three parts:
   Bastion directly.
 - `src/modules/admin/` — the admin API itself (`admin/clients`, `admin/images`, `admin/videos`,
   `admin/albums`, `admin/creators`, `admin/avatars`, `admin/bookmarks`, `admin/image-share-links`)
-- **Duplicates** (plan 03): `Image.dHash` is a 64-bit dHash of `original.webp` as 16 hex chars
+- **Duplicates** (plan 03): `Image.dHash` is a 256-bit dHash (17x16 grid) of `original.webp` as 64 hex chars
   (`StorageService.computeDHash`, set on upload, best-effort: a failure leaves it `null`). Text, not
   `BigInt`, because raw image rows are spread into responses. `GET /admin/images/duplicates` groups by
   `(clientId, dHash)` inside `allowedClientIds` (`crossClient=true` → `dHash` alone, `fullAccess` only),

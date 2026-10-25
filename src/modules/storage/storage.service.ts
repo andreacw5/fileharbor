@@ -16,11 +16,14 @@ import sharp from 'sharp';
 // with room to spare, at ~400 MB of RGBA per pipeline.
 const MAX_INPUT_PIXELS = 100_000_000;
 
-/** A dHash as stored and as the API speaks it: 16 hex chars (`computeDHash`). */
-export const DHASH_PATTERN = /^[0-9a-f]{16}$/;
+/** dHash grid side: 16x16 bits. 8x8 saw only the shared frame of icon sets. */
+const DHASH_SIZE = 16;
+
+/** A dHash as stored and as the API speaks it: 64 hex chars (`computeDHash`). */
+export const DHASH_PATTERN = /^[0-9a-f]{64}$/;
 
 /** What a flat image hashes to: every such image would "match" every other. */
-export const FLAT_DHASH = '0000000000000000';
+export const FLAT_DHASH = '0'.repeat(64);
 
 /** Formats accepted on upload, as reported by sharp from the bytes themselves. */
 export const SUPPORTED_IMAGE_FORMATS = ['jpeg', 'png', 'webp', 'gif'];
@@ -703,8 +706,9 @@ export class StorageService {
   }
 
   /**
-   * 64-bit difference hash as 16 hex chars: 9x8 grayscale, one bit per
-   * "left pixel brighter than its right neighbour". Survives re-encoding,
+   * 256-bit difference hash as 64 hex chars: 17x16 grayscale, one bit per
+   * "left pixel brighter than its right neighbour". Not 64 bits (9x8): icons
+   * sharing a frame (game perks, badges) all hashed alike there. Survives re-encoding,
    * optimize, Tinify and resizing, so it matches on content, not bytes.
    * Animated input: first frame. Transparency is flattened onto white, so a
    * flat image of any colour hashes to all zeros.
@@ -713,17 +717,17 @@ export class StorageService {
     const px = await openImage(buffer, false)
       .flatten({ background: '#ffffff' })
       .grayscale()
-      .resize(9, 8, { fit: 'fill' })
+      .resize(DHASH_SIZE + 1, DHASH_SIZE, { fit: 'fill' })
       .raw()
       .toBuffer();
     let hash = 0n;
-    for (let y = 0; y < 8; y++) {
-      for (let x = 0; x < 8; x++) {
-        const i = y * 9 + x;
+    for (let y = 0; y < DHASH_SIZE; y++) {
+      for (let x = 0; x < DHASH_SIZE; x++) {
+        const i = y * (DHASH_SIZE + 1) + x;
         hash = (hash << 1n) | (px[i] > px[i + 1] ? 1n : 0n);
       }
     }
-    return hash.toString(16).padStart(16, '0');
+    return hash.toString(16).padStart(DHASH_SIZE ** 2 / 4, '0');
   }
 
   /**

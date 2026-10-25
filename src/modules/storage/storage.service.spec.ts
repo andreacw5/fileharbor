@@ -9,7 +9,7 @@ import { join } from 'path';
 import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
 import { deflateSync } from 'zlib';
-import { StorageService } from './storage.service';
+import { DHASH_PATTERN, FLAT_DHASH, StorageService } from './storage.service';
 
 // A PNG whose IHDR claims width x height but carries a single tiny IDAT:
 // the header is all metadata() reads, so this is what a decompression bomb
@@ -225,41 +225,43 @@ describe('StorageService.computeDHash', () => {
     get: () => undefined,
   } as unknown as ConfigService);
 
-  // 9x8 blocks of 8 px, neighbours at least 30 levels apart: resizing to 9x8
-  // lands one block per pixel, so no bit sits on a near-tie.
+  // 17x16 blocks of 8 px, neighbours at least 30 levels apart: resizing to
+  // 17x16 lands one block per pixel, so no bit sits on a near-tie.
+  const W = 17;
+  const H = 16;
   const blocks = (seed: number) => {
     const levels: number[] = [];
-    for (let i = 0, v = seed; i < 72; i++) {
+    for (let i = 0, v = seed; i < W * H; i++) {
       v = (v * 1103515245 + 12345) % 2 ** 31;
       let level = v % 256;
-      if (i % 9 && Math.abs(level - levels[i - 1]) < 30) {
+      if (i % W && Math.abs(level - levels[i - 1]) < 30) {
         level = (levels[i - 1] + 128) % 256;
       }
       levels.push(level);
     }
-    const raw = Buffer.alloc(72 * 64 * 3);
-    for (let y = 0; y < 64; y++) {
-      for (let x = 0; x < 72; x++) {
+    const raw = Buffer.alloc(W * 8 * H * 8 * 3);
+    for (let y = 0; y < H * 8; y++) {
+      for (let x = 0; x < W * 8; x++) {
         raw.fill(
-          levels[(y >> 3) * 9 + (x >> 3)],
-          (y * 72 + x) * 3,
-          (y * 72 + x + 1) * 3,
+          levels[(y >> 3) * W + (x >> 3)],
+          (y * W * 8 + x) * 3,
+          (y * W * 8 + x + 1) * 3,
         );
       }
     }
-    return sharp(raw, { raw: { width: 72, height: 64, channels: 3 } });
+    return sharp(raw, { raw: { width: W * 8, height: H * 8, channels: 3 } });
   };
 
   it('matches the same picture across quality and size', async () => {
     const q100 = await blocks(1).webp({ quality: 100 }).toBuffer();
     const q85 = await storage.optimizeImage(q100, 85);
     const smaller = await blocks(1)
-      .resize(36, 32)
+      .resize(W * 4, H * 4)
       .webp({ quality: 85 })
       .toBuffer();
 
     const hash = await storage.computeDHash(q100);
-    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).toMatch(DHASH_PATTERN);
     await expect(storage.computeDHash(q85)).resolves.toBe(hash);
     await expect(storage.computeDHash(smaller)).resolves.toBe(hash);
   });
@@ -272,6 +274,31 @@ describe('StorageService.computeDHash', () => {
     );
   });
 
+  // Regression: game perk icons (same diamond frame, different art inside)
+  // all shared one 64-bit hash.
+  it('tells apart icons sharing a frame', async () => {
+    const icon = (inner: string) =>
+      sharp(
+        Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+          <polygon points="150,25 275,150 150,275 25,150" fill="#000"/>
+          <polygon points="150,45 255,150 150,255 45,150" fill="#5a2a82"/>
+          ${inner}</svg>`,
+        ),
+      )
+        .png()
+        .toBuffer();
+    const a = await icon(
+      '<circle cx="150" cy="120" r="30" fill="#fff"/><rect x="120" y="160" width="60" height="50" fill="#fff"/>',
+    );
+    const b = await icon(
+      '<path d="M90 150 L210 150 M150 90 L150 210" stroke="#fff" stroke-width="14"/><circle cx="150" cy="150" r="20" fill="#fff"/>',
+    );
+    expect(await storage.computeDHash(a)).not.toBe(
+      await storage.computeDHash(b),
+    );
+  });
+
   it('hashes a flat image, transparent or not, to zero', async () => {
     const flat = (background: string) =>
       sharp({ create: { width: 20, height: 20, channels: 4, background } })
@@ -279,7 +306,7 @@ describe('StorageService.computeDHash', () => {
         .toBuffer();
     for (const bg of ['#3a7', '#00000000']) {
       await expect(storage.computeDHash(await flat(bg))).resolves.toBe(
-        '0000000000000000',
+        FLAT_DHASH,
       );
     }
   });

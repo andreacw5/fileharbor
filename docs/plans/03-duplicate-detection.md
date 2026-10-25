@@ -3,7 +3,7 @@ type: plan
 service: fileharbor
 status: in-progress
 estimate: 2d
-updated: 2026-10-22
+updated: 2026-10-25
 verified: 4774bd3
 ---
 
@@ -148,7 +148,7 @@ Fatto, con tre scostamenti dal testo sopra:
 - **`dHash CHAR(16)` hex, non `BigInt`**: nessun patch globale per `BigInt` e varie risposte admin
   spalmano la riga grezza (`findAdminImages`): un `bigint` farebbe esplodere `JSON.stringify`. Il
   testo evita anche il problema del bit di segno di `int8`. Stessa selettività sull'indice. Le
-  distanze di Hamming, se mai servissero, passano da `('x' || "dHash")::bit(64)`.
+  distanze di Hamming, se mai servissero, passano da `('x' || "dHash")::bit(256)` (era `bit(64)` prima del 2026-10-25).
 - `dHash` malformato su `GET /admin/images` → `400` con `code: BAD_REQUEST` (stesso stile di
   `isPrivate`, parametri letti uno per uno), non `VALIDATION_FAILED`. Su `/duplicates` i filtri
   stanno nel DTO, quindi lì è `VALIDATION_FAILED`.
@@ -165,6 +165,14 @@ Lato Meridian: fatto come da piano (`images/duplicates.vue`, `useFileHarborDupli
 `images/duplicates.get.ts`, `?dHash=` inoltrato e chip sulla lista, fact sulla show, i18n
 `fileharbor.duplicates.*`). Domanda 3 risolta col toggle sempre visibile + 403. Manca la prova
 end-to-end in console (ultimo criterio).
+
+**2026-10-25 — 64 → 256 bit.** A 9x8 le icone con la stessa cornice (perk DBD: rombo nero, interno
+viola, disegno bianco) davano tutte lo stesso hash: il disegno spariva nella media e restava solo la
+cornice. Ora griglia 17x16, `CHAR(64)` (migration `20261025120000_image_dhash_256`, che azzera i
+vecchi valori: non confrontabili), `DHASH_PATTERN` a 64 hex. Va rilanciato il backfill
+(`--apply`); `--rehash` ricalcola tutte le righe, non solo le `NULL`. Più bit = un bit in pareggio
+può girare su una ricodifica: il test su qualità/dimensione resta verde, ma una copia
+ricompressa male può non combaciare più. Con la distanza 0 resta il compromesso scelto.
 
 ## Rischi/domande aperte
 

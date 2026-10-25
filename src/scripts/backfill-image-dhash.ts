@@ -1,6 +1,7 @@
 /**
- * One-off: fills `images.dHash` for rows uploaded before plan 03
- * (docs/plans/03-duplicate-detection.md). New uploads hash themselves.
+ * Fills `images.dHash` for rows uploaded before plan 03
+ * (docs/plans/03-duplicate-detection.md), or emptied by the 64 -> 256 bit
+ * migration. New uploads hash themselves.
  *
  * Lives in src/ so `nest build` ships it in dist/ (see backfill-media-size.ts).
  * Dry run by default, `--apply` writes:
@@ -11,6 +12,9 @@
  * One image at a time (a full decode each, CPU-bound). Resumable: only rows with
  * dHash IS NULL are read, so a second run picks up where the first stopped and
  * redoes nothing. A missing or unreadable original is logged and skipped.
+ *
+ * `--rehash` reads every row instead, for a `computeDHash` change that leaves
+ * old values in place (not resumable: a second run starts over).
  */
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../modules/prisma/prisma.service';
@@ -18,7 +22,7 @@ import { StorageService } from '../modules/storage/storage.service';
 
 const PAGE = 200;
 
-async function main(apply: boolean) {
+async function main(apply: boolean, rehash: boolean) {
   try {
     process.loadEnvFile();
   } catch {
@@ -37,7 +41,7 @@ async function main(apply: boolean) {
     let cursor: string | undefined;
     for (;;) {
       const rows = await prisma.image.findMany({
-        where: { dHash: null },
+        where: rehash ? {} : { dHash: null },
         select: { id: true, clientId: true },
         orderBy: { id: 'asc' },
         take: PAGE,
@@ -80,7 +84,9 @@ async function main(apply: boolean) {
   }
 }
 
-main(process.argv.includes('--apply')).catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main(process.argv.includes('--apply'), process.argv.includes('--rehash')).catch(
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  },
+);
