@@ -43,22 +43,3 @@ export class AlbumItemDto {
   @Type(() => AlbumItemVideoDataDto)
   video?: AlbumItemVideoDataDto;
 }
-
-export class AlbumItemPaginationDto {
-  @ApiProperty() @Expose() page: number;
-  @ApiProperty() @Expose() perPage: number;
-  @ApiProperty() @Expose() total: number;
-  @ApiProperty() @Expose() totalPages: number;
-}
-
-export class AlbumItemListResponseDto {
-  @ApiProperty({ type: [AlbumItemDto] })
-  @Expose()
-  @Type(() => AlbumItemDto)
-  data: AlbumItemDto[];
-
-  @ApiProperty({ type: AlbumItemPaginationDto })
-  @Expose()
-  @Type(() => AlbumItemPaginationDto)
-  pagination: AlbumItemPaginationDto;
-}

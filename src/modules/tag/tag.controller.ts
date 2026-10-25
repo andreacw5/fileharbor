@@ -1,19 +1,13 @@
 import { SkipThrottle } from '@nestjs/throttler';
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TagService } from './tag.service';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
-import { TagPageParams, TagsResponseDto } from './dto/tag-response.dto';
-import { PaginatedResult } from '@heyatom/nest-common';
-import { TagListItemDto } from './dto/tag-response.dto';
+import { TagListItemDto, TagPageParams } from './dto/tag-response.dto';
+import { ApiPaginatedResponse, PaginatedResult } from '@heyatom/nest-common';
 
 @ApiTags('Admin - Tags')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -28,7 +22,7 @@ export class TagController {
   @RequirePermission('fileharbor-media.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List image tags (scoped to accessible clients)' })
-  @ApiResponse({ status: 200, type: TagsResponseDto })
+  @ApiPaginatedResponse(TagListItemDto)
   listTags(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
     @Query() params: TagPageParams = new TagPageParams(),

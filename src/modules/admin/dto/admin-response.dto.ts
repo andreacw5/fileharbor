@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Expose, Type, Transform } from 'class-transformer';
 import { maskApiKey } from '../helpers/mask-api-key.helper';
-import { CreatorListResponseDto } from '@/modules/creator/dto/creator-response.dto';
 
 export class AdminClientResponseDto {
   @ApiProperty() @Expose() id: string;
@@ -388,13 +387,6 @@ export class AdminImageShareLinkResponseDto {
   client: AdminShareLinkClientDto;
 }
 
-export class AdminPaginationResponseDto {
-  @ApiProperty() @Expose() page: number;
-  @ApiProperty() @Expose() perPage: number;
-  @ApiProperty() @Expose() total: number;
-  @ApiProperty() @Expose() totalPages: number;
-}
-
 export class AdminBookmarkResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() actorId: string;
@@ -408,18 +400,6 @@ export class AdminBookmarkResponseDto {
   @Expose()
   @Type(() => AdminImageResponseDto)
   image: AdminImageResponseDto;
-}
-
-export class AdminBookmarkListResponseDto {
-  @ApiProperty({ type: [AdminBookmarkResponseDto] })
-  @Expose()
-  @Type(() => AdminBookmarkResponseDto)
-  data: AdminBookmarkResponseDto[];
-
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  @Expose()
-  @Type(() => AdminPaginationResponseDto)
-  pagination: AdminPaginationResponseDto;
 }
 
 export class AdminBookmarkedCreatorDto {
@@ -513,18 +493,6 @@ export class AdminVideoBookmarkResponseDto {
   video: AdminVideoResponseDto;
 }
 
-export class AdminVideoBookmarkListResponseDto {
-  @ApiProperty({ type: [AdminVideoBookmarkResponseDto] })
-  @Expose()
-  @Type(() => AdminVideoBookmarkResponseDto)
-  data: AdminVideoBookmarkResponseDto[];
-
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  @Expose()
-  @Type(() => AdminPaginationResponseDto)
-  pagination: AdminPaginationResponseDto;
-}
-
 // ---------------------------------------------------------------------------
 // Admin list responses. Documentation only: the list routes return these
 // shapes as built by their services (Prisma `include` selects), no mapping.
@@ -554,12 +522,6 @@ export class AdminImageListItemDto extends OmitType(AdminImageResponseDto, [
   @ApiProperty({ type: AdminListClientDto }) client: AdminListClientDto;
 }
 
-export class AdminImageListResponseDto {
-  @ApiProperty({ type: [AdminImageListItemDto] }) data: AdminImageListItemDto[];
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  pagination: AdminPaginationResponseDto;
-}
-
 export class AdminAvatarListItemDto extends OmitType(AdminAvatarResponseDto, [
   'client',
   'creator',
@@ -574,13 +536,6 @@ export class AdminAvatarListItemDto extends OmitType(AdminAvatarResponseDto, [
   @ApiProperty({ type: AdminListClientDto }) client: AdminListClientDto;
 }
 
-export class AdminAvatarListResponseDto {
-  @ApiProperty({ type: [AdminAvatarListItemDto] })
-  data: AdminAvatarListItemDto[];
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  pagination: AdminPaginationResponseDto;
-}
-
 export class AdminAlbumListItemDto extends OmitType(AdminAlbumResponseDto, [
   'client',
 ] as const) {
@@ -588,21 +543,6 @@ export class AdminAlbumListItemDto extends OmitType(AdminAlbumResponseDto, [
   @ApiProperty({ type: AdminListClientDto }) client: AdminListClientDto;
 }
 
-export class AdminAlbumListResponseDto {
-  @ApiProperty({ type: [AdminAlbumListItemDto] }) data: AdminAlbumListItemDto[];
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  pagination: AdminPaginationResponseDto;
-}
-
-export class AdminVideoListResponseDto {
-  @ApiProperty({ type: [AdminVideoResponseDto] }) data: AdminVideoResponseDto[];
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  pagination: AdminPaginationResponseDto;
-}
-
-export class AdminCreatorListResponseDto {
-  @ApiProperty({ type: [CreatorListResponseDto] })
-  data: CreatorListResponseDto[];
-  @ApiProperty({ type: AdminPaginationResponseDto })
-  pagination: AdminPaginationResponseDto;
+export class AdminReoptimizeFailedResponseDto {
+  @ApiProperty({ description: 'Rows re-queued' }) count: number;
 }

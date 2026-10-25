@@ -1,23 +1,8 @@
-import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PageParams } from '@heyatom/nest-common';
 
-export class ListVideosDto {
+export class ListVideosDto extends PageParams {
   @ApiPropertyOptional() @IsOptional() @IsString() creatorId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  perPage?: number = 20;
 }

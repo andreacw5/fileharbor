@@ -473,7 +473,22 @@ One global filter, nest-common's `AllExceptionsFilter` (`APP_FILTER`); it logs t
 - A number in `retryAfterSeconds` on the exception body becomes the `Retry-After` header.
 - Logs only 5xx (`error`) and 401/403/429 (`warn`): scanner 404s (`/wp-admin`, `.env`, …) stay quiet but are answered.
 - `GET /images/:id` 404/403 on a file request never reaches the filter: the controller serves the placeholder
-  (`X-FileHarbor-Fallback`). No `TransformInterceptor` (no `{ data }` envelope) until phase 3.
+  (`X-FileHarbor-Fallback`).
+
+## Response envelope & pagination (api.md §1–§2)
+
+- nest-common's `TransformInterceptor` (`APP_INTERCEPTOR`, registered before `AuditInterceptor`, so `@Audit`
+  metadata still sees the raw result) wraps every 2xx JSON body in `{ data }`. Never build the envelope by hand.
+- Lists: the query DTO **extends** `PageParams` (`page`, `limit` ≤ 100, `skip` getter; never spread it), the
+  service returns `paginate(items, total, params)` → `{ data, meta: { total, page, limit, totalPages } }`.
+  Re-map items with `paginate(mapped, result.meta.total, query)`, not `{ ...result }` (loses the marker and
+  gets wrapped twice). Admin list filters live on the DTOs in `admin/dto/admin-list-query.dto.ts`.
+- Swagger: `@ApiOkData(X)` / `@ApiOkData([X])` / `@ApiCreatedData(X)` / `@ApiPaginatedResponse(X)`, never
+  `@ApiResponse({ status: 200, type })`, which documents the bare DTO and misleads `@heyatom/client`.
+- `@NoTransform()`: file and stream routes (`GET /images/:id`, avatar GETs, video `thumb`/`stream`, admin
+  image `download`/`file`, admin video `thumb`/`stream`) and `health`. Their errors keep Nest's raw body. The
+  `?info=true` JSON of `GET /images/:id` and of the avatar GETs is wrapped by hand (`{ data }`), so clients
+  always read `.data`.
 
 ## Config Access
 

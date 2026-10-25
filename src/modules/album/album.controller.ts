@@ -11,14 +11,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiSecurity,
-  ApiResponse,
-  ApiQuery,
-  ApiBody,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiSecurity, ApiBody } from '@nestjs/swagger';
 import { AlbumService } from './album.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import {
@@ -31,7 +24,6 @@ import {
   CreateAlbumDto,
   UpdateAlbumDto,
   ListAlbumsDto,
-  ListAlbumsResponseDto,
   AlbumResponseDto,
   CreateAlbumTokenDto,
   AlbumTokenResponseDto,
@@ -40,9 +32,15 @@ import {
   AddAlbumItemsResponseDto,
   RemoveAlbumItemsDto,
   ListAlbumItemsDto,
-  AlbumItemListResponseDto,
+  AlbumItemDto,
 } from './dto';
-import { AlbumResourceType } from '@prisma/client';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  PaginatedResult,
+} from '@heyatom/nest-common';
+import { AdminRemoveImagesFromAlbumResponseDto } from '@/modules/admin/dto/admin-response.dto';
 
 @ApiTags('Albums')
 @ApiSecurity('api-key')
@@ -58,7 +56,7 @@ export class AlbumController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new album' })
-  @ApiResponse({ status: 201, type: AlbumResponseDto })
+  @ApiCreatedData(AlbumResponseDto)
   async createAlbum(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -73,25 +71,26 @@ export class AlbumController {
 
   @Get()
   @ApiOperation({ summary: 'List albums with filtering and pagination' })
-  @ApiResponse({ status: 200, type: ListAlbumsResponseDto })
+  @ApiPaginatedResponse(AlbumResponseDto)
   async listAlbums(
     @ClientId() clientId: string,
     @Query() query: ListAlbumsDto,
-  ): Promise<ListAlbumsResponseDto> {
-    return this.albumService.listAlbums({
-      clientId,
-      creatorId: query.creatorId,
-      public: query.public,
-      search: query.search,
-      page: query.page,
-      perPage: query.perPage,
-    });
+  ) {
+    return this.albumService.listAlbums(
+      {
+        clientId,
+        creatorId: query.creatorId,
+        public: query.public,
+        search: query.search,
+      },
+      query,
+    );
   }
 
   @Public()
   @Get('shared/:token')
   @ApiOperation({ summary: 'Access album via shared token (public)' })
-  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  @ApiOkData(AlbumResponseDto)
   async getAlbumByToken(
     @Param('token') token: string,
   ): Promise<AlbumResponseDto> {
@@ -100,7 +99,7 @@ export class AlbumController {
 
   @Get(':albumId')
   @ApiOperation({ summary: 'Get album info by ID' })
-  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  @ApiOkData(AlbumResponseDto)
   async getAlbum(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -111,7 +110,7 @@ export class AlbumController {
 
   @Patch(':albumId')
   @ApiOperation({ summary: 'Update album metadata' })
-  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  @ApiOkData(AlbumResponseDto)
   async updateAlbum(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -127,7 +126,7 @@ export class AlbumController {
 
   @Delete(':albumId')
   @ApiOperation({ summary: 'Delete album' })
-  @ApiResponse({ status: 200, type: DeleteAlbumResponseDto })
+  @ApiOkData(DeleteAlbumResponseDto)
   async deleteAlbum(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -154,7 +153,7 @@ export class AlbumController {
 
   @Post(':albumId/items')
   @ApiOperation({ summary: 'Add images and/or videos to album' })
-  @ApiResponse({ status: 201, type: AddAlbumItemsResponseDto })
+  @ApiCreatedData(AddAlbumItemsResponseDto)
   async addItems(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -172,6 +171,7 @@ export class AlbumController {
 
   @Delete(':albumId/items')
   @ApiOperation({ summary: 'Remove images and/or videos from album' })
+  @ApiOkData(AdminRemoveImagesFromAlbumResponseDto)
   @ApiBody({ type: RemoveAlbumItemsDto })
   async removeItems(
     @ClientId() clientId: string,
@@ -193,20 +193,13 @@ export class AlbumController {
 
   @Get(':albumId/items')
   @ApiOperation({ summary: 'List album items ordered (images and/or videos)' })
-  @ApiQuery({ name: 'resourceType', required: false, enum: AlbumResourceType })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AlbumItemListResponseDto })
+  @ApiPaginatedResponse(AlbumItemDto)
   async listItems(
     @ClientId() clientId: string,
     @Param('albumId') albumId: string,
     @Query() query: ListAlbumItemsDto,
-  ): Promise<AlbumItemListResponseDto> {
-    return this.albumService.listAlbumItems(albumId, clientId, {
-      resourceType: query.resourceType,
-      page: query.page ?? 1,
-      perPage: query.perPage ?? 20,
-    });
+  ): Promise<PaginatedResult<AlbumItemDto>> {
+    return this.albumService.listAlbumItems(albumId, clientId, query);
   }
 
   // ---------------------------------------------------------------------------
@@ -215,7 +208,7 @@ export class AlbumController {
 
   @Post(':albumId/token')
   @ApiOperation({ summary: 'Generate access token for private album' })
-  @ApiResponse({ status: 201, type: AlbumTokenResponseDto })
+  @ApiCreatedData(AlbumTokenResponseDto)
   async generateAlbumToken(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -236,7 +229,7 @@ export class AlbumController {
 
   @Delete(':albumId/token')
   @ApiOperation({ summary: 'Revoke all access tokens for album' })
-  @ApiResponse({ status: 200, type: DeleteAlbumResponseDto })
+  @ApiOkData(DeleteAlbumResponseDto)
   async revokeAlbumToken(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -255,7 +248,7 @@ export class AlbumController {
 
   @Get('external/:externalAlbumId')
   @ApiOperation({ summary: 'Get album by external ID' })
-  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  @ApiOkData(AlbumResponseDto)
   async getAlbumByExternalId(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -270,7 +263,7 @@ export class AlbumController {
 
   @Patch('external/:externalAlbumId')
   @ApiOperation({ summary: 'Update album by external ID' })
-  @ApiResponse({ status: 200, type: AlbumResponseDto })
+  @ApiOkData(AlbumResponseDto)
   async updateAlbumByExternalId(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -291,7 +284,7 @@ export class AlbumController {
 
   @Post('external/:externalAlbumId/items')
   @ApiOperation({ summary: 'Add items to album by external ID' })
-  @ApiResponse({ status: 201, type: AddAlbumItemsResponseDto })
+  @ApiCreatedData(AddAlbumItemsResponseDto)
   async addItemsToAlbumByExternalId(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string,
@@ -312,6 +305,7 @@ export class AlbumController {
 
   @Delete('external/:externalAlbumId/items')
   @ApiOperation({ summary: 'Remove items from album by external ID' })
+  @ApiOkData(AdminRemoveImagesFromAlbumResponseDto)
   @ApiBody({ type: RemoveAlbumItemsDto })
   async removeItemsFromAlbumByExternalId(
     @ClientId() clientId: string,

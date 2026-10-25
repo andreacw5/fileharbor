@@ -1,10 +1,11 @@
 import { Controller, Get, UseInterceptors } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { ClientService } from './client.service';
 import { ClientId } from './decorators/client.decorator';
 import { ClientInterceptor } from './interceptors/client.interceptor';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
+import { ApiOkData } from '@heyatom/nest-common';
 
 @ApiTags('Client')
 @UseInterceptors(ClientInterceptor)
@@ -18,7 +19,7 @@ export class ClientController {
     description:
       'Get statistics for the authenticated client including image count, album count, storage usage, and top downloaded images.',
   })
-  @ApiResponse({ status: 200, type: ClientStatsResponseDto })
+  @ApiOkData(ClientStatsResponseDto)
   async getStats(
     @ClientId() clientId: string,
   ): Promise<ClientStatsResponseDto> {

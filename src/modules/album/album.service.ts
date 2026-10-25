@@ -8,6 +8,7 @@ import {
 import { AlbumResourceType } from '@prisma/client';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { randomUUID } from 'crypto';
+import { paginate, PageParams } from '@heyatom/nest-common';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
 import { RouteHelperService } from '@/utils/route.utils';
 import { buildSrcset } from '@/modules/image/image-variants';
@@ -192,18 +193,15 @@ export class AlbumService {
     };
   }
 
-  async listAlbums(filters: {
-    clientId?: string;
-    creatorId?: string;
-    public?: boolean;
-    search?: string;
-    page?: number;
-    perPage?: number;
-  }) {
-    const page = filters.page || 1;
-    const perPage = Math.min(filters.perPage || 20, 100);
-    const skip = (page - 1) * perPage;
-
+  async listAlbums(
+    filters: {
+      clientId?: string;
+      creatorId?: string;
+      public?: boolean;
+      search?: string;
+    },
+    params: PageParams,
+  ) {
     const where: any = {};
     if (filters.clientId) where.clientId = filters.clientId;
     if (filters.creatorId) where.creatorId = filters.creatorId;
@@ -219,16 +217,16 @@ export class AlbumService {
           ...this.coverInclude(),
         },
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: perPage,
+        skip: params.skip,
+        take: params.limit,
       }),
       this.prisma.album.count({ where }),
     ]);
 
     const countMap = await this.fetchItemCountMap(albums.map((a) => a.id));
 
-    return {
-      data: albums.map((album) => {
+    return paginate(
+      albums.map((album) => {
         const { imageCount = 0, videoCount = 0 } = countMap.get(album.id) ?? {};
         return {
           ...this.formatAlbumResponse(album),
@@ -238,13 +236,9 @@ export class AlbumService {
           coverUrl: this.resolveCoverUrl(album),
         };
       }),
-      pagination: {
-        page,
-        perPage,
-        total,
-        totalPages: Math.ceil(total / perPage),
-      },
-    };
+      total,
+      params,
+    );
   }
 
   async updateAlbum(
@@ -486,7 +480,7 @@ export class AlbumService {
   async listAlbumItems(
     albumId: string,
     clientId: string,
-    params: { resourceType?: AlbumResourceType; page: number; perPage: number },
+    params: PageParams & { resourceType?: AlbumResourceType },
   ) {
     const albumExists = await this.prisma.album.findFirst({
       where: { id: albumId, clientId },
@@ -500,8 +494,8 @@ export class AlbumService {
       this.prisma.albumItem.findMany({
         where,
         orderBy: { order: 'asc' },
-        skip: (params.page - 1) * params.perPage,
-        take: params.perPage,
+        skip: params.skip,
+        take: params.limit,
         include: {
           image: {
             select: {
@@ -532,15 +526,11 @@ export class AlbumService {
       this.prisma.albumItem.count({ where }),
     ]);
 
-    return {
-      data: rows.map((item) => this.mapAlbumItem(item)),
-      pagination: {
-        page: params.page,
-        perPage: params.perPage,
-        total,
-        totalPages: Math.ceil(total / params.perPage),
-      },
-    };
+    return paginate(
+      rows.map((item) => this.mapAlbumItem(item)),
+      total,
+      params,
+    );
   }
 
   // ---------------------------------------------------------------------------

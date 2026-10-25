@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@heyatom/bastion-client": "^0.9.0",
-    "@heyatom/nest-common": "^0.3.0",
+    "@heyatom/nest-common": "^0.4.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.2.7",
     "@nestjs/config": "^4.0.4",

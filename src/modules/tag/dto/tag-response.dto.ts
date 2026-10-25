@@ -67,18 +67,3 @@ export class TagPageParams extends PageParams {
   @IsString()
   search?: string;
 }
-
-class TagMetaDto {
-  @ApiProperty() total: number;
-  @ApiProperty() page: number;
-  @ApiProperty() limit: number;
-  @ApiProperty() totalPages: number;
-}
-
-export class TagsResponseDto {
-  @ApiProperty({ type: [TagListItemDto] })
-  data: TagListItemDto[];
-
-  @ApiProperty({ type: TagMetaDto })
-  meta: TagMetaDto;
-}

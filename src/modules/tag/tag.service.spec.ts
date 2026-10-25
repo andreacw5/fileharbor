@@ -194,7 +194,7 @@ describe('TagService', () => {
     });
   });
 
-  it('caps perPage at 500 and floors page at 1', async () => {
+  it('caps limit at 500 and floors page at 1', async () => {
     mockPrismaService.tag.findMany.mockResolvedValue([]);
     mockPrismaService.tag.count.mockResolvedValue(0);
 

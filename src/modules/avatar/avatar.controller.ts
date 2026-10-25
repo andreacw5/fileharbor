@@ -39,6 +39,7 @@ import {
 } from './dto';
 import { IMAGE_UPLOAD_LIMITS } from '@/modules/storage/storage.service';
 import { contentDisposition } from '@/utils/content-disposition';
+import { ApiCreatedData, ApiOkData, NoTransform } from '@heyatom/nest-common';
 
 @ApiTags('Avatars')
 @ApiSecurity('api-key')
@@ -60,11 +61,7 @@ export class AvatarController {
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadAvatarDto })
-  @ApiResponse({
-    status: 201,
-    type: AvatarResponseDto,
-    description: 'Avatar uploaded successfully',
-  })
+  @ApiCreatedData(AvatarResponseDto, 'Avatar uploaded successfully')
   @ApiResponse({
     status: 400,
     description: 'No file uploaded, invalid format, or missing externalUserId',
@@ -120,6 +117,7 @@ export class AvatarController {
   @Public()
   // Media delivery: one page can embed dozens of these.
   @SkipThrottle()
+  @NoTransform()
   @Get(':clientRef/:externalUserId')
   @ApiOperation({
     summary: 'Get creator avatar (public endpoint)',
@@ -140,6 +138,7 @@ export class AvatarController {
 
   @Public()
   @SkipThrottle()
+  @NoTransform()
   @Get(':externalUserId')
   @ApiOperation({
     summary: 'Get creator avatar (deprecated)',
@@ -191,7 +190,8 @@ export class AvatarController {
           `[getAvatar] Metadata returned - Creator: ${externalUserId}`,
         );
         res.set(extraHeaders);
-        return res.json(metadata);
+        // @NoTransform route (it serves files): envelope the JSON branch by hand
+        return res.json({ data: metadata });
       }
 
       // Otherwise return the file
@@ -242,11 +242,7 @@ export class AvatarController {
     description:
       'Delete the avatar for a specific creator. Requires only API key authentication.',
   })
-  @ApiResponse({
-    status: 200,
-    type: DeleteAvatarResponseDto,
-    description: 'Avatar deleted successfully',
-  })
+  @ApiOkData(DeleteAvatarResponseDto, 'Avatar deleted successfully')
   @ApiResponse({ status: 404, description: 'Avatar not found' })
   @ApiResponse({
     status: 401,

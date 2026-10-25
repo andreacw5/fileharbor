@@ -15,7 +15,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
@@ -23,14 +22,22 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import {
-  AdminBookmarkListResponseDto,
   AdminBookmarkResponseDto,
   AdminDeleteResponseDto,
   AdminCreatorBookmarkResponseDto,
-  AdminVideoBookmarkListResponseDto,
   AdminVideoBookmarkResponseDto,
 } from '../dto/admin-response.dto';
+import {
+  AdminBookmarkListQuery,
+  AdminVideoBookmarkListQuery,
+} from '../dto/admin-list-query.dto';
 import { BookmarksService } from '@/modules/bookmarks/bookmarks.service';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  paginate,
+} from '@heyatom/nest-common';
 
 @ApiTags('Admin - Bookmarks')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -45,33 +52,12 @@ export class BookmarksAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List bookmarked images for admin GUI' })
-  @ApiQuery({
-    name: 'clientId',
-    required: false,
-    description: 'Filter by client ID',
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    description: 'Search by original filename',
-  })
-  @ApiQuery({
-    name: 'tags',
-    required: false,
-    isArray: true,
-    description: 'Filter by tags',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminBookmarkListResponseDto })
+  @ApiPaginatedResponse(AdminBookmarkResponseDto)
   async listBookmarks(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
-    @Query('tags') tags?: string | string[],
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ): Promise<AdminBookmarkListResponseDto> {
+    @Query() query: AdminBookmarkListQuery,
+  ) {
+    const { tags } = query;
     const tagsArray = tags
       ? Array.isArray(tags)
         ? tags
@@ -81,23 +67,25 @@ export class BookmarksAdminController {
             .filter(Boolean)
       : undefined;
 
-    const result = await this.bookmarksService.listBookmarks(adminUser, {
-      clientId,
-      search,
-      tags: tagsArray,
-      page: Number(page) || 1,
-      perPage: Number(perPage) || 20,
-    });
+    const result = await this.bookmarksService.listBookmarks(
+      adminUser,
+      { clientId: query.clientId, search: query.search, tags: tagsArray },
+      query,
+    );
 
-    return plainToInstance(AdminBookmarkListResponseDto, result, {
-      excludeExtraneousValues: true,
-    });
+    return paginate(
+      plainToInstance(AdminBookmarkResponseDto, result.data, {
+        excludeExtraneousValues: true,
+      }),
+      result.meta.total,
+      query,
+    );
   }
 
   @Post(':imageId')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark an image for the current admin' })
-  @ApiResponse({ status: 201, type: AdminBookmarkResponseDto })
+  @ApiCreatedData(AdminBookmarkResponseDto)
   @ApiResponse({ status: 404, description: 'Image not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async bookmarkImage(
@@ -117,7 +105,7 @@ export class BookmarksAdminController {
   @Delete(':imageId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove an image from admin bookmarks' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @ApiResponse({ status: 404, description: 'Image not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async removeBookmark(
@@ -146,7 +134,7 @@ export class BookmarksAdminController {
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark a creator for the current admin' })
-  @ApiResponse({ status: 201, type: AdminCreatorBookmarkResponseDto })
+  @ApiCreatedData(AdminCreatorBookmarkResponseDto)
   @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async bookmarkCreator(
@@ -167,7 +155,7 @@ export class BookmarksAdminController {
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a creator from admin bookmarks' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async removeCreatorBookmark(
@@ -195,35 +183,31 @@ export class BookmarksAdminController {
   @Get('videos')
   @RequirePermission('fileharbor-library.manage')
   @ApiOperation({ summary: 'List bookmarked videos for admin GUI' })
-  @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminVideoBookmarkListResponseDto })
+  @ApiPaginatedResponse(AdminVideoBookmarkResponseDto)
   async listVideoBookmarks(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ): Promise<AdminVideoBookmarkListResponseDto> {
-    const result = await this.bookmarksService.listVideoBookmarks(adminUser, {
-      clientId,
-      search,
-      page: Number(page) || 1,
-      perPage: Number(perPage) || 20,
-    });
+    @Query() query: AdminVideoBookmarkListQuery,
+  ) {
+    const result = await this.bookmarksService.listVideoBookmarks(
+      adminUser,
+      { clientId: query.clientId, search: query.search },
+      query,
+    );
 
-    return plainToInstance(AdminVideoBookmarkListResponseDto, result, {
-      excludeExtraneousValues: true,
-    });
+    return paginate(
+      plainToInstance(AdminVideoBookmarkResponseDto, result.data, {
+        excludeExtraneousValues: true,
+      }),
+      result.meta.total,
+      query,
+    );
   }
 
   @Post('videos/:videoId')
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bookmark a video for the current admin' })
-  @ApiResponse({ status: 201, type: AdminVideoBookmarkResponseDto })
+  @ApiCreatedData(AdminVideoBookmarkResponseDto)
   async bookmarkVideo(
     @Param('videoId') videoId: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -241,7 +225,7 @@ export class BookmarksAdminController {
   @RequirePermission('fileharbor-library.manage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a video from admin bookmarks' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   async removeVideoBookmark(
     @Param('videoId') videoId: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,

@@ -12,7 +12,11 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
 import { AdminStatsResponseDto } from '@/modules/admin/dto/admin-response.dto';
-import { ApiPaginatedResponse, PaginatedResult } from '@heyatom/nest-common';
+import {
+  ApiOkData,
+  ApiPaginatedResponse,
+  PaginatedResult,
+} from '@heyatom/nest-common';
 import {
   CreatorStorageDto,
   CreatorStorageQuery,
@@ -33,7 +37,7 @@ export class StatisticsController {
   @RequirePermission('fileharbor-media.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics (scoped to accessible clients)' })
-  @ApiResponse({ status: 200, type: AdminStatsResponseDto })
+  @ApiOkData(AdminStatsResponseDto)
   getGlobalStats(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminStatsResponseDto> {
@@ -49,7 +53,7 @@ export class StatisticsController {
     description:
       'Bytes of the originals: thumbnails and cached variants are not counted.',
   })
-  @ApiResponse({ status: 200, type: StorageReportDto })
+  @ApiOkData(StorageReportDto)
   @ApiResponse({
     status: 400,
     description: 'Bad range (to < from, > 366 days)',

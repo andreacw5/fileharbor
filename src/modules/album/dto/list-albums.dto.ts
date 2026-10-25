@@ -1,15 +1,9 @@
-import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsNumber,
-  Min,
-  Max,
-} from 'class-validator';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type, Transform } from 'class-transformer';
+import { Transform } from 'class-transformer';
+import { PageParams } from '@heyatom/nest-common';
 
-export class ListAlbumsDto {
+export class ListAlbumsDto extends PageParams {
   @ApiPropertyOptional({
     description: 'Filter by creator ID',
     example: 'creator-123',
@@ -38,30 +32,4 @@ export class ListAlbumsDto {
   @IsOptional()
   @IsString()
   search?: string;
-
-  @ApiPropertyOptional({
-    description: 'Page number',
-    minimum: 1,
-    default: 1,
-    example: 1,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({
-    description: 'Items per page',
-    minimum: 1,
-    maximum: 100,
-    default: 20,
-    example: 20,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  @Max(100)
-  perPage?: number;
 }
