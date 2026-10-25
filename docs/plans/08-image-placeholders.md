@@ -1,15 +1,22 @@
 ---
 type: plan
 service: fileharbor
-status: open
+status: deferred
 estimate: 1d
-updated: 2026-10-22
-verified: 4774bd3
+updated: 2026-10-24
+verified: 6475eb0
 ---
 
 # 08 · Placeholder immagine: ThumbHash + colore dominante
 
 Backlog 2b.1.
+
+> **Sospeso (2026-10-24): nessun consumer.** Il placeholder vive nella risposta JSON, ma nessun sito
+> la legge al momento del render. puma-arts e heyatom-portfolio hanno gli URL FileHarbor scritti a
+> mano nei file dati (`app/data/*.ts`) e non chiamano l'API. dbdbuilds-api, beacon-gui, Articuno e
+> Almanac salvano solo `fullPath`/id dopo l'upload. Meridian legge `AdminImageResponseDto` e usa il
+> thumb. Da riprendere quando nasce un consumer che renderizza dalle risposte (es. una galleria sugli
+> item album) o se i siti statici decidono di copiare il placeholder nei dati in build.
 
 ## Problema
 

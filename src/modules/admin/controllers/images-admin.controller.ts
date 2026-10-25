@@ -201,7 +201,7 @@ export class ImagesAdminController {
   @ApiQuery({
     name: 'dHash',
     required: false,
-    description: 'Only images with this dHash (16 hex chars)',
+    description: 'Only images with this dHash (64 hex chars)',
   })
   @ApiQuery({
     name: 'optimizeStatus',
@@ -275,7 +275,7 @@ export class ImagesAdminController {
     if (privacy !== undefined) where.isPrivate = privacy;
     if (dHash !== undefined && dHash !== '') {
       if (!DHASH_PATTERN.test(dHash)) {
-        throw new BadRequestException('dHash must be 16 hex characters');
+        throw new BadRequestException('dHash must be 64 hex characters');
       }
       where.dHash = dHash;
     }

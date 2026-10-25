@@ -104,9 +104,9 @@ model Image {
   views            Int       @default(0)
   downloads        Int       @default(0)
   description      String?
-  // 64-bit dHash of original.webp as 16 hex chars (StorageService.computeDHash), null until
+  // 256-bit dHash of original.webp as 64 hex chars (StorageService.computeDHash), null until
   // computed. Text, not BigInt: raw rows are spread into responses and JSON.stringify throws on bigint.
-  dHash            String?   @db.Char(16)
+  dHash            String?   @db.Char(64)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

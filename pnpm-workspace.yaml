@@ -1,6 +1,10 @@
 packages:
   - '.'
 
+# @nestjs/platform-express pins multer exact; 2.5.0 fixes CVE-2026-113872. Drop once Nest bumps it.
+overrides:
+  multer: ^2.5.0
+
 allowBuilds:
   '@prisma/engines': true
   '@scarf/scarf': false

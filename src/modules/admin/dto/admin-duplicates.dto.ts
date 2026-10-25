@@ -56,7 +56,7 @@ export class AdminDuplicateImageDto {
 }
 
 export class AdminDuplicateGroupDto {
-  @ApiProperty({ example: '3c3e1e0f0f1e3c3c' }) dHash: string;
+  @ApiProperty({ example: '3c3e1e0f0f1e3c3c'.repeat(4) }) dHash: string;
   @ApiProperty({
     nullable: true,
     type: String,

@@ -264,7 +264,7 @@ export class AdminImageResponseDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'Perceptual hash (16 hex chars), null until computed',
+    description: 'Perceptual hash (64 hex chars), null until computed',
   })
   @Expose()
   dHash: string | null;

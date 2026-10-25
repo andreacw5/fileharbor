@@ -155,10 +155,10 @@ describe('ImagesAdminController.listImages', () => {
     );
 
   it('filters on dHash inside the scope', async () => {
-    await byHash('00ff00ff00ff00ff');
+    await byHash('00ff'.repeat(16));
     expect(where()).toEqual({
       clientId: { in: ['client-1'] },
-      dHash: '00ff00ff00ff00ff',
+      dHash: '00ff'.repeat(16),
     });
   });
 
@@ -177,7 +177,7 @@ describe('ImagesAdminController.listImages', () => {
 
   it('rejects a malformed dHash before querying', async () => {
     await expect(byHash('00FF')).rejects.toThrow(
-      'dHash must be 16 hex characters',
+      'dHash must be 64 hex characters',
     );
     expect(imageService.findAdminImages).not.toHaveBeenCalled();
   });

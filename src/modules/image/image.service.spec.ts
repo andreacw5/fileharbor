@@ -236,7 +236,7 @@ describe('ImageService', () => {
         original: Buffer.from('webp-data'),
         thumb: Buffer.from('thumb-data'),
       });
-      mockStorageService.computeDHash.mockResolvedValue('00ff00ff00ff00ff');
+      mockStorageService.computeDHash.mockResolvedValue('00ff'.repeat(16));
       mockStorageService.getImagePath.mockReturnValue(
         `storage/${mockDomain}/images/${mockImageId}`,
       );
@@ -275,7 +275,7 @@ describe('ImageService', () => {
       );
       expect(mockPrismaService.image.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ dHash: '00ff00ff00ff00ff' }),
+          data: expect.objectContaining({ dHash: '00ff'.repeat(16) }),
         }),
       );
     });
