@@ -390,6 +390,8 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 - EXIF metadata removed during optimization
 - Sanitize file paths (handled by `StorageService`)
 - Rate limiting via `@nestjs/throttler` — configured by `THROTTLE_TTL` and `THROTTLE_LIMIT` env vars
+- A request with a **valid** `X-API-Key` skips the throttler (`ClientThrottlerGuard`, `client/guards/`): callers are
+  trusted services running batches from one IP. Missing or invalid keys stay IP-throttled (key guessing).
 - The console surface (`admin/*`, every `BastionUserGuard` controller) is `@SkipThrottle()` at class level:
   Meridian's BFF calls from one IP for every admin, so an IP-keyed bucket (10/min by default) 429'd bulk
   actions. A new admin controller needs the decorator too.
