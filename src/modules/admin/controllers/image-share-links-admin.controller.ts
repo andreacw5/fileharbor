@@ -19,6 +19,8 @@ import {
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
 import {
+  ApiCreatedData,
+  ApiOkData,
   ApiPaginatedResponse,
   paginate,
   PaginatedResult,
@@ -125,7 +127,7 @@ export class ImageShareLinksAdminController {
 
   @Post()
   @ApiOperation({ summary: 'Create a share link on a private image (admin)' })
-  @ApiResponse({ status: 201, type: AdminImageShareLinkResponseDto })
+  @ApiCreatedData(AdminImageShareLinkResponseDto)
   @ApiResponse({
     status: 400,
     description: 'Invalid expiry, or IMAGE_NOT_PRIVATE',
@@ -169,7 +171,7 @@ export class ImageShareLinksAdminController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete an image share link (admin)' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @ApiResponse({ status: 404, description: 'Share link not found' })
   @ApiResponse({
     status: 403,

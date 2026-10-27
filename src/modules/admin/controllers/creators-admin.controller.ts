@@ -16,7 +16,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
@@ -24,10 +23,18 @@ import { RequirePermission } from '@/modules/bastion/decorators/require-permissi
 import { Audit, AuditRequest } from '@heyatom/bastion-client/nest';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import { CreatorService } from '@/modules/creator/creator.service';
-import { CreatorResponseDto } from '@/modules/creator/dto/creator-response.dto';
+import {
+  CreatorListResponseDto,
+  CreatorResponseDto,
+} from '@/modules/creator/dto/creator-response.dto';
 import { UpdateCreatorAdminDto } from '@/modules/creator/dto/update-creator-admin.dto';
 import { CreateCreatorAdminDto } from '@/modules/admin/dto/create-creator-admin.dto';
-import { AdminCreatorListResponseDto } from '@/modules/admin/dto/admin-response.dto';
+import { AdminCreatorListQuery } from '@/modules/admin/dto/admin-list-query.dto';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+} from '@heyatom/nest-common';
 
 @ApiTags('Admin - Creators')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -43,7 +50,7 @@ export class CreatorsAdminController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new creator for a client' })
-  @ApiResponse({ status: 201, type: CreatorResponseDto })
+  @ApiCreatedData(CreatorResponseDto)
   @ApiResponse({
     status: 400,
     description: 'Invalid data or reserved externalId',
@@ -72,49 +79,27 @@ export class CreatorsAdminController {
     summary:
       'List creators (scoped to accessible clients, system creator excluded)',
   })
-  @ApiQuery({
-    name: 'clientId',
-    required: false,
-    description: 'Scope to a specific client',
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    description: 'Search by externalId or username',
-  })
-  @ApiQuery({
-    name: 'isBookmarked',
-    required: false,
-    type: Boolean,
-    description:
-      'If true, returns only creators bookmarked by the current admin',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({
-    status: 200,
-    description: 'Paginated creator list (email is never returned)',
-    type: AdminCreatorListResponseDto,
-  })
+  @ApiPaginatedResponse(
+    CreatorListResponseDto,
+    'Paginated creator list (email is never returned)',
+  )
   listCreators(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('search') search?: string,
-    @Query('isBookmarked') isBookmarked?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
+    @Query() query: AdminCreatorListQuery,
   ) {
     const bookmarkedOnly =
-      isBookmarked !== undefined &&
-      ['true', '1'].includes(isBookmarked.toLowerCase());
+      query.isBookmarked !== undefined &&
+      ['true', '1'].includes(query.isBookmarked.toLowerCase());
 
-    return this.creatorService.listCreators(adminUser, {
-      clientId,
-      search,
-      ...(bookmarkedOnly && { isBookmarked: true }),
-      page: Number(page) || 1,
-      perPage: Number(perPage) || 20,
-    });
+    return this.creatorService.listCreators(
+      adminUser,
+      {
+        clientId: query.clientId,
+        search: query.search,
+        ...(bookmarkedOnly && { isBookmarked: true }),
+      },
+      query,
+    );
   }
 
   @Get(':id')
@@ -122,7 +107,7 @@ export class CreatorsAdminController {
     summary:
       'Get creator details by internal UUID (email and sensitive data excluded)',
   })
-  @ApiResponse({ status: 200, type: CreatorResponseDto })
+  @ApiOkData(CreatorResponseDto)
   @ApiResponse({ status: 404, description: 'Creator not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   getCreator(
@@ -138,7 +123,7 @@ export class CreatorsAdminController {
     description:
       'Admin can update creators from accessible clients. System creator cannot be updated.',
   })
-  @ApiResponse({ status: 200, type: CreatorResponseDto })
+  @ApiOkData(CreatorResponseDto)
   @ApiResponse({
     status: 400,
     description: 'Invalid data or system creator update attempt',

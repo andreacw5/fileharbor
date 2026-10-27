@@ -17,7 +17,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
@@ -27,7 +26,8 @@ import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
   AdminDeleteResponseDto,
   AdminAvatarResponseDto,
-  AdminAvatarListResponseDto,
+  AdminAvatarListItemDto,
+  AdminReoptimizeFailedResponseDto,
 } from '../dto/admin-response.dto';
 import { AvatarService } from '@/modules/avatar/avatar.service';
 import { plainToInstance } from 'class-transformer';
@@ -35,13 +35,16 @@ import {
   assertClientAccess,
   buildClientWhere,
 } from '../helpers/admin-access.helper';
-import {
-  OPTIMIZE_STATUSES,
-  parseOptimizeStatusQuery,
-} from '../helpers/admin-query.helper';
+import { parseOptimizeStatusQuery } from '../helpers/admin-query.helper';
 import { AdminReoptimizeFailedDto } from '../dto/admin-reoptimize-failed.dto';
 import { OPTIMIZE_GIVEN_UP_WHERE } from '@/modules/storage/storage.service';
 import { RouteHelperService, clientRef } from '@/utils/route.utils';
+import {
+  ApiOkData,
+  ApiPaginatedResponse,
+  paginate,
+} from '@heyatom/nest-common';
+import { AdminAvatarListQuery } from '../dto/admin-list-query.dto';
 
 @ApiTags('Admin - Avatars')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -59,36 +62,12 @@ export class AvatarsAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List avatars (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'creatorId', required: false })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    description: "Creator's externalId or username, contains, case-insensitive",
-  })
-  @ApiQuery({
-    name: 'optimizeStatus',
-    required: false,
-    enum: OPTIMIZE_STATUSES,
-    description:
-      'optimized, pending (the job will retry) or failed (the job gave up)',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminAvatarListResponseDto })
+  @ApiPaginatedResponse(AdminAvatarListItemDto)
   async listAvatars(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('creatorId') creatorId?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-    @Query('optimizeStatus') optimizeStatus?: string,
+    @Query() query: AdminAvatarListQuery,
   ) {
-    const pageNum = Number(page) || 1;
-    const take = Math.min(Number(perPage) || 20, 100);
-    const skip = (pageNum - 1) * take;
-
+    const { clientId, creatorId, search } = query;
     const where: any = buildClientWhere(adminUser, clientId);
     // The console lists avatars by username, so the search box must match it
     // too, not only the external id nobody sees.
@@ -105,11 +84,11 @@ export class AvatarsAdminController {
       };
     }
 
-    Object.assign(where, parseOptimizeStatusQuery(optimizeStatus));
+    Object.assign(where, parseOptimizeStatusQuery(query.optimizeStatus));
 
     const { avatars, total } = await this.avatarService.findAdminAvatars(
       where,
-      { skip, take },
+      { skip: query.skip, take: query.limit },
     );
 
     const data = avatars.map((avatar) => {
@@ -124,15 +103,7 @@ export class AvatarsAdminController {
       return { ...avatar, fullPath };
     });
 
-    return {
-      data,
-      pagination: {
-        page: pageNum,
-        perPage: take,
-        total,
-        totalPages: Math.ceil(total / take),
-      },
-    };
+    return paginate(data, total, query);
   }
 
   @Post('reoptimize-failed')
@@ -142,10 +113,7 @@ export class AvatarsAdminController {
     description:
       'Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.',
   })
-  @ApiResponse({
-    status: 200,
-    schema: { properties: { count: { type: 'number' } } },
-  })
+  @ApiOkData(AdminReoptimizeFailedResponseDto)
   @ApiResponse({ status: 403, description: 'clientId outside your scope' })
   @Audit('fh_avatar.reoptimize_queued', {
     metadata: (r: { count: number }, req: AuditRequest) => ({
@@ -166,7 +134,7 @@ export class AvatarsAdminController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get avatar details' })
-  @ApiResponse({ status: 200, type: AdminAvatarResponseDto })
+  @ApiOkData(AdminAvatarResponseDto)
   async getAvatar(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -194,7 +162,7 @@ export class AvatarsAdminController {
   @Delete(':id')
   @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an avatar (admin)' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @Audit('fh_avatar.deleted', {
     metadata: (_r: unknown, req: AuditRequest) => ({ avatarId: req.params.id }),
   })

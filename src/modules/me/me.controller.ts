@@ -27,6 +27,7 @@ import {
   DeleteAvatarResponseDto,
 } from '@/modules/avatar/dto';
 import { MeAvatarStatusDto } from './dto';
+import { ApiOkData } from '@heyatom/nest-common';
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_AVATAR_MIME_TYPES = [
@@ -52,7 +53,7 @@ export class MeController {
 
   @Get('avatar')
   @ApiOperation({ summary: "Get the current user's avatar status" })
-  @ApiResponse({ status: 200, type: MeAvatarStatusDto })
+  @ApiOkData(MeAvatarStatusDto)
   async getAvatar(
     @CurrentUser() user: BastionUserPayload,
   ): Promise<MeAvatarStatusDto> {
@@ -69,7 +70,7 @@ export class MeController {
       properties: { file: { type: 'string', format: 'binary' } },
     },
   })
-  @ApiResponse({ status: 200, type: AvatarResponseDto })
+  @ApiOkData(AvatarResponseDto)
   @ApiResponse({
     status: 400,
     description: 'No file uploaded, or an unsupported image format',
@@ -109,7 +110,7 @@ export class MeController {
 
   @Delete('avatar')
   @ApiOperation({ summary: "Delete the current user's avatar" })
-  @ApiResponse({ status: 200, type: DeleteAvatarResponseDto })
+  @ApiOkData(DeleteAvatarResponseDto)
   @ApiResponse({ status: 404, description: 'No avatar to delete' })
   @ApiResponse({
     status: 422,

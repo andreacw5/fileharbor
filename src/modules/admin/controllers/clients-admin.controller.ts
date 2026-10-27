@@ -12,12 +12,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BastionUserGuard } from '@/modules/bastion/guards/bastion-user.guard';
 import { CurrentAdminUser } from '@/modules/bastion/decorators/current-admin-user.decorator';
 import { RequirePermission } from '@/modules/bastion/decorators/require-permission.decorator';
@@ -36,6 +31,7 @@ import {
   assertTenantSlugAllowed,
   resolveAllowedClients,
 } from '../helpers/admin-access.helper';
+import { ApiCreatedData, ApiOkData } from '@heyatom/nest-common';
 
 @ApiTags('Admin - Clients')
 // Every console call reaches us from Meridian's BFF, one IP for every admin: an
@@ -52,7 +48,7 @@ export class ClientsAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List accessible clients with their stats' })
-  @ApiResponse({ status: 200, type: [AdminClientResponseDto] })
+  @ApiOkData([AdminClientResponseDto])
   async listClients(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminClientResponseDto[]> {
@@ -67,7 +63,7 @@ export class ClientsAdminController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get client details' })
-  @ApiResponse({ status: 200, type: AdminClientResponseDto })
+  @ApiOkData(AdminClientResponseDto)
   async getClient(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -83,7 +79,7 @@ export class ClientsAdminController {
   @Post()
   @RequirePermission('fileharbor-config.manage')
   @ApiOperation({ summary: 'Create a new client (SUPER_ADMIN only)' })
-  @ApiResponse({ status: 201, type: AdminClientCreatedResponseDto })
+  @ApiCreatedData(AdminClientCreatedResponseDto)
   @Audit('fh_client.created', {
     metadata: (r: AdminClientCreatedResponseDto) => ({
       clientId: r.id,
@@ -133,7 +129,7 @@ export class ClientsAdminController {
   @ApiOperation({
     summary: 'Update client name, status and Tinify settings',
   })
-  @ApiResponse({ status: 200, type: AdminClientResponseDto })
+  @ApiOkData(AdminClientResponseDto)
   @Audit('fh_client.updated', {
     // Only the field names, never their values: the body can carry a Tinify API
     // key.

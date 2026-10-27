@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { plainToInstance } from 'class-transformer';
+import { paginate, PageParams } from '@heyatom/nest-common';
 import { Prisma, Creator } from '@prisma/client';
 import { AdminJwtPayload } from '@/modules/bastion/bastion.types';
 import {
@@ -36,13 +37,6 @@ export class CreatorService {
   ) {}
 
   // ─── Private helpers ──────────────────────────────────────────────────────
-
-  /** Normalises page/perPage into skip/take with a hard cap of 100 per page. */
-  private buildPagination(page?: number, perPage?: number) {
-    const p = page || 1;
-    const take = Math.min(perPage || 20, 100);
-    return { page: p, take, skip: (p - 1) * take };
-  }
 
   /**
    * Flattens Prisma `_count` relations and any extra fields onto the raw record,
@@ -98,15 +92,11 @@ export class CreatorService {
 
   async listCreatorsForClient(
     clientId: string,
-    filters: { search?: string; page?: number; perPage?: number } = {},
+    filters: { search?: string },
+    params: PageParams,
   ) {
     this.logger.log(
-      `listCreatorsForClient clientId=${clientId} search="${filters.search ?? ''}" page=${filters.page ?? 1}`,
-    );
-
-    const { page, take, skip } = this.buildPagination(
-      filters.page,
-      filters.perPage,
+      `listCreatorsForClient clientId=${clientId} search="${filters.search ?? ''}" page=${params.page}`,
     );
 
     const where: any = { clientId, externalId: { not: SYSTEM_USER_ID } };
@@ -122,8 +112,8 @@ export class CreatorService {
       this.prisma.creator.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip,
-        take,
+        skip: params.skip,
+        take: params.limit,
         include: {
           _count: { select: { images: true, albums: true, videos: true } },
         },
@@ -139,15 +129,7 @@ export class CreatorService {
       this.mapCreator(CreatorListResponseDto, u),
     );
 
-    return {
-      data,
-      pagination: {
-        page,
-        perPage: take,
-        total,
-        totalPages: Math.ceil(total / take),
-      },
-    };
+    return paginate(data, total, params);
   }
 
   async createCreatorForClient(
@@ -207,18 +189,13 @@ export class CreatorService {
       clientId?: string;
       search?: string;
       isBookmarked?: boolean;
-      page?: number;
-      perPage?: number;
-    } = {},
+    },
+    params: PageParams,
   ) {
     this.logger.log(
-      `listCreators called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${filters.page ?? 1}`,
+      `listCreators called by admin=${admin.sub} clientId=${filters.clientId ?? 'all'} search="${filters.search ?? ''}" isBookmarked=${filters.isBookmarked === true} page=${params.page}`,
     );
 
-    const { page, take, skip } = this.buildPagination(
-      filters.page,
-      filters.perPage,
-    );
     const where: any = buildClientWhere(admin, filters.clientId);
 
     if (filters.search) {
@@ -244,8 +221,8 @@ export class CreatorService {
       this.prisma.creator.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip,
-        take,
+        skip: params.skip,
+        take: params.limit,
         include: {
           _count: { select: { images: true, avatars: true, videos: true } },
           client: { select: { id: true, name: true, domain: true } },
@@ -291,15 +268,7 @@ export class CreatorService {
       });
     });
 
-    return {
-      data,
-      pagination: {
-        page,
-        perPage: take,
-        total,
-        totalPages: Math.ceil(total / take),
-      },
-    };
+    return paginate(data, total, params);
   }
 
   async getCreator(

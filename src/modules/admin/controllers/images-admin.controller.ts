@@ -47,8 +47,9 @@ import {
   AdminBulkDeleteResponseDto,
   AdminDeleteResponseDto,
   AdminImageResponseDto,
-  AdminImageListResponseDto,
+  AdminImageListItemDto,
   RegenerateImageResponseDto,
+  AdminReoptimizeFailedResponseDto,
 } from '../dto/admin-response.dto';
 import { ImageService } from '@/modules/image/image.service';
 import { plainToInstance } from 'class-transformer';
@@ -57,15 +58,21 @@ import {
   buildClientWhere,
 } from '../helpers/admin-access.helper';
 import {
-  OPTIMIZE_STATUSES,
   parseBooleanQuery,
   parseOptimizeStatusQuery,
 } from '../helpers/admin-query.helper';
+import { AdminImageListQuery } from '../dto/admin-list-query.dto';
 import {
   AdminDuplicateGroupDto,
   AdminDuplicateListQuery,
 } from '../dto/admin-duplicates.dto';
-import { ApiPaginatedResponse, PaginatedResult } from '@heyatom/nest-common';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+  NoTransform,
+  PaginatedResult,
+} from '@heyatom/nest-common';
 import {
   DHASH_PATTERN,
   OPTIMIZE_GIVEN_UP_WHERE,
@@ -127,11 +134,7 @@ export class ImagesAdminController {
       },
     },
   })
-  @ApiResponse({
-    status: 201,
-    description: 'Uploaded successfully',
-    type: [ImageResponseDto],
-  })
+  @ApiCreatedData([ImageResponseDto], 'Uploaded successfully')
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({
     status: 403,
@@ -178,68 +181,13 @@ export class ImagesAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List images (scoped to accessible clients)' })
-  @ApiQuery({ name: 'clientId', required: false })
-  @ApiQuery({ name: 'creatorId', required: false })
-  @ApiQuery({ name: 'albumId', required: false })
-  @ApiQuery({
-    name: 'name',
-    required: false,
-    description: 'Search by original filename',
-  })
-  @ApiQuery({
-    name: 'tags',
-    required: false,
-    isArray: true,
-    description: 'Filter by tags',
-  })
-  @ApiQuery({
-    name: 'isPrivate',
-    required: false,
-    enum: ['true', 'false'],
-    description: 'Only private (true) or only public (false) files',
-  })
-  @ApiQuery({
-    name: 'dHash',
-    required: false,
-    description: 'Only images with this dHash (64 hex chars)',
-  })
-  @ApiQuery({
-    name: 'optimizeStatus',
-    required: false,
-    enum: OPTIMIZE_STATUSES,
-    description:
-      'optimized, pending (the job will retry) or failed (the job gave up)',
-  })
-  @ApiQuery({
-    name: 'sortBy',
-    required: false,
-    enum: ['createdAt', 'size', 'originalName', 'views', 'downloads'],
-    description: 'Sort field',
-  })
-  @ApiQuery({
-    name: 'sortOrder',
-    required: false,
-    enum: ['asc', 'desc'],
-    description: 'Sort order',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  @ApiResponse({ status: 200, type: AdminImageListResponseDto })
+  @ApiPaginatedResponse(AdminImageListItemDto)
   async listImages(
     @CurrentAdminUser() adminUser: AdminJwtPayload,
-    @Query('clientId') clientId?: string,
-    @Query('creatorId') creatorId?: string,
-    @Query('albumId') albumId?: string,
-    @Query('name') name?: string,
-    @Query('tags') tags?: string | string[],
-    @Query('isPrivate') isPrivate?: string,
-    @Query('dHash') dHash?: string,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-    @Query('optimizeStatus') optimizeStatus?: string,
+    @Query() query: AdminImageListQuery,
   ) {
+    const { clientId, creatorId, albumId, name, tags, isPrivate, dHash } =
+      query;
     const tagsArray = tags
       ? Array.isArray(tags)
         ? tags
@@ -248,23 +196,6 @@ export class ImagesAdminController {
             .map((t) => t.trim())
             .filter(Boolean)
       : undefined;
-
-    const pageNum = Number(page) || 1;
-    const take = Math.min(Number(perPage) || 20, 100);
-    const skip = (pageNum - 1) * take;
-
-    // Validate and set sort parameters
-    const allowedSortFields = [
-      'createdAt',
-      'size',
-      'originalName',
-      'views',
-      'downloads',
-    ];
-    const validSortBy =
-      sortBy && allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    const validSortOrder =
-      sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
     const where: any = buildClientWhere(adminUser, clientId);
     if (creatorId) where.creator = { id: creatorId };
@@ -280,7 +211,7 @@ export class ImagesAdminController {
       where.dHash = dHash;
     }
     // isOptimized / optimizeAttempts: no other filter sets them
-    Object.assign(where, parseOptimizeStatusQuery(optimizeStatus));
+    Object.assign(where, parseOptimizeStatusQuery(query.optimizeStatus));
     if (tagsArray && tagsArray.length > 0) {
       where.imageTags = {
         some: { tag: { name: { in: normalizeTagNames(tagsArray) } } },
@@ -289,8 +220,8 @@ export class ImagesAdminController {
 
     return this.imageService.findAdminImages(
       where,
-      { skip, take, page: pageNum },
-      { field: validSortBy, order: validSortOrder },
+      query,
+      { field: query.sortBy, order: query.sortOrder },
       adminUser.actorId,
     );
   }
@@ -322,7 +253,7 @@ export class ImagesAdminController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get image details' })
-  @ApiResponse({ status: 200, type: AdminImageResponseDto })
+  @ApiOkData(AdminImageResponseDto)
   async getImage(
     @Param('id') id: string,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
@@ -362,7 +293,7 @@ export class ImagesAdminController {
     summary:
       'Update image metadata (originalName, isPrivate, tags, description)',
   })
-  @ApiResponse({ status: 200, type: AdminImageResponseDto })
+  @ApiOkData(AdminImageResponseDto)
   @Audit('fh_image.updated', {
     metadata: (_r: unknown, req: AuditRequest) => ({
       imageId: req.params.id,
@@ -408,7 +339,7 @@ export class ImagesAdminController {
     description:
       'Up to 100 ids. Each image is deleted on its own: one that is missing or on a client the admin cannot see lands in `failed` (both read as "Image not found", so the answer leaks nothing) and the rest go ahead.',
   })
-  @ApiResponse({ status: 200, type: AdminBulkDeleteResponseDto })
+  @ApiOkData(AdminBulkDeleteResponseDto)
   @Audit('fh_image.deleted', {
     metadata: (r: AdminBulkDeleteResponseDto) => ({
       count: r?.deleted?.length ?? 0,
@@ -451,10 +382,7 @@ export class ImagesAdminController {
     description:
       'Only rows at MAX_OPTIMIZE_ATTEMPTS (optimizeStatus=failed): the others are still in the queue.',
   })
-  @ApiResponse({
-    status: 200,
-    schema: { properties: { count: { type: 'number' } } },
-  })
+  @ApiOkData(AdminReoptimizeFailedResponseDto)
   @ApiResponse({ status: 403, description: 'clientId outside your scope' })
   @Audit('fh_image.reoptimize_queued', {
     metadata: (r: { count: number }, req: AuditRequest) => ({
@@ -476,7 +404,7 @@ export class ImagesAdminController {
   @Delete(':id')
   @RequirePermission('fileharbor-media.moderate')
   @ApiOperation({ summary: 'Force delete an image (admin)' })
-  @ApiResponse({ status: 200, type: AdminDeleteResponseDto })
+  @ApiOkData(AdminDeleteResponseDto)
   @Audit('fh_image.deleted', {
     // The response is a generic success DTO, so the subject comes from the route.
     metadata: (_r: unknown, req: AuditRequest) => ({ imageId: req.params.id }),
@@ -497,6 +425,7 @@ export class ImagesAdminController {
     );
   }
 
+  @NoTransform()
   @Get(':id/download')
   @ApiOperation({
     summary: 'Download image file (admin)',
@@ -552,6 +481,7 @@ export class ImagesAdminController {
     });
   }
 
+  @NoTransform()
   @Get(':id/file')
   @ApiOperation({
     summary: 'Serve image file inline (admin)',
@@ -607,7 +537,7 @@ export class ImagesAdminController {
     description:
       'Rebuilds thumb.webp from the stored original and empties the variant cache; id, original, size and optimize state are untouched. Public GETs are cached `immutable`: a cache holding the old thumb keeps it, reload with `?t=<updatedAt>`.',
   })
-  @ApiResponse({ status: 200, type: RegenerateImageResponseDto })
+  @ApiOkData(RegenerateImageResponseDto)
   @ApiResponse({ status: 403, description: 'Access denied' })
   @ApiResponse({ status: 404, description: 'Image or original file not found' })
   @ApiResponse({
@@ -637,11 +567,10 @@ export class ImagesAdminController {
     description:
       'Sends the existing image to Tinify API for additional compression, replaces the original, and regenerates the thumbnail. Returns compression statistics along with the updated image. Requires the client to have Tinify enabled (tinifyActive=true) and a valid API key configured. The compression limit is configurable per client (default: 500/month for free tier).',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Image compressed successfully with compression stats',
-    type: TinifyCompressionResponseDto,
-  })
+  @ApiOkData(
+    TinifyCompressionResponseDto,
+    'Image compressed successfully with compression stats',
+  )
   @ApiResponse({
     status: 400,
     description:

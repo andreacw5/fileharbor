@@ -8,10 +8,13 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '@heyatom/bastion-client/nest';
+import { NoTransform } from '@heyatom/nest-common';
 import { StorageHealthIndicator } from './storage-health.indicator';
 
 @ApiTags('health')
 @SkipThrottle()
+// Probes: terminus' own body (503 `details` included), no envelope
+@NoTransform()
 @Controller('health')
 export class HealthController {
   constructor(

@@ -13,6 +13,7 @@ import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { MetricsService } from '@heyatom/nest-common/metrics';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
+import { PageParams } from '@heyatom/nest-common';
 
 jest.mock('fs/promises');
 
@@ -470,7 +471,10 @@ describe('VideoService', () => {
     });
 
     it('should return paginated video list', async () => {
-      const result = await service.listVideos({ clientId: mockClientId });
+      const result = await service.listVideos(
+        { clientId: mockClientId },
+        new PageParams(),
+      );
 
       expect(result).toBeDefined();
       expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
@@ -483,10 +487,10 @@ describe('VideoService', () => {
     });
 
     it('should filter by creatorId', async () => {
-      await service.listVideos({
-        clientId: mockClientId,
-        creatorId: mockCreatorExternalId,
-      });
+      await service.listVideos(
+        { clientId: mockClientId, creatorId: mockCreatorExternalId },
+        new PageParams(),
+      );
 
       expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -496,7 +500,10 @@ describe('VideoService', () => {
     });
 
     it('should filter by tag', async () => {
-      await service.listVideos({ clientId: mockClientId, tag: 'comedy' });
+      await service.listVideos(
+        { clientId: mockClientId, tag: 'comedy' },
+        new PageParams(),
+      );
 
       expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -507,37 +514,23 @@ describe('VideoService', () => {
       );
     });
 
-    it('should cap perPage at 100', async () => {
-      await service.listVideos({ clientId: mockClientId, perPage: 999 });
-
-      expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 100 }),
-      );
-    });
-
-    it('should use page 1 as minimum', async () => {
-      await service.listVideos({ clientId: mockClientId, page: -5 });
-
-      expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 0 }),
-      );
-    });
-
     it('should return empty list when no videos', async () => {
       mockPrismaService.video.findMany.mockResolvedValue([]);
       mockPrismaService.video.count.mockResolvedValue(0);
 
-      const result = await service.listVideos({ clientId: mockClientId });
+      const result = await service.listVideos(
+        { clientId: mockClientId },
+        new PageParams(),
+      );
 
       expect(result).toBeDefined();
     });
 
-    it('should calculate correct skip for page 3 with perPage 10', async () => {
-      await service.listVideos({
-        clientId: mockClientId,
-        page: 3,
-        perPage: 10,
-      });
+    it('should calculate correct skip for page 3 with limit 10', async () => {
+      await service.listVideos(
+        { clientId: mockClientId },
+        Object.assign(new PageParams(), { page: 3, limit: 10 }),
+      );
 
       expect(mockPrismaService.video.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ skip: 20, take: 10 }),

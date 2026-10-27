@@ -11,7 +11,6 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import {
-  ApiQuery,
   ApiSecurity,
   ApiTags,
   ApiOperation,
@@ -20,9 +19,18 @@ import {
 import { CreatorService } from './creator.service';
 import { ClientId } from '@/modules/client/decorators/client.decorator';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
-import { CreatorResponseDto } from './dto/creator-response.dto';
+import {
+  CreatorListResponseDto,
+  CreatorResponseDto,
+} from './dto/creator-response.dto';
 import { UpdateCreatorByExternalIdDto } from './dto/update-creator-by-external-id.dto';
 import { CreateCreatorDto } from './dto/create-creator.dto';
+import { ListCreatorsDto } from './dto/list-creators.dto';
+import {
+  ApiCreatedData,
+  ApiOkData,
+  ApiPaginatedResponse,
+} from '@heyatom/nest-common';
 
 @ApiTags('Creators')
 @ApiSecurity('api-key')
@@ -35,35 +43,23 @@ export class CreatorClientController {
   @ApiOperation({
     summary: 'List creators for this client (email is never returned)',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of creators' })
+  @ApiPaginatedResponse(CreatorListResponseDto)
   @ApiResponse({
     status: 401,
     description: 'Missing or invalid X-API-Key header',
   })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    description: 'Search by externalId or username',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'perPage', required: false, type: Number })
-  listCreators(
-    @ClientId() clientId: string,
-    @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('perPage') perPage?: number,
-  ) {
-    return this.creatorService.listCreatorsForClient(clientId, {
-      search,
-      page,
-      perPage,
-    });
+  listCreators(@ClientId() clientId: string, @Query() query: ListCreatorsDto) {
+    return this.creatorService.listCreatorsForClient(
+      clientId,
+      { search: query.search },
+      query,
+    );
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a creator for this client' })
-  @ApiResponse({ status: 201, type: CreatorResponseDto })
+  @ApiCreatedData(CreatorResponseDto)
   @ApiResponse({
     status: 400,
     description: 'Invalid payload or reserved externalId',
@@ -85,7 +81,7 @@ export class CreatorClientController {
 
   @Patch('external/:externalId')
   @ApiOperation({ summary: 'Sync creator username/email by externalId' })
-  @ApiResponse({ status: 200, type: CreatorResponseDto })
+  @ApiOkData(CreatorResponseDto)
   @ApiResponse({
     status: 400,
     description: 'Invalid payload or no fields to update',

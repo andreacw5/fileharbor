@@ -14,12 +14,8 @@ import { RouteHelperService } from '@/utils/route.utils';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
-import {
-  VideoResponseDto,
-  ListVideosResponseDto,
-  DeleteVideoResponseDto,
-  VideoPaginationMetaDto,
-} from './dto';
+import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
+import { VideoResponseDto, DeleteVideoResponseDto } from './dto';
 import {
   buildVideoTagCreateInput,
   extractVideoTagNames,
@@ -227,17 +223,14 @@ export class VideoService {
     };
   }
 
-  async listVideos(filters: {
-    clientId: string;
-    creatorId?: string;
-    tag?: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<ListVideosResponseDto> {
-    const page = Math.max(filters.page || 1, 1);
-    const perPage = Math.min(filters.perPage || 20, 100);
-    const skip = (page - 1) * perPage;
-
+  async listVideos(
+    filters: {
+      clientId: string;
+      creatorId?: string;
+      tag?: string;
+    },
+    params: PageParams,
+  ): Promise<PaginatedResult<VideoResponseDto>> {
     const where: any = { clientId: filters.clientId };
     if (filters.creatorId) where.creatorId = filters.creatorId;
     if (filters.tag) {
@@ -248,8 +241,8 @@ export class VideoService {
       this.prisma.video.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: perPage,
+        skip: params.skip,
+        take: params.limit,
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
           creator: { select: { id: true, externalId: true, username: true } },
@@ -259,17 +252,10 @@ export class VideoService {
       this.prisma.video.count({ where }),
     ]);
 
-    const data = videos.map((v) => this.formatVideoResponse(v));
-    const pagination = plainToInstance(
-      VideoPaginationMetaDto,
-      { page, perPage, total, totalPages: Math.ceil(total / perPage) },
-      { excludeExtraneousValues: true },
-    );
-
-    return plainToInstance(
-      ListVideosResponseDto,
-      { data, pagination },
-      { excludeExtraneousValues: true },
+    return paginate(
+      videos.map((v) => this.formatVideoResponse(v)),
+      total,
+      params,
     );
   }
 
@@ -369,7 +355,7 @@ export class VideoService {
 
   async findAdminVideos(
     where: any,
-    options: { skip: number; take: number; page: number },
+    params: PageParams,
     sort?: { field: string; order: 'asc' | 'desc' },
     actorId?: string,
   ) {
@@ -381,8 +367,8 @@ export class VideoService {
       this.prisma.video.findMany({
         where,
         orderBy,
-        skip: options.skip,
-        take: options.take,
+        skip: params.skip,
+        take: params.limit,
         include: {
           videoTags: { include: { tag: { select: { name: true } } } },
           creator: { select: { id: true, externalId: true, username: true } },
@@ -407,15 +393,7 @@ export class VideoService {
       isBookmarked: bookmarkedIds.has(video.id),
     }));
 
-    return {
-      data,
-      pagination: {
-        page: options.page,
-        perPage: options.take,
-        total,
-        totalPages: Math.ceil(total / options.take),
-      },
-    };
+    return paginate(data, total, params);
   }
 
   async findAdminVideoById(videoId: string, actorId?: string) {

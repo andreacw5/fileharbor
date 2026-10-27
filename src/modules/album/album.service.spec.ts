@@ -5,6 +5,7 @@ import { AlbumService } from './album.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
+import { PageParams } from '@heyatom/nest-common';
 
 describe('AlbumService', () => {
   let service: AlbumService;
@@ -294,17 +295,18 @@ describe('AlbumService', () => {
       mockPrismaService.album.findMany.mockResolvedValue([mockAlbumWithItems]);
       mockPrismaService.album.count.mockResolvedValue(1);
 
-      const result = await service.listAlbums({
-        clientId: mockClientId,
-        page: 1,
-        perPage: 20,
-      });
+      const result = await service.listAlbums(
+        { clientId: mockClientId },
+        new PageParams(),
+      );
 
       expect(result.data).toHaveLength(1);
-      expect(result.pagination.page).toBe(1);
-      expect(result.pagination.perPage).toBe(20);
-      expect(result.pagination.total).toBe(1);
-      expect(result.pagination.totalPages).toBe(1);
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      });
     });
 
     it('should filter albums by public status', async () => {
@@ -313,7 +315,10 @@ describe('AlbumService', () => {
       ]);
       mockPrismaService.album.count.mockResolvedValue(1);
 
-      await service.listAlbums({ clientId: mockClientId, public: true });
+      await service.listAlbums(
+        { clientId: mockClientId, public: true },
+        new PageParams(),
+      );
 
       expect(mockPrismaService.album.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -328,7 +333,10 @@ describe('AlbumService', () => {
       ]);
       mockPrismaService.album.count.mockResolvedValue(1);
 
-      await service.listAlbums({ clientId: mockClientId, search: 'Test' });
+      await service.listAlbums(
+        { clientId: mockClientId, search: 'Test' },
+        new PageParams(),
+      );
 
       expect(mockPrismaService.album.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -339,14 +347,17 @@ describe('AlbumService', () => {
       );
     });
 
-    it('should limit perPage to maximum 100', async () => {
+    it('pages with the validated params', async () => {
       mockPrismaService.album.findMany.mockResolvedValue([]);
       mockPrismaService.album.count.mockResolvedValue(0);
 
-      await service.listAlbums({ clientId: mockClientId, perPage: 200 });
+      await service.listAlbums(
+        { clientId: mockClientId },
+        Object.assign(new PageParams(), { page: 3, limit: 10 }),
+      );
 
       expect(mockPrismaService.album.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 100 }),
+        expect.objectContaining({ skip: 20, take: 10 }),
       );
     });
   });
@@ -1016,10 +1027,11 @@ describe('AlbumService', () => {
         1,
       ]);
 
-      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
-        page: 1,
-        perPage: 20,
-      });
+      const result = await service.listAlbumItems(
+        mockAlbumId,
+        mockClientId,
+        new PageParams(),
+      );
 
       // mapAlbumItem returns a union whose base variant carries neither image
       // nor video, so the payload is narrowed here rather than in the assertion.
@@ -1060,10 +1072,11 @@ describe('AlbumService', () => {
         2,
       ]);
 
-      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
-        page: 1,
-        perPage: 20,
-      });
+      const result = await service.listAlbumItems(
+        mockAlbumId,
+        mockClientId,
+        new PageParams(),
+      );
 
       const [pub, priv] = result.data.map(
         (item) => (item as { image: { srcset?: string } }).image,
@@ -1101,10 +1114,11 @@ describe('AlbumService', () => {
         1,
       ]);
 
-      const result = await service.listAlbumItems(mockAlbumId, mockClientId, {
-        page: 1,
-        perPage: 20,
-      });
+      const result = await service.listAlbumItems(
+        mockAlbumId,
+        mockClientId,
+        new PageParams(),
+      );
 
       const { video } = result.data[0] as {
         video: { url: string; thumbnailUrl: string };
