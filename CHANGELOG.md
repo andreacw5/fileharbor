@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.0.0] – 2026-10-27
+
+**Breaking**: API contract v1 (heyatom platform plan 02, `docs/platform/plans/02-api-contract-cutover.md`).
+Deploy **FileHarbor together with its consumers** on `@heyatom/client` ^1.0.0 (articuno, beacon,
+shelfie-api, almanac, dbdbuilds-api) and Meridian ≥ 2.0.0: old consumers break on the new shapes.
+No migration.
+
+### Changed
+- **Envelope**: every 2xx JSON response is `{ data }` (global `TransformInterceptor`). Files, streams
+  and `/health` are untouched (`@NoTransform()`); the `?info=true` JSON branch of image/avatar GETs is
+  `{ data: metadata }`.
+- **Pagination**: `perPage` → `limit` (default 20, max 100; tags max 500);
+  `{ data, pagination: { page, perPage, total, totalPages } }` → `{ data, meta: { total, page, limit, totalPages } }`
+  on every list (images, videos, albums, album items, creators and their admin counterparts, bookmarks).
+- Admin list routes read DTOs instead of raw query params; admin `sortBy` / `sortOrder` on images and
+  videos are validated (unknown value → 400 instead of a silent fallback).
+- Share links are paginated by the DB query, not sliced in memory.
+- OpenAPI documents the envelope (`ApiOkData` / `ApiCreatedData` / `ApiPaginatedResponse` from
+  `@heyatom/nest-common` 0.4.0).
+
+### Fixed
+- **Throttling**: calls with a valid client API key skip the per-IP throttler. Batches from one service
+  IP (e.g. a 34-file upload) no longer hit 429; missing or invalid keys stay IP-throttled.
+
+### Dependencies
+- Dependency updates.
+
+---
+
 ## [3.6.1] – 2026-10-25
 
 Deploy **FileHarbor first**, then Meridian (Meridian's `?dHash=` filter now expects 64 hex chars). One
