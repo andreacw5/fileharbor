@@ -22,6 +22,19 @@ RUN pnpm build
 # Remove devDependencies to keep only production deps (pruned node_modules)
 RUN pnpm prune --prod
 
+# Drop what prune keeps but the runtime never loads:
+# - the prisma CLI (+ studio, react, typescript, pglite): kept as a resolved peer of @prisma/client;
+#   migrations aren't shipped in this image anyway
+# - the query compilers of every database but postgres
+# - ffprobe binaries for other platforms (darwin, win32, linux/ia32), sharp's musl libvips
+RUN cd node_modules/.pnpm \
+ && rm -rf prisma@* @prisma+studio-core@* @prisma+engines@* @prisma+dev@* @electric-sql+pglite* \
+           typescript@* effect@* react@* react-dom@* @img+sharp-libvips-linuxmusl* @img+sharp-linuxmusl* \
+ && find @prisma+client@*/node_modules/@prisma/client/runtime \
+      \( -name '*cockroachdb*' -o -name '*mysql*' -o -name '*sqlite*' -o -name '*sqlserver*' \) -delete \
+ && find ffprobe-static@*/node_modules/ffprobe-static/bin -mindepth 2 -maxdepth 2 \
+      ! -path "*/linux/$(node -p process.arch)" -exec rm -rf {} +
+
 # Start a fresh runtime image
 FROM node:24.15.0-slim AS prod
 
