@@ -6008,7 +6008,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "4.0.0",
+    "version": "4.0.1",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
