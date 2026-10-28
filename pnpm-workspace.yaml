@@ -5,9 +5,12 @@ packages:
 overrides:
   multer: ^2.5.0
 
-allowBuilds:
-  '@prisma/engines': true
-  '@scarf/scarf': false
-  ffmpeg-static: true
-  prisma: true
-  sharp: true
+# pnpm 10.14 reads these keys (not `allowBuilds`, nor onlyBuiltDependencies in .npmrc).
+# Without ffmpeg-static's postinstall the binary is never downloaded: video thumbnails fail with ENOENT.
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - ffmpeg-static
+  - prisma
+  - sharp
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
