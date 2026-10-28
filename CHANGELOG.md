@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.0.1] – 2026-10-28
+
+Rebuild the image: nothing else to deploy, no migration.
+
+### Fixed
+- **Video thumbnails and metadata failed on every upload** (`spawn …/ffmpeg-static/ffmpeg ENOENT`, alert
+  `fileharbor_video_processing_failures_total`). pnpm 10.14 ignored `allowBuilds` and the `.npmrc`
+  `onlyBuiltDependencies`, so ffmpeg-static's postinstall never downloaded the binary into the image.
+  Build approvals now live in `pnpm-workspace.yaml` as `onlyBuiltDependencies` / `ignoredBuiltDependencies`.
+
+---
+
 ## [4.0.0] – 2026-10-27
 
 **Breaking**: API contract v1 (heyatom platform plan 02, `docs/platform/plans/02-api-contract-cutover.md`).
