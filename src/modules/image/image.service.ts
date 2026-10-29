@@ -782,7 +782,10 @@ export class ImageService implements OnModuleDestroy {
         client: { select: { domain: true } },
       },
     });
-    if (isPrivate || blurPublic) this.warmBlurred(updatedImage);
+    // warmBlurred reads the updated row: an already-blurPublic image PATCHed
+    // to isPrivate=false still needs its preview.
+    if (isPrivate !== undefined || blurPublic !== undefined)
+      this.warmBlurred(updatedImage);
 
     this.logger.log(
       `[updateImageMetadata] Success - ID: ${imageId}, Client: ${clientId}`,

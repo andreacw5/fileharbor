@@ -316,6 +316,22 @@ describe('ImageService', () => {
       );
     });
 
+    it('pre-generates blurred.webp for a public image with blurPublic', async () => {
+      await service.uploadImage(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        true,
+      );
+
+      expect(mockStorageService.blurImage).toHaveBeenCalled();
+    });
+
     it('still uploads when the blur fails', async () => {
       mockStorageService.blurImage.mockRejectedValue(new RenderBusyException());
 
@@ -1139,12 +1155,12 @@ describe('ImageService', () => {
     });
 
     describe('blurred.webp warm-up', () => {
-      const patchPrivate = async (isPrivate: boolean) => {
+      const patchPrivate = async (isPrivate: boolean, blurPublic = false) => {
         mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
         mockPrismaService.image.update.mockResolvedValue({
           ...mockImage,
           isPrivate,
-          blurPublic: false,
+          blurPublic,
           imageTags: [],
           client: { domain: mockDomain },
         });
@@ -1185,6 +1201,23 @@ describe('ImageService', () => {
         mockStorageService.fileExists.mockResolvedValue(false);
         await patchPrivate(false);
         expect(mockStorageService.blurImage).not.toHaveBeenCalled();
+      });
+
+      it('reads the updated row: still blurPublic after a PATCH to public', async () => {
+        mockStorageService.fileExists.mockResolvedValue(false);
+        await patchPrivate(false, true);
+        expect(mockStorageService.blurImage).toHaveBeenCalled();
+      });
+
+      it('only warns when the warm-up render fails', async () => {
+        mockStorageService.fileExists.mockResolvedValue(false);
+        // Once: patchPrivate sets the default implementation
+        mockStorageService.blurImage.mockRejectedValueOnce(
+          new RenderBusyException(),
+        );
+        await expect(patchPrivate(true)).resolves.toBeUndefined();
+        expect(mockStorageService.blurImage).toHaveBeenCalled();
+        expect(mockStorageService.saveFile).not.toHaveBeenCalled();
       });
     });
 
