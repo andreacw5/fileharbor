@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.1.1] – 2026-10-29
+
+Rebuild the image: nothing else to deploy, no migration.
+
+### Changed
+- **Blurred preview generated only where it is shown.** Upload pre-generates `blurred.webp` only for
+  private or `blurPublic` images; public ones get it lazily on the first `?blur=1`. A `PATCH` (client or
+  admin) that leaves an image private or `blurPublic` builds a missing one after the response. Regenerate
+  rebuilds it only if it already exists. Existing files are left in place.
+
+---
+
 ## [4.1.0] – 2026-10-29
 
 **Migration**: `20261029120000_image_blur_public` (adds `images."blurPublic"`, default `false`). The image
