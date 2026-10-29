@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.1.0] – 2026-10-29
+
+**Migration**: `20261029120000_image_blur_public` (adds `images."blurPublic"`, default `false`). The image
+ships no migrations: apply it before starting the new container.
+
+### Added
+- **Blurred preview** (plan 11): `GET /images/:id?blur=1` serves `blurred.webp`, a 480 px blurred
+  rendition built from the thumb. Same access as the original, unless the owner sets `blurPublic`
+  (upload or `PATCH /images/:imageId`, audited), which serves the preview to anyone. Pre-generated on
+  upload and rebuilt by regenerate; never falls back to the original (`422`/`503`), never counts as a view.
+
+### Fixed
+- Storage: `fileExists` now goes through `validatePath`, and `.`/empty path components are rejected
+  (hardening, not reachable from the API).
+
+### Changed
+- Docker image drops runtime-dead dependencies (prisma CLI, other databases' query compilers, foreign
+  ffprobe binaries, musl libvips): amd64 image 1.52 GB → 533 MB.
+
 ## [4.0.1] – 2026-10-28
 
 Rebuild the image: nothing else to deploy, no migration.

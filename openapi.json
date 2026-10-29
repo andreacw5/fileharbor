@@ -6023,7 +6023,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "4.0.1",
+    "version": "4.1.0",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
