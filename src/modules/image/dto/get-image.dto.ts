@@ -43,7 +43,7 @@ export class GetImageDto {
 
   @ApiPropertyOptional({
     description:
-      'Return the blurred preview (≤ 480 px, webp). Same access as the original, unless the image has blurPublic. Ignored with info or download; thumb, width, height and quality are ignored with it, format still applies',
+      'Return the blurred preview (≤ 480 px, webp). Same access as the original, unless the image has blurPublic. Ignored with info or download; thumb and quality are ignored with it; width, height (capped at 480) and format apply',
     example: false,
     type: Boolean,
   })

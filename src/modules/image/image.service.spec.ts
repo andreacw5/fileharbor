@@ -731,7 +731,6 @@ describe('ImageService', () => {
 
         const result = await service.getImageFile(image, {
           blur: true,
-          width: 800,
           quality: 100,
           thumb: true,
         });
@@ -744,21 +743,22 @@ describe('ImageService', () => {
         expect(mockStorageService.resizeImage).not.toHaveBeenCalled();
       });
 
-      it('converts blurred.webp to the requested format, uncached', async () => {
+      it('resizes/converts blurred.webp per request, uncached, quality fixed', async () => {
         existing('blurred');
         mockStorageService.readFile.mockResolvedValue(Buffer.from('blurred'));
         mockStorageService.resizeImage.mockResolvedValue(Buffer.from('jpeg'));
 
         const result = await service.getImageFile(image, {
           blur: true,
-          width: 800,
+          width: 300,
+          quality: 100,
           format: 'jpeg',
           skipDiskRead: true,
         });
 
         expect(mockStorageService.resizeImage).toHaveBeenCalledWith(
           Buffer.from('blurred'),
-          undefined,
+          320,
           undefined,
           'jpeg',
           50,

@@ -53,7 +53,7 @@ export interface ImageFileOptions {
   format?: 'webp' | 'jpeg' | 'png';
   quality?: number;
   thumb?: boolean;
-  /** The `?blur=1` rendition (plan 11): every other option but format and skipDiskRead is ignored. */
+  /** The `?blur=1` rendition (plan 11): only width, height, format and skipDiskRead apply. */
   blur?: boolean;
   /** Return only `filePath` when the file is already on disk (X-Accel-Redirect). */
   skipDiskRead?: boolean;
@@ -381,14 +381,15 @@ export class ImageService implements OnModuleDestroy {
 
     if (blur) {
       const blurred = await this.getBlurredFile(domain, image.id, fromDisk);
-      if (format === 'webp') return blurred;
-      // Converted per request, not cached: ≤ 480 px, and blurred.webp stays the one file.
+      if (format === 'webp' && !width && !height) return blurred;
+      // Resized/converted per request, not cached: ≤ 480 px (never enlarged),
+      // and blurred.webp stays the one file. Quality stays BLUR_QUALITY.
       return {
         mimeType: `image/${format}`,
         buffer: await this.storage.resizeImage(
           blurred.buffer ?? (await this.storage.readFile(blurred.filePath!)),
-          undefined,
-          undefined,
+          width,
+          height,
           format,
           BLUR_QUALITY,
         ),

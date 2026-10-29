@@ -230,7 +230,7 @@ export class ImageController {
     const clientId = req['clientId'];
     const creatorId = req['externalCreatorId'];
     // The blurred preview (plan 11): info and download win over it, and it wins
-    // over every transform but format.
+    // over thumb and quality.
     const blur = !!query.blur && !query.info && !query.download;
     const requestType = query.info
       ? 'metadata'
@@ -307,8 +307,13 @@ export class ImageController {
       const restricted =
         !(blur && image.blurPublic) && (image.isPrivate || !!query.token);
       const variant = blur
-        ? query.format && query.format !== 'webp'
-          ? `blur-${query.format}`
+        ? query.width || query.height || (query.format ?? 'webp') !== 'webp'
+          ? [
+              'blur',
+              snapSize(query.width) ?? '',
+              snapSize(query.height) ?? '',
+              query.format || 'webp',
+            ].join('-')
           : 'blur'
         : query.thumb
           ? 'thumb'
@@ -354,8 +359,8 @@ export class ImageController {
       const xAccel = this.config.get<boolean>('image.xAccelRedirect');
       const { buffer, mimeType, filePath } =
         await this.imageService.getImageFile(image, {
-          width: query.thumb ? undefined : query.width,
-          height: query.thumb ? undefined : query.height,
+          width: query.thumb && !blur ? undefined : query.width,
+          height: query.thumb && !blur ? undefined : query.height,
           format: query.format || 'webp',
           quality: query.quality,
           thumb: query.thumb,
