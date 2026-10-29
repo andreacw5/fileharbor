@@ -1,235 +1,117 @@
 <p align="center">
-  <a href="https://github.com/andreacw5/fileharbor" target="blank"><img src="app_logo.png" width="500" alt="File Harbor App Logo" /></a>
+  <a href="https://github.com/andreacw5/fileharbor" target="blank"><img src="app_logo.png" width="500" alt="FileHarbor logo" /></a>
 </p>
 
 <p align="center">
-Multi-tenant image management system built with NestJS 10, Prisma ORM, and PostgreSQL.
+Multi-tenant media service for images, videos, avatars and albums.<br/>
+NestJS 11 · Prisma 7 · PostgreSQL · Sharp
 </p>
+
 <p align="center">
-    <a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@andreacw5/fileharbor" alt="NPM Version" /></a>
-    <a href="https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md" target="_blank"><img alt="GitHub License" src="https://img.shields.io/github/license/andreacw5/fileharbor"></a>
+  <a href="https://github.com/andreacw5/fileharbor/blob/main/LICENSE.md"><img alt="License" src="https://img.shields.io/github/license/andreacw5/fileharbor"></a>
 </p>
+
+FileHarbor is the media CDN of the HeyAtom platform. Apps upload through an API key, FileHarbor stores
+everything as WebP on local disk, serves it with resizing and caching, and keeps it optimized in the
+background. Admins manage it through Meridian, signed in with Bastion.
 
 ## Features
 
-✅ **Multi-tenant Architecture**: Complete isolation between clients with API key authentication  
-✅ **Image Management**: Upload, store, and serve images with automatic WebP conversion  
-✅ **Avatar System**: Single avatar per user with automatic replacement  
-✅ **Album Support**: Organize images in public or private albums  
-✅ **Automatic Optimization**: Scheduled jobs for compression and EXIF removal  
-✅ **On-Demand Resizing**: Generate custom sizes and formats on the fly  
-✅ **Secure Access**: Token-based access for private albums  
-✅ **Rate Limiting**: Built-in throttling protection  
-✅ **API Documentation**: Auto-generated Swagger/OpenAPI docs  
+- **Multi-tenant**: every row is scoped by client, resolved from the `X-API-Key` header.
+- **Images**: WebP conversion, thumbnails, on-demand resize snapped to fixed sizes, ready-made `srcset`,
+  private images, share links, blurred previews (`?blur=1`), animated GIF/WebP kept animated.
+- **Videos**: MP4 upload, ffmpeg thumbnail and metadata, range streaming (optionally via nginx `X-Accel-Redirect`).
+- **Avatars**: one per creator, plus self-service `/me/avatar` for Bastion end users.
+- **Albums**: public or private, temporary access tokens, addressable by external id.
+- **Background jobs**: hourly re-optimization, opt-in Tinify compression per client, orphan file cleanup,
+  daily storage snapshots.
+- **Admin API**: cross-client console behind Bastion JWT with per-route permissions and per-client scope,
+  duplicate detection (dHash), storage reports, audit events to Bastion.
+- **Ops**: Prometheus metrics on a separate port, `/health/live` and `/health/ready`, request ids, Swagger.
 
-## Tech Stack
+## Quick start
 
-- **Framework**: NestJS 10 (Node.js/TypeScript)
-- **Database**: PostgreSQL with Prisma ORM
-- **Image Processing**: Sharp library
-- **Authentication**: JWT tokens, API Keys
-- **Package Manager**: pnpm (enforced via preinstall script)
-- **Testing**: Jest
-- **API Documentation**: Swagger/OpenAPI
-- **Caching**: HTTP ETag & Cache-Control headers
-- **Storage**: Local file system (extensible to S3/Cloud)
-
-## Installation
+Requires Node ≥ 22.12, pnpm and PostgreSQL. pnpm is enforced: `npm` and `yarn` refuse to install.
 
 ```bash
-# Install dependencies (pnpm only)
 pnpm install
-
-# Setup database
-cp .env.example .env
-# Edit .env with your database credentials
-
-# Generate Prisma client
+cp .env.example .env          # set DATABASE_URL at least
 pnpm run prisma:generate
-
-# Run migrations
-pnpm run prisma:migrate
-
-# Seed database with demo data (optional)
-pnpm run prisma:seed
+pnpm run prisma:migrate       # apply migrations
+pnpm run start:dev            # http://localhost:3000
 ```
 
-## Running the App
+- Swagger UI: `http://localhost:3000/docs` (on by default in `development`/`test`, `ENABLE_SWAGGER` otherwise)
+- Metrics: `http://localhost:9091/metrics`
 
-```bash
-# Development mode with hot reload
-pnpm run start:dev
+Every environment variable, with its default and purpose, is documented in [`.env.example`](.env.example)
+and validated at boot by `src/configs/config.validation.ts`.
 
-# Production build
-pnpm run build
-pnpm run start:prod
+## Authentication
+
+| Surface | Routes | Auth |
+|---|---|---|
+| Client API | `images`, `videos`, `avatars`, `albums`, `creators`, `client` | `X-API-Key` (+ `X-User-Id` for the acting creator) |
+| Admin API | `admin/*` | Bastion user JWT (`Authorization: Bearer`), `fileharbor-*` permissions |
+| Self-service | `me/avatar` | Bastion user JWT, tenant mapped to a client |
+| Public | `GET /images/:id`, shared albums, `health/*` | none (access rules per resource) |
+
+FileHarbor has no user accounts. Callers pass their own user id in `X-User-Id`; FileHarbor creates a
+matching `Creator` on first use. Uploads without it belong to the client's `system` creator.
+
+```http
+POST /images
+X-API-Key: <client-api-key>
+X-User-Id: <your-user-id>
+Content-Type: multipart/form-data
 ```
 
-The API will be available at `http://localhost:3000`
+Integration guide for other services: [`../docs/integrations/fileharbor.md`](../docs/integrations/fileharbor.md).
+The consumer SDK is `@heyatom/client`.
 
-## API Documentation
-
-Complete API documentation with interactive testing interface:
-- **Swagger UI**: `http://localhost:3000/docs`
-
-All endpoints, request/response schemas, and examples are available in the Swagger documentation.
-
-## Architecture
-
-### Multi-Tenant Flow
-
-1. Client sends request with `X-API-Key` header (validates and retrieves client - REQUIRED)
-2. `ClientInterceptor` validates and attaches client info to request
-3. All queries are scoped to `clientId`
-4. User isolation via `X-User-Id` header for user-specific operations
-
-**Security Note**: Only API Key authentication is supported.
-
-### Storage Structure
+## Storage layout
 
 ```
-storage/
-├── {domain}/
-│   ├── images/
-│   │   └── {imageId}/
-│   │       ├── original.webp
-│   │       └── thumb.webp
-│   └── avatars/
-│       └── {userId}/
-│           ├── avatar.webp
-│           └── thumb.webp
+storage/{client.domain || clientId}/
+  images/{imageId}/original.webp, thumb.webp, blurred.webp, variants/
+  avatars/{creatorId}/original.webp
+  videos/{videoId}/...
 ```
 
-## Request Headers
-
-### Required Headers
-
-```
-X-API-Key: {your-api-key}           # Required for authentication
-X-User-Id: {externalUserId}         # Required for user-specific operations
-```
-
-
-## Optimization Jobs
-
-The system runs hourly jobs to:
-- Convert images to WebP format
-- Remove EXIF metadata
-- Compress images
-- Generate optimized thumbnails
-
-Jobs run automatically via NestJS Schedule module.
-
-## Configuration
-
-Every variable, with its default and what it does, is in `.env.example` (validated at boot by
-`src/configs/config.validation.ts`).
-
-## Database Schema
-
-### Main Entities
-
-- **Client**: Multi-tenant clients with API keys
-- **User**: Users within each client
-- **Image**: Image metadata and storage paths
-- **Avatar**: Single avatar per user
-- **Album**: Image collections (public/private)
-- **AlbumImage**: Many-to-many relation
-- **AlbumToken**: Access tokens for private albums
-
-## Security Features
-
-- API key authentication for clients
-- User-level authorization
-- Token-based album access
-- Rate limiting on all endpoints
-- EXIF data sanitization
-- File type validation
-- Size limits on uploads
-
-## Performance Optimizations
-
-- ETag caching for static assets
-- Cache-Control headers
-- On-demand image generation
-- Batch processing for optimization jobs
-- Database indexing on frequently queried fields
+Paths are built only through `StorageService`, which sanitizes components and blocks traversal.
 
 ## Development
 
 ```bash
-# Watch mode
-pnpm run start:dev
-
-# Run tests
-pnpm run test
-pnpm run test:watch
-pnpm run test:cov
-
-# Linting and formatting
-pnpm run lint
-pnpm run format
-
-# Prisma Studio (DB GUI)
-pnpm run prisma:studio
-
-# Generate migration
-pnpm run prisma:migrate
+pnpm run start:dev        # watch mode
+pnpm run test             # Jest unit tests
+pnpm run lint             # eslint --fix
+pnpm run format           # prettier
+pnpm run prisma:studio    # DB GUI
+pnpm run openapi:dump     # refresh openapi.json
 ```
 
-## Production Deployment
+One-off maintenance scripts live in `src/scripts/` and ship in `dist/` (dry run unless `--apply`):
+`backfill-media-size`, `backfill-image-dhash`, `regenerate-thumbnails`.
 
-1. Set `NODE_ENV=production`
-2. Configure PostgreSQL connection
-3. Set up file storage (local or cloud)
-4. Configure reverse proxy (Nginx)
-5. Enable SSL/TLS
-6. Set up monitoring and logging
-7. Leave `API_PREFIX` empty (default) unless routes should live under a prefix — it applies to served routes and generated URLs alike
+## Deployment
 
-## Roadmap
+Docker images are built by CI only (amd64), from the [`Dockerfile`](Dockerfile). In production:
 
-### 🚀 Core Features
-- [ ] **Advanced Image Transformations**: Watermarks, filters, blur, grayscale, sepia effects
-- [ ] **Batch Upload API**: Multiple image upload in single request with progress tracking
-- [ ] **Image Collections**: Extended album functionality with sorting, filtering, and bulk operations
+- `NODE_ENV=production`, `CORS_ORIGIN` set (boot fails without it), `TRUST_PROXY_HOPS=1` behind nginx.
+- nginx serves `https://fileharbor.heyatom.dev/v2/...` and strips `/v2`: keep `API_PREFIX` empty and put
+  the public prefix in `BASE_URL`.
+- Never expose `METRICS_PORT`; Prometheus scrapes it on the internal network. Alert rules are in
+  [`monitoring/alerts.yml`](monitoring/alerts.yml).
 
-### 📊 Analytics & Monitoring
-- [ ] **Enhanced Analytics Dashboard**: Real-time usage metrics, popular images, client statistics
-- [ ] **Performance Metrics**: API response times, optimization job statistics, storage usage trends
-- [ ] **Client Usage Reports**: Bandwidth consumption, storage quotas, API call analytics
+## Docs
 
-### 🔐 Security & Authentication
-- [ ] **API Rate Limiting per Client**: Individual throttling limits based on client subscription
-- [ ] **Audit Logging**: Complete action history for compliance and security monitoring
-
-### 🎨 Advanced Image Processing
-- [ ] **AI-Powered Features**: Auto-tagging, content moderation, duplicate detection
-- [ ] **Dynamic Watermarking**: Configurable watermarks per client with position/opacity controls
-- [ ] **Format-Specific Optimizations**: AVIF support, progressive JPEG, animated WebP
-
-### 🔗 Integrations & API
-- [ ] **WebSocket Support**: Real-time notifications for upload progress, optimization status
-- [ ] **CDN Integration**: CloudFlare, AWS CloudFront integration for global distribution
-
-### 📱 User Experience
-- [ ] **Image Search & Filtering**: Advanced search by tags, date ranges, formats, sizes
-- [ ] **Bulk Operations Dashboard**: Mass deletion, optimization, and metadata editing
-
-### 🌐 Enterprise Features
-- [ ] **SSO Integration**: SAML/OAuth2 integration for enterprise client authentication
-- [ ] **Compliance Features**: GDPR data export/deletion, audit trails, data encryption
-
-### 🔄 Automation & Intelligence
-- [X] **Smart Cleanup**: Auto-deletion of unused images based on configurable policies
-- [ ] **Predictive Optimization**: Machine learning for optimal compression settings
-- [ ] **Content Insights**: Usage analytics and recommendations for image management
+- [`CLAUDE.md`](CLAUDE.md): architecture, auth, jobs, metrics and conventions in detail
+- [`docs/plans/`](docs/plans/README.md): feature plans and their status
+- [`docs/BACKLOG.md`](docs/BACKLOG.md): open work
+- [`docs/external-album-api.md`](docs/external-album-api.md): album API for clients
+- [`CHANGELOG.md`](CHANGELOG.md)
 
 ## License
 
-MIT
-
-## Support
-
-For issues and questions, please open a GitHub issue.
-
+[MIT](LICENSE.md)
