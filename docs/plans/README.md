@@ -12,3 +12,4 @@
 | 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | deferred |
 | 09 | [`srcset` nelle risposte immagine](09-srcset.md) | done |
 | 10 | [Via i webhook, audit sulla superficie client](10-webhooks-to-audit.md) | done |
+| 11 | [Anteprima sfocata delle private (`?blur=1`)](11-blurred-preview.md) | open (+ addendum `blurPublic` per wood19aw, approvato) |
