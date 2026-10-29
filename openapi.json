@@ -69,6 +69,11 @@
                     "type": "boolean",
                     "default": false
                   },
+                  "blurPublic": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Serve the ?blur=1 preview to anyone, even when the image is private"
+                  },
                   "username": {
                     "type": "string",
                     "description": "Username of the uploader (saved/updated on the creator record)"
@@ -231,6 +236,16 @@
             }
           },
           {
+            "name": "blur",
+            "required": false,
+            "in": "query",
+            "description": "Return the blurred preview (≤ 480 px, webp). Same access as the original, unless the image has blurPublic. Ignored with info or download; thumb, width, height, format and quality are ignored with it",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
+          },
+          {
             "name": "info",
             "required": false,
             "in": "query",
@@ -348,7 +363,7 @@
         ]
       },
       "patch": {
-        "description": "Update tags, description or isPrivate. Only the owner (X-User-Id) can update.",
+        "description": "Update tags, description, isPrivate or blurPublic. Only the owner (X-User-Id) can update.",
         "operationId": "ImageController_updateImage",
         "parameters": [
           {
@@ -6135,6 +6150,11 @@
             "description": "Whether the image is private",
             "example": false
           },
+          "blurPublic": {
+            "type": "boolean",
+            "description": "The ?blur=1 preview is served to anyone, even when private",
+            "example": false
+          },
           "tags": {
             "description": "Image tags for categorization",
             "example": [
@@ -6202,6 +6222,7 @@
           "mimeType",
           "isOptimized",
           "isPrivate",
+          "blurPublic",
           "tags",
           "views",
           "downloads",
@@ -6255,6 +6276,10 @@
           "isPrivate": {
             "type": "boolean",
             "description": "Make the image private or public. Bytes already served public may stay in browser and shared caches until they expire."
+          },
+          "blurPublic": {
+            "type": "boolean",
+            "description": "Serve the ?blur=1 preview to anyone, even when the image is private. The original keeps its own access."
           }
         }
       },
