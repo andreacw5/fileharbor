@@ -230,7 +230,7 @@ export class ImageController {
     const clientId = req['clientId'];
     const creatorId = req['externalCreatorId'];
     // The blurred preview (plan 11): info and download win over it, and it wins
-    // over every transform.
+    // over every transform but format.
     const blur = !!query.blur && !query.info && !query.download;
     const requestType = query.info
       ? 'metadata'
@@ -307,7 +307,9 @@ export class ImageController {
       const restricted =
         !(blur && image.blurPublic) && (image.isPrivate || !!query.token);
       const variant = blur
-        ? 'blur'
+        ? query.format && query.format !== 'webp'
+          ? `blur-${query.format}`
+          : 'blur'
         : query.thumb
           ? 'thumb'
           : [

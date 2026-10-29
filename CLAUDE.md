@@ -442,7 +442,7 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - **Blurred preview** (plan 11, `?blur=1`): `blurred.webp` beside the thumb, a rendition and not an access rule:
   same access as the original (`validateImageAccess` unchanged), except `Image.blurPublic` (owner-set, upload or
   `PATCH`), which serves the preview to anyone with `public, immutable`. Effective `blur = blur && !info && !download`;
-  with it every transform is ignored, ETag variant `blur`, never a view (304 included). `StorageService.blurImage`:
+  with it every transform but `format` is ignored (jpeg/png converted per request, never cached), ETag variant `blur` (`blur-<format>` for non-webp), never a view (304 included). `StorageService.blurImage`:
   two passes (32 px `toBuffer()`, then 480 px + `blur(6)`), because sharp keeps one `resize()` per pipeline and a
   single pass would blur the full source; constants in `image-variants.ts`, `BLUR_SOURCE_SIZE` is the knob. Source is
   the thumb (original only if the thumb is gone), first frame. Pre-generated only where a site shows it: on upload when

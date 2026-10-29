@@ -137,6 +137,13 @@ describe('ImageController.getImage ?blur=1', () => {
       expect(headers['Cache-Control']).toBe('private, no-store');
     });
 
+    it('passes format through and tags it in the ETag', async () => {
+      await get({ blur: true, format: 'jpeg' });
+
+      expect(fileOptions()).toMatchObject({ blur: true, format: 'jpeg' });
+      expect(headers.ETag).toBe('"img-1-blur-jpeg-0"');
+    });
+
     it('does not count a view on a 304 either', async () => {
       await get({ blur: true }, '"img-1-blur-0"');
 
