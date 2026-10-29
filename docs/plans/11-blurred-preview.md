@@ -1,10 +1,10 @@
 ---
 type: plan
 service: fileharbor
-status: open
+status: done
 estimate: 1d
 updated: 2026-10-29
-verified: 7dd0b13
+verified: f9d95ee
 ---
 
 # 11 · Anteprima sfocata delle immagini private (`?blur=1`)
@@ -215,3 +215,17 @@ a un anonimo, **quando il proprietario lo decide, per immagine**.
 
 Stima: +0,25d. Approvato (Almanac P-8, 29/10/2026): si fa insieme al piano 11; la sfocata delle bloccate
 non passa dal proxy di Almanac.
+
+## Implementazione (2026-10-29)
+
+Fatto come da piano, addendum compreso: `StorageService.blurImage`, `ImageService.getBlurredFile`
+(ramo chiuso di `getImageFile`), pre-generazione in upload e `regenerateImageThumb`, `blur` in
+`GetImageDto`, `Image.blurPublic` (migration `20261029120000_image_blur_public`) su upload, `PATCH`,
+risposta e audit; SDK rigenerato; doc in `CLAUDE.md` e `../docs/integrations/fileharbor.md`.
+
+Scostamento: il test sulla `stdev` usa una scacchiera a quadri da 50 px, non il rumore. Con sharp 0.35
+il rumore 2000×1000 esce piatto anche in una passata sola (0,9 contro 0,9), quindi non distingueva i
+due casi; la scacchiera sì (~20 contro ~1,5).
+
+Da fare dopo il deploy: la [Verifica](#verifica) manuale sopra e la migration.
+

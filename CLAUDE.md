@@ -57,6 +57,7 @@ Never construct paths manually — use `StorageService` helpers:
 ```
 storage/{client.domain || clientId}/images/{imageId}/original.webp
 storage/{client.domain || clientId}/images/{imageId}/thumb.webp
+storage/{client.domain || clientId}/images/{imageId}/blurred.webp
 storage/{client.domain || clientId}/avatars/{creatorId}/original.webp
 ```
 `StorageService.validatePath()` blocks directory traversal. `sanitizePathComponent()` strips `..`, `/`, `\`, and null bytes.
@@ -317,7 +318,7 @@ data, and one event per toggle would spend the `/events` budget on noise.
 Where the information is lost or visibility changes, client writes are audited too (plan 10), under the
 console's event names: `DELETE /images/:imageId`, `/videos/:id`, `/avatars/:externalUserId`,
 `/albums/:albumId` → `fh_{image,video,avatar,album}.deleted`; `PATCH /images/:imageId` and `/videos/:id`
-**only when the body carries `isPrivate`** → `fh_{image,video}.updated`. Nothing else: no uploads, no
+**only when the body carries `isPrivate`** (images: or `blurPublic`) → `fh_{image,video}.updated`. Nothing else: no uploads, no
 metadata or album edits, no share links (the row stays, or is temporary by design). There are no outgoing
 webhooks: the per-client Discord ones were removed.
 
@@ -329,8 +330,8 @@ webhooks: the per-client Discord ones were removed.
 - Metadata: `via: 'api_key'`, `clientId`, `externalUserId` (the `X-User-Id` actor, `null` without one), the
   resource id (`ownerExternalUserId` for the avatar's path). Never `userId`: an app's user id is not a
   Bastion user.
-- The PATCH events add `fields: ['isPrivate']` **and the `isPrivate` boolean**: the one value allowed in
-  metadata, since it is the fact being tracked and not a secret.
+- The PATCH events add `fields` (`isPrivate` and/or `blurPublic`) **and those booleans**: the only values allowed in
+  metadata, since they are the fact being tracked and not a secret.
 
 
 ## Self-Service Module (`/me`)
@@ -436,10 +437,19 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
   at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
-  (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. Uploads and the optimize jobs
-  don't use it.
-- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` from the stored original and
-  empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
+  (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. The optimize jobs don't
+  use it; upload and regenerate do, for the blurred preview only (best-effort: a full queue skips it).
+- **Blurred preview** (plan 11, `?blur=1`): `blurred.webp` beside the thumb, a rendition and not an access rule:
+  same access as the original (`validateImageAccess` unchanged), except `Image.blurPublic` (owner-set, upload or
+  `PATCH`), which serves the preview to anyone with `public, immutable`. Effective `blur = blur && !info && !download`;
+  with it every transform is ignored, ETag variant `blur`, never a view (304 included). `StorageService.blurImage`:
+  two passes (32 px `toBuffer()`, then 480 px + `blur(6)`), because sharp keeps one `resize()` per pipeline and a
+  single pass would blur the full source; constants in `image-variants.ts`, `BLUR_SOURCE_SIZE` is the knob. Source is
+  the thumb (original only if the thumb is gone), first frame. Pre-generated on upload for every image (best-effort),
+  rebuilt by regenerate, built and saved on the fly when missing, behind `renderLimiter`. The branch is closed:
+  `422`/`503`, **never** a fall-through to the original. Not in storage bytes or metrics.
+- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` (and `blurred.webp`, best-effort) from the
+  stored original and empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
   without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
   it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).
 

@@ -9,7 +9,12 @@ import { join } from 'path';
 import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
 import { deflateSync } from 'zlib';
-import { DHASH_PATTERN, FLAT_DHASH, StorageService } from './storage.service';
+import {
+  DHASH_PATTERN,
+  FLAT_DHASH,
+  RenderBusyException,
+  StorageService,
+} from './storage.service';
 
 // A PNG whose IHDR claims width x height but carries a single tiny IDAT:
 // the header is all metadata() reads, so this is what a decompression bomb
@@ -344,6 +349,11 @@ describe('StorageService.regenerateImageThumb', () => {
       await readFile(storage.getImageFilePath('d', 'img', 'thumb')),
     ).metadata();
     expect([thumb.width, thumb.height]).toEqual([100, 50]);
+    await expect(
+      sharp(
+        await readFile(storage.getImageFilePath('d', 'img', 'blurred')),
+      ).metadata(),
+    ).resolves.toMatchObject({ format: 'webp', width: 480, height: 240 });
     await expect(stat(variants)).rejects.toThrow();
     expect((await readFile(originalPath)).equals(original)).toBe(true);
   });
@@ -379,6 +389,20 @@ describe('StorageService.regenerateImageThumb', () => {
     ).rejects.toBeInstanceOf(InternalServerErrorException);
   });
 
+  it('still regenerates when the blur fails, dropping the stale blurred.webp', async () => {
+    await seed();
+    const blurred = storage.getImageFilePath('d', 'img', 'blurred');
+    await writeFile(blurred, 'stale');
+    jest
+      .spyOn(storage, 'blurImage')
+      .mockRejectedValueOnce(new UnprocessableEntityException());
+
+    await expect(
+      storage.regenerateImageThumb('d', 'img', 100, 70),
+    ).resolves.toBeUndefined();
+    await expect(stat(blurred)).rejects.toThrow();
+  });
+
   it('only warns when the variants cannot be cleared', async () => {
     await seed();
     jest
@@ -390,5 +414,79 @@ describe('StorageService.regenerateImageThumb', () => {
     await expect(
       stat(storage.getImageFilePath('d', 'img', 'thumb')),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('StorageService.blurImage', () => {
+  const storage = new StorageService({
+    get: () => undefined,
+  } as unknown as ConfigService);
+
+  it('shrinks before blurring: a 50 px checkerboard comes out flat at 480 px', async () => {
+    // 50 px squares survive a 2000 → 480 resize plus blur(6) (stdev ~20), not a
+    // pass through 32 px (~1.5): this fails if the two passes collapse into one.
+    const [width, height] = [2000, 1000];
+    const raw = Buffer.alloc(width * height);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++)
+        raw[y * width + x] =
+          (Math.floor(x / 50) + Math.floor(y / 50)) % 2 ? 255 : 0;
+    const board = await sharp(raw, { raw: { width, height, channels: 1 } })
+      .png()
+      .toBuffer();
+
+    const blurred = await storage.blurImage(board);
+
+    await expect(sharp(blurred).metadata()).resolves.toMatchObject({
+      format: 'webp',
+      width: 480,
+      height: 240,
+    });
+    const { channels } = await sharp(blurred).stats();
+    expect(channels[0].stdev).toBeLessThan(5);
+  });
+
+  it('takes the first frame of an animated image', async () => {
+    const frames = await Promise.all(
+      ['#f00', '#0f0'].map((background) =>
+        sharp({ create: { width: 40, height: 30, channels: 4, background } })
+          .png()
+          .toBuffer(),
+      ),
+    );
+    const gif = await sharp(frames, { join: { animated: true } })
+      .gif({ delay: [100, 100] })
+      .toBuffer();
+
+    const meta = await sharp(await storage.blurImage(gif), {
+      animated: true,
+    }).metadata();
+    expect(meta.pages ?? 1).toBe(1);
+    // One 40x30 frame, not every frame stacked into one tall image.
+    expect([meta.width, meta.height]).toEqual([480, 360]);
+  });
+
+  it('422s on bytes that are not an image', async () => {
+    await expect(storage.blurImage(Buffer.from('junk'))).rejects.toBeInstanceOf(
+      UnprocessableEntityException,
+    );
+  });
+
+  it('503s when the render queue is full', async () => {
+    const busy = new StorageService({
+      get: (key: string) =>
+        ({ RENDER_CONCURRENCY: 1, RENDER_QUEUE_LIMIT: 0 })[key],
+    } as unknown as ConfigService);
+    const png = await sharp({
+      create: { width: 64, height: 64, channels: 3, background: '#fff' },
+    })
+      .png()
+      .toBuffer();
+
+    const first = busy.blurImage(png);
+    await expect(busy.blurImage(png)).rejects.toBeInstanceOf(
+      RenderBusyException,
+    );
+    await first;
   });
 });

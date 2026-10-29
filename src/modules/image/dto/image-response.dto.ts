@@ -88,6 +88,14 @@ export class ImageResponseDto {
   isPrivate: boolean;
 
   @ApiProperty({
+    description: 'The ?blur=1 preview is served to anyone, even when private',
+    example: false,
+  })
+  @Expose()
+  @Transform(({ value }) => value || false)
+  blurPublic: boolean;
+
+  @ApiProperty({
     description: 'Image tags for categorization',
     type: [String],
     example: ['nature', 'landscape', 'sunset'],

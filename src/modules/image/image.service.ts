@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Logger,
   OnModuleDestroy,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
@@ -47,6 +48,8 @@ export interface ImageFileOptions {
   format?: 'webp' | 'jpeg' | 'png';
   quality?: number;
   thumb?: boolean;
+  /** The `?blur=1` rendition (plan 11): every other option but skipDiskRead is ignored. */
+  blur?: boolean;
   /** Return only `filePath` when the file is already on disk (X-Accel-Redirect). */
   skipDiskRead?: boolean;
 }
@@ -117,6 +120,7 @@ export class ImageService implements OnModuleDestroy {
     description?: string,
     isPrivate?: boolean,
     username?: string,
+    blurPublic?: boolean,
   ) {
     const imageId = randomUUID();
     this.logger.debug(
@@ -217,6 +221,22 @@ export class ImageService implements OnModuleDestroy {
         `[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`,
       );
 
+      // Pre-generated for every image, private or not: a later PATCH to private
+      // needs it too. Best-effort: GET ?blur=1 rebuilds a missing one.
+      await this.storage
+        .blurImage(thumbBuffer)
+        .then((blurred) =>
+          this.storage.saveFile(
+            this.storage.getImageFilePath(domain, imageId, 'blurred'),
+            blurred,
+          ),
+        )
+        .catch((error: unknown) =>
+          this.logger.warn(
+            `[uploadImage] Blurred not saved - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
+          ),
+        );
+
       // Same input the backfill hashes (original.webp). Duplicate detection is
       // best-effort: a failure leaves dHash null rather than failing the upload.
       const dHash = await this.storage
@@ -248,6 +268,7 @@ export class ImageService implements OnModuleDestroy {
           dHash,
           isOptimized: false,
           isPrivate: isPrivate || false,
+          blurPublic: blurPublic || false,
           description: description || null,
           ...(imageTagsInput.length > 0 && {
             imageTags: { create: imageTagsInput },
@@ -336,6 +357,7 @@ export class ImageService implements OnModuleDestroy {
       format = 'webp',
       quality: requestedQuality,
       thumb = false,
+      blur = false,
       skipDiskRead = false,
     }: ImageFileOptions = {},
   ): Promise<{ mimeType: string; filePath?: string; buffer?: Buffer }> {
@@ -348,6 +370,10 @@ export class ImageService implements OnModuleDestroy {
       filePath,
       buffer: skipDiskRead ? undefined : await this.storage.readFile(filePath),
     });
+
+    if (blur) {
+      return this.getBlurredFile(domain, image.id, fromDisk);
+    }
 
     if (thumb) {
       const thumbPath = this.storage.getImageFilePath(
@@ -391,6 +417,45 @@ export class ImageService implements OnModuleDestroy {
         );
     }
     return { mimeType, buffer };
+  }
+
+  /**
+   * `blurred.webp`, built from the thumb (the original only if the thumb is gone)
+   * and stored when missing. A closed branch: every failure throws (422, or 503
+   * from a full render queue) and the original is never served in its place.
+   */
+  private async getBlurredFile(
+    domain: string,
+    imageId: string,
+    fromDisk: (
+      filePath: string,
+      mimeType: string,
+    ) => Promise<{ mimeType: string; filePath: string; buffer?: Buffer }>,
+  ): Promise<{ mimeType: string; filePath?: string; buffer?: Buffer }> {
+    const blurredPath = this.storage.getImageFilePath(
+      domain,
+      imageId,
+      'blurred',
+    );
+    if (await this.storage.fileExists(blurredPath)) {
+      return fromDisk(blurredPath, 'image/webp');
+    }
+
+    const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
+    const sourcePath = (await this.storage.fileExists(thumbPath))
+      ? thumbPath
+      : this.storage.getImageFilePath(domain, imageId, 'original');
+    const source = await this.storage.readFile(sourcePath).catch(() => {
+      throw new UnprocessableEntityException('Image file is not readable');
+    });
+    // Two concurrent misses both write: saveFile renames, the content is the same.
+    const buffer = await this.storage.blurImage(source);
+    this.storage
+      .saveFile(blurredPath, buffer)
+      .catch((e) =>
+        this.logger.warn(`[getImageFile] Blurred not cached: ${e.message}`),
+      );
+    return { mimeType: 'image/webp', buffer };
   }
 
   /**
@@ -632,6 +697,7 @@ export class ImageService implements OnModuleDestroy {
     tags?: string[],
     description?: string,
     isPrivate?: boolean,
+    blurPublic?: boolean,
   ) {
     this.logger.debug(
       `[updateImageMetadata] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${creatorId}, Tags: ${tags?.length || 0}`,
@@ -653,6 +719,7 @@ export class ImageService implements OnModuleDestroy {
       data: {
         ...(description !== undefined && { description }),
         ...(isPrivate !== undefined && { isPrivate }),
+        ...(blurPublic !== undefined && { blurPublic }),
         ...(imageTagsInput !== undefined && {
           imageTags: {
             deleteMany: {},

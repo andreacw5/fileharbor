@@ -94,6 +94,12 @@ export class ImageController {
         tags: { type: 'array', items: { type: 'string' } },
         description: { type: 'string' },
         isPrivate: { type: 'boolean', default: false },
+        blurPublic: {
+          type: 'boolean',
+          default: false,
+          description:
+            'Serve the ?blur=1 preview to anyone, even when the image is private',
+        },
         username: {
           type: 'string',
           description:
@@ -139,6 +145,7 @@ export class ImageController {
         dto.description,
         dto.isPrivate,
         dto.username,
+        dto.blurPublic,
       );
 
       this.logger.log(
@@ -222,13 +229,18 @@ export class ImageController {
   ) {
     const clientId = req['clientId'];
     const creatorId = req['externalCreatorId'];
+    // The blurred preview (plan 11): info and download win over it, and it wins
+    // over every transform.
+    const blur = !!query.blur && !query.info && !query.download;
     const requestType = query.info
       ? 'metadata'
       : query.download
         ? 'download'
-        : query.thumb
-          ? 'thumb'
-          : 'view';
+        : blur
+          ? 'blur'
+          : query.thumb
+            ? 'thumb'
+            : 'view';
 
     // Single comprehensive log for request start
     this.logger.debug(
@@ -236,26 +248,20 @@ export class ImageController {
     );
 
     try {
-      // Handle image access with optimized logic
       let image;
+      let viaShareLink = false;
       if (query.token) {
         try {
           // Try share link first
           image = await this.imageService.getImageByShareToken(query.token);
           imageId = image.id;
+          viaShareLink = true;
         } catch {
           // Fallback to normal access with token validation
           image = await this.imageService.getImageById(
             imageId,
             undefined,
             !!query.info,
-          );
-          await this.imageService.validateImageAccess(
-            image,
-            imageId,
-            clientId,
-            creatorId,
-            query.token,
           );
         }
       } else {
@@ -264,13 +270,17 @@ export class ImageController {
           undefined,
           !!query.info,
         );
+      }
+      // blurPublic opens the blurred preview to anyone. Safe without a check:
+      // the blur branch of getImageFile never falls back to the original.
+      if (!viaShareLink && !(blur && image.blurPublic))
         await this.imageService.validateImageAccess(
           image,
           imageId,
           clientId,
           creatorId,
+          query.token,
         );
-      }
 
       // Handle metadata request early return
       if (query.info) {
@@ -282,25 +292,32 @@ export class ImageController {
       // Counters: views are buffered in memory, downloads are one UPDATE.
       // Counted only once the bytes are served (or a 304 confirms them), so a
       // 503 from a full render queue is not a view.
-      const countHit = () =>
-        query.download
+      // The blurred preview is not a view, 304 included.
+      const countHit = async () => {
+        if (blur) return;
+        await (query.download
           ? this.imageService.incrementDownloads(imageId, image.clientId)
-          : this.imageService.incrementViews(imageId);
+          : this.imageService.incrementViews(imageId));
+      };
 
       // Set response headers
       // Private bytes and token-gated responses must never land in a shared
       // cache (CDN, proxy): the next requester would get them without a check.
-      const restricted = image.isPrivate || !!query.token;
-      const variant = query.thumb
-        ? 'thumb'
-        : [
-            // Snapped like getImageFile does: URLs that render the same
-            // variant share one ETag.
-            snapSize(query.width) ?? '',
-            snapSize(query.height) ?? '',
-            query.format || 'webp',
-            snapQuality(query.quality),
-          ].join('-');
+      // A public blurred preview is the same for everyone and safe to cache.
+      const restricted =
+        !(blur && image.blurPublic) && (image.isPrivate || !!query.token);
+      const variant = blur
+        ? 'blur'
+        : query.thumb
+          ? 'thumb'
+          : [
+              // Snapped like getImageFile does: URLs that render the same
+              // variant share one ETag.
+              snapSize(query.width) ?? '',
+              snapSize(query.height) ?? '',
+              query.format || 'webp',
+              snapQuality(query.quality),
+            ].join('-');
       // updatedAt moves when the file is rewritten (optimize job, Tinify, admin
       // regenerate), never on a view or download (those counters skip it), so revalidation stays cheap.
       const etag = `"${imageId}-${variant}-${image.updatedAt.getTime()}"`;
@@ -340,6 +357,7 @@ export class ImageController {
           format: query.format || 'webp',
           quality: query.quality,
           thumb: query.thumb,
+          blur,
           skipDiskRead: xAccel,
         });
       await countHit();
@@ -417,7 +435,7 @@ export class ImageController {
   @ApiOperation({
     summary: 'Update image metadata',
     description:
-      'Update tags, description or isPrivate. Only the owner (X-User-Id) can update.',
+      'Update tags, description, isPrivate or blurPublic. Only the owner (X-User-Id) can update.',
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
   @ApiOkData(ImageResponseDto, 'Updated successfully')
@@ -448,12 +466,20 @@ export class ImageController {
         dto.tags,
         dto.description,
         dto.isPrivate,
+        dto.blurPublic,
       );
-      if (typeof dto.isPrivate === 'boolean')
+      // Visibility changes only; the booleans are the fact tracked, not secrets.
+      const visibility = {
+        ...(typeof dto.isPrivate === 'boolean' && { isPrivate: dto.isPrivate }),
+        ...(typeof dto.blurPublic === 'boolean' && {
+          blurPublic: dto.blurPublic,
+        }),
+      };
+      if (Object.keys(visibility).length > 0)
         auditClientWrite(this.audit, 'fh_image.updated', clientId, creatorId, {
           imageId,
-          fields: ['isPrivate'],
-          isPrivate: dto.isPrivate,
+          fields: Object.keys(visibility),
+          ...visibility,
         });
 
       this.logger.log(

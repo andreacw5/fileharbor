@@ -42,6 +42,21 @@ export class GetImageDto {
   download?: boolean;
 
   @ApiPropertyOptional({
+    description:
+      'Return the blurred preview (≤ 480 px, webp). Same access as the original, unless the image has blurPublic. Ignored with info or download; thumb, width, height, format and quality are ignored with it',
+    example: false,
+    type: Boolean,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === '1' || value === true) return true;
+    if (value === 'false' || value === '0' || value === false) return false;
+    return value;
+  })
+  @IsBoolean()
+  blur?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Return JSON metadata instead of image file',
     example: false,
     type: Boolean,

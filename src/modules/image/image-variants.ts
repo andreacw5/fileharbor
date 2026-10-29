@@ -52,3 +52,16 @@ export function buildSrcset(
     `${fullPath} ${originalWidth}w`,
   ].join(', ');
 }
+
+/**
+ * `?blur=1` rendition (plan 11): the source is shrunk to BLUR_SOURCE_SIZE
+ * first, so whatever is served afterwards carries no more detail than that.
+ * This is the security knob: higher means more recognizable. Not in the ETag
+ * and never rebuilt on its own: after retuning, delete every blurred.webp, and
+ * public copies already in caches (`immutable`) stay as they were.
+ */
+export const BLUR_SOURCE_SIZE = 32;
+/** Served size: smooth without relying on the browser's upscaling. */
+export const BLUR_OUTPUT_SIZE = 480;
+export const BLUR_SIGMA = 6;
+export const BLUR_QUALITY = 50;

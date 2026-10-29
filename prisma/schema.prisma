@@ -101,6 +101,8 @@ model Image {
   tinifyOptimized  Boolean   @default(false) // Track if image was compressed with Tinify to avoid reprocessing
   tinifyAttempts   Int       @default(0) // failed auto Tinify runs; skipped at MAX_OPTIMIZE_ATTEMPTS
   isPrivate        Boolean   @default(false)
+  // ?blur=1 is served to anyone, even when isPrivate (plan 11 addendum); set by the owner
+  blurPublic       Boolean   @default(false)
   views            Int       @default(0)
   downloads        Int       @default(0)
   description      String?
