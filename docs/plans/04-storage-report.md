@@ -1,10 +1,10 @@
 ---
 type: plan
 service: fileharbor
-status: in-progress
+status: done
 estimate: 2d
-updated: 2026-10-22
-verified: 4774bd3
+updated: 2026-10-29
+verified: 636ff71
 ---
 
 # 04 · Report storage per client e creator nel tempo (FX5)
@@ -171,15 +171,17 @@ nel browser.
 
 ## Criteri di completamento
 
-- [ ] Dopo il deploy esiste una riga `storage_snapshots` per ogni client × 3 tipi con la data di oggi;
+- [x] Dopo il deploy esiste una riga `storage_snapshots` per ogni client × 3 tipi con la data di oggi;
       rilanciare il job non duplica.
-- [ ] `sum(bytes)` dello snapshot di oggi per un client = `totalStorage` di `GET /admin/clients/:id`.
-- [ ] `GET /admin/stats` ha `storageByKind` con somma = `totalStorage`, e `dailyChart[].storage`.
-- [ ] `GET /admin/stats/storage?from&to` restituisce `series` lunga quanto il range, `null` prima di
+- [x] `sum(bytes)` dello snapshot di oggi per un client = `totalStorage` di `GET /admin/clients/:id`.
+- [x] `GET /admin/stats` ha `storageByKind` con somma = `totalStorage`, e `dailyChart[].storage`.
+- [x] `GET /admin/stats/storage?from&to` restituisce `series` lunga quanto il range, `null` prima di
       `firstSnapshot`; range > 366 gg → 400; `clientId` fuori scope → 403.
-- [ ] `GET /admin/stats/storage/creators` risponde `{ data, meta }`, ordinata per `totalBytes` desc,
+- [x] `GET /admin/stats/storage/creators` risponde `{ data, meta }`, ordinata per `totalBytes` desc,
       solo creator in scope; un AUTHOR prende 403 (FileHarbor e BFF).
-- [ ] Meridian: la tile storage della dashboard ha la sparkline dopo due snapshot e porta al report; il
+- [x] Meridian: la tile storage della dashboard ha la sparkline dopo due snapshot e porta al report; il
       report mostra immagini/video/avatar separati; un AUTHOR non vede la tabella creator.
-- [ ] Documentazione stantia corretta (`meridian/CLAUDE.md`, `app/types/fileharbor.ts:150`, FX5 nel
+- [x] Documentazione stantia corretta (`meridian/CLAUDE.md`, `app/types/fileharbor.ts:150`, FX5 nel
       backlog); `node --test test/i18n-parity.test.ts` verde.
+
+Verificato in prod il 2026-10-29: tutto funziona.
