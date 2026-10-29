@@ -54,7 +54,7 @@ import {
 } from './dto';
 import { Readable } from 'node:stream';
 import { contentDisposition } from '@/utils/content-disposition';
-import { snapQuality, snapSize } from './image-variants';
+import { snapBlurSize, snapQuality, snapSize } from './image-variants';
 import {
   ApiCreatedData,
   ApiOkData,
@@ -306,12 +306,14 @@ export class ImageController {
       // A public blurred preview is the same for everyone and safe to cache.
       const restricted =
         !(blur && image.blurPublic) && (image.isPrivate || !!query.token);
+      const blurWidth = snapBlurSize(query.width);
+      const blurHeight = snapBlurSize(query.height);
       const variant = blur
-        ? query.width || query.height || (query.format ?? 'webp') !== 'webp'
+        ? blurWidth || blurHeight || (query.format ?? 'webp') !== 'webp'
           ? [
               'blur',
-              snapSize(query.width) ?? '',
-              snapSize(query.height) ?? '',
+              blurWidth ?? '',
+              blurHeight ?? '',
               query.format || 'webp',
             ].join('-')
           : 'blur'

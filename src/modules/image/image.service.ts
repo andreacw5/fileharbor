@@ -37,6 +37,7 @@ import { CreatorService } from '@/modules/creator/creator.service';
 import {
   BLUR_QUALITY,
   buildSrcset,
+  snapBlurSize,
   snapQuality,
   snapSize,
 } from './image-variants';
@@ -380,16 +381,18 @@ export class ImageService implements OnModuleDestroy {
     });
 
     if (blur) {
+      const blurWidth = snapBlurSize(requestedWidth);
+      const blurHeight = snapBlurSize(requestedHeight);
       const blurred = await this.getBlurredFile(domain, image.id, fromDisk);
-      if (format === 'webp' && !width && !height) return blurred;
-      // Resized/converted per request, not cached: ≤ 480 px (never enlarged),
-      // and blurred.webp stays the one file. Quality stays BLUR_QUALITY.
+      if (format === 'webp' && !blurWidth && !blurHeight) return blurred;
+      // Resized/converted per request, not cached: blurred.webp stays the one
+      // file. Quality stays BLUR_QUALITY.
       return {
         mimeType: `image/${format}`,
         buffer: await this.storage.resizeImage(
           blurred.buffer ?? (await this.storage.readFile(blurred.filePath!)),
-          width,
-          height,
+          blurWidth,
+          blurHeight,
           format,
           BLUR_QUALITY,
         ),

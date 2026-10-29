@@ -731,6 +731,7 @@ describe('ImageService', () => {
 
         const result = await service.getImageFile(image, {
           blur: true,
+          width: 1000,
           quality: 100,
           thumb: true,
         });

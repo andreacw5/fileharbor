@@ -148,6 +148,12 @@ describe('ImageController.getImage ?blur=1', () => {
       expect(headers.ETag).toBe('"img-1-blur-320--jpeg-0"');
     });
 
+    it('gives sizes from 480 up the plain blur ETag', async () => {
+      await get({ blur: true, width: 1000, height: 480 });
+
+      expect(headers.ETag).toBe('"img-1-blur-0"');
+    });
+
     it('does not count a view on a 304 either', async () => {
       await get({ blur: true }, '"img-1-blur-0"');
 

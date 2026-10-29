@@ -65,3 +65,13 @@ export const BLUR_SOURCE_SIZE = 32;
 export const BLUR_OUTPUT_SIZE = 480;
 export const BLUR_SIGMA = 6;
 export const BLUR_QUALITY = 50;
+
+/**
+ * snapSize for the blurred preview: blurred.webp is at most BLUR_OUTPUT_SIZE on
+ * its longer side and never enlarged, so any size from there up renders the
+ * file as it is. Those map to undefined: same ETag, served from disk.
+ */
+export function snapBlurSize(size: number | undefined): number | undefined {
+  const snapped = snapSize(size);
+  return snapped && snapped < BLUR_OUTPUT_SIZE ? snapped : undefined;
+}
