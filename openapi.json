@@ -239,7 +239,7 @@
             "name": "blur",
             "required": false,
             "in": "query",
-            "description": "Return the blurred preview (≤ 480 px, webp). Same access as the original, unless the image has blurPublic. Ignored with info or download; thumb, width, height, format and quality are ignored with it",
+            "description": "Return the blurred preview (≤ 480 px, webp unless format asks otherwise). Same access as the original, unless the image has blurPublic. Ignored with info or download; thumb and quality are ignored with it; width, height (capped at 480) and format apply",
             "schema": {
               "example": false,
               "type": "boolean"
@@ -6023,7 +6023,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "4.1.1",
+    "version": "4.1.2",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
