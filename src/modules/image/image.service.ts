@@ -221,21 +221,24 @@ export class ImageService implements OnModuleDestroy {
         `[uploadImage] Thumbnail saved - ID: ${imageId}, Size: ${thumbBuffer.length} bytes`,
       );
 
-      // Pre-generated for every image, private or not: a later PATCH to private
-      // needs it too. Best-effort: GET ?blur=1 rebuilds a missing one.
-      await this.storage
-        .blurImage(thumbBuffer)
-        .then((blurred) =>
-          this.storage.saveFile(
-            this.storage.getImageFilePath(domain, imageId, 'blurred'),
-            blurred,
-          ),
-        )
-        .catch((error: unknown) =>
-          this.logger.warn(
-            `[uploadImage] Blurred not saved - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
-          ),
-        );
+      // Pre-generated only where a site shows it (private, or blurPublic), so a
+      // gallery's first visit doesn't fill the render queue. Public images get
+      // it lazily on the first ?blur=1, a PATCH to private via warmBlurred.
+      // Best-effort: GET ?blur=1 rebuilds a missing one.
+      if (isPrivate || blurPublic)
+        await this.storage
+          .blurImage(thumbBuffer)
+          .then((blurred) =>
+            this.storage.saveFile(
+              this.storage.getImageFilePath(domain, imageId, 'blurred'),
+              blurred,
+            ),
+          )
+          .catch((error: unknown) =>
+            this.logger.warn(
+              `[uploadImage] Blurred not saved - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
+            ),
+          );
 
       // Same input the backfill hashes (original.webp). Duplicate detection is
       // best-effort: a failure leaves dHash null rather than failing the upload.
@@ -440,7 +443,46 @@ export class ImageService implements OnModuleDestroy {
     if (await this.storage.fileExists(blurredPath)) {
       return fromDisk(blurredPath, 'image/webp');
     }
+    return {
+      mimeType: 'image/webp',
+      buffer: await this.buildBlurred(domain, imageId, blurredPath),
+    };
+  }
 
+  /**
+   * Builds a missing `blurred.webp` after a PATCH made it reachable (private or
+   * blurPublic), off the request: fire-and-forget, a failure only warns and
+   * leaves it to the next ?blur=1.
+   */
+  private warmBlurred(image: {
+    id: string;
+    clientId: string;
+    isPrivate: boolean;
+    blurPublic: boolean;
+    client?: { domain: string | null } | null;
+  }): void {
+    if (!image.isPrivate && !image.blurPublic) return;
+    const domain = image.client?.domain || image.clientId;
+    const blurredPath = this.storage.getImageFilePath(
+      domain,
+      image.id,
+      'blurred',
+    );
+    void (async () => {
+      if (!(await this.storage.fileExists(blurredPath)))
+        await this.buildBlurred(domain, image.id, blurredPath);
+    })().catch((e: unknown) =>
+      this.logger.warn(
+        `[warmBlurred] ${image.id}: ${e instanceof Error ? e.message : e}`,
+      ),
+    );
+  }
+
+  private async buildBlurred(
+    domain: string,
+    imageId: string,
+    blurredPath: string,
+  ): Promise<Buffer> {
     const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
     const sourcePath = (await this.storage.fileExists(thumbPath))
       ? thumbPath
@@ -455,7 +497,7 @@ export class ImageService implements OnModuleDestroy {
       .catch((e) =>
         this.logger.warn(`[getImageFile] Blurred not cached: ${e.message}`),
       );
-    return { mimeType: 'image/webp', buffer };
+    return buffer;
   }
 
   /**
@@ -737,8 +779,13 @@ export class ImageService implements OnModuleDestroy {
             },
           },
         },
+        client: { select: { domain: true } },
       },
     });
+    // warmBlurred reads the updated row: an already-blurPublic image PATCHed
+    // to isPrivate=false still needs its preview.
+    if (isPrivate !== undefined || blurPublic !== undefined)
+      this.warmBlurred(updatedImage);
 
     this.logger.log(
       `[updateImageMetadata] Success - ID: ${imageId}, Client: ${clientId}`,
@@ -1314,7 +1361,7 @@ export class ImageService implements OnModuleDestroy {
    * Returns the updated image with tags and creator for DTO mapping.
    */
   async adminUpdateImage(imageId: string, data: Record<string, any>) {
-    return this.prisma.image.update({
+    const image = await this.prisma.image.update({
       where: { id: imageId },
       data,
       include: {
@@ -1323,6 +1370,8 @@ export class ImageService implements OnModuleDestroy {
         creator: { select: { id: true, externalId: true, username: true } },
       },
     });
+    if (data.isPrivate) this.warmBlurred(image);
+    return image;
   }
 
   /**

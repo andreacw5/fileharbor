@@ -275,17 +275,20 @@ export class StorageService {
       );
     }
     await this.saveFile(this.getImageFilePath(domain, imageId, 'thumb'), thumb);
-    // Best-effort: a missing blurred.webp is rebuilt on the next ?blur=1, so a
-    // failure drops the old one rather than keep it under the new ETag.
+    // Rebuilt only if there was one: blurred.webp is created where it's shown
+    // (upload, PATCH, first ?blur=1), never by regenerate. Best-effort: a
+    // missing one is rebuilt on the next ?blur=1, so a failure drops the old
+    // one rather than keep it under the new ETag.
     const blurredPath = this.getImageFilePath(domain, imageId, 'blurred');
-    await this.blurImage(thumb)
-      .then((blurred) => this.saveFile(blurredPath, blurred))
-      .catch(async (error: unknown) => {
-        this.logger.warn(
-          `[regenerateImageThumb] Blurred of ${imageId} not rebuilt: ${error instanceof Error ? error.message : error}`,
-        );
-        await fs.rm(blurredPath, { force: true }).catch(() => undefined);
-      });
+    if (await this.fileExists(blurredPath))
+      await this.blurImage(thumb)
+        .then((blurred) => this.saveFile(blurredPath, blurred))
+        .catch(async (error: unknown) => {
+          this.logger.warn(
+            `[regenerateImageThumb] Blurred of ${imageId} not rebuilt: ${error instanceof Error ? error.message : error}`,
+          );
+          await fs.rm(blurredPath, { force: true }).catch(() => undefined);
+        });
     await this.clearImageVariants(domain, imageId).catch((error: unknown) =>
       this.logger.warn(
         `[regenerateImageThumb] Variants of ${imageId} not cleared: ${error instanceof Error ? error.message : error}`,

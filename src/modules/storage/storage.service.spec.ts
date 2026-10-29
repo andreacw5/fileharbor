@@ -354,6 +354,7 @@ describe('StorageService.regenerateImageThumb', () => {
     await writeFile(originalPath, original);
     await writeFile(join(variants, '64x-q75.webp'), 'stale');
     await writeFile(storage.getImageFilePath('d', 'img', 'thumb'), 'corrupt');
+    await writeFile(storage.getImageFilePath('d', 'img', 'blurred'), 'stale');
 
     await storage.regenerateImageThumb('d', 'img', 100, 70);
 
@@ -399,6 +400,14 @@ describe('StorageService.regenerateImageThumb', () => {
     await expect(
       storage.regenerateImageThumb('d', 'img', 100, 70),
     ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('creates no blurred.webp where there was none', async () => {
+    await seed();
+    await storage.regenerateImageThumb('d', 'img', 100, 70);
+    await expect(
+      stat(storage.getImageFilePath('d', 'img', 'blurred')),
+    ).rejects.toThrow();
   });
 
   it('still regenerates when the blur fails, dropping the stale blurred.webp', async () => {
