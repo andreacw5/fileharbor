@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { ImageService } from './image.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { StorageService } from '@/modules/storage/storage.service';
+import {
+  RenderBusyException,
+  StorageService,
+} from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
@@ -157,6 +160,7 @@ describe('ImageService', () => {
     isAnimated: jest.fn(),
     createThumbnail: jest.fn(),
     regenerateImageThumb: jest.fn(),
+    blurImage: jest.fn(),
   };
 
   const mockHttpService = { post: jest.fn(), get: jest.fn() };
@@ -237,6 +241,7 @@ describe('ImageService', () => {
         thumb: Buffer.from('thumb-data'),
       });
       mockStorageService.computeDHash.mockResolvedValue('00ff'.repeat(16));
+      mockStorageService.blurImage.mockResolvedValue(Buffer.from('blurred'));
       mockStorageService.getImagePath.mockReturnValue(
         `storage/${mockDomain}/images/${mockImageId}`,
       );
@@ -264,7 +269,48 @@ describe('ImageService', () => {
       expect(mockStorageService.encodeWebpWithThumbnail).toHaveBeenCalledTimes(
         1,
       );
-      expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2); // original + thumbnail
+      expect(mockStorageService.saveFile).toHaveBeenCalledTimes(3); // original + thumbnail + blurred
+    });
+
+    it('pre-generates blurred.webp from the thumbnail', async () => {
+      await service.uploadImage(mockClientId, mockExternalUserId, mockFile);
+
+      expect(mockStorageService.blurImage).toHaveBeenCalledWith(
+        Buffer.from('thumb-data'),
+      );
+      expect(mockStorageService.saveFile).toHaveBeenCalledWith(
+        expect.stringMatching(/\/blurred\.webp$/),
+        Buffer.from('blurred'),
+      );
+    });
+
+    it('saves blurPublic', async () => {
+      await service.uploadImage(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        true,
+        undefined,
+        true,
+      );
+
+      expect(mockPrismaService.image.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isPrivate: true, blurPublic: true }),
+        }),
+      );
+    });
+
+    it('still uploads when the blur fails', async () => {
+      mockStorageService.blurImage.mockRejectedValue(new RenderBusyException());
+
+      await expect(
+        service.uploadImage(mockClientId, mockExternalUserId, mockFile),
+      ).resolves.toBeDefined();
+      expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2);
     });
 
     it('hashes the stored original and saves the dHash', async () => {
@@ -640,6 +686,94 @@ describe('ImageService', () => {
 
       expect(result.buffer).toEqual(Buffer.from('resized'));
       expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+    });
+
+    describe('blur', () => {
+      const path = (v: string) =>
+        `storage/${mockDomain}/images/${mockImageId}/${v}.webp`;
+      const existing = (...variants: string[]) =>
+        mockStorageService.fileExists.mockImplementation(async (p: string) =>
+          variants.some((v) => p === path(v)),
+        );
+
+      beforeEach(() =>
+        mockStorageService.blurImage.mockResolvedValue(Buffer.from('blurred')),
+      );
+
+      it('serves blurred.webp from disk, ignoring every transform', async () => {
+        existing('blurred', 'thumb', 'original');
+
+        const result = await service.getImageFile(image, {
+          blur: true,
+          width: 800,
+          format: 'png',
+          thumb: true,
+        });
+
+        expect(result).toMatchObject({
+          mimeType: 'image/webp',
+          filePath: path('blurred'),
+        });
+        expect(mockStorageService.blurImage).not.toHaveBeenCalled();
+        expect(mockStorageService.resizeImage).not.toHaveBeenCalled();
+      });
+
+      it('builds a missing one from the thumb and stores it', async () => {
+        existing('thumb', 'original');
+        mockStorageService.readFile.mockImplementation(async (p: string) =>
+          Buffer.from(p),
+        );
+
+        const result = await service.getImageFile(image, { blur: true });
+
+        expect(mockStorageService.blurImage).toHaveBeenCalledWith(
+          Buffer.from(path('thumb')),
+        );
+        expect(mockStorageService.saveFile).toHaveBeenCalledWith(
+          path('blurred'),
+          Buffer.from('blurred'),
+        );
+        expect(result).toEqual({
+          mimeType: 'image/webp',
+          buffer: Buffer.from('blurred'),
+        });
+      });
+
+      it('falls back to the original as source when the thumb is gone', async () => {
+        existing('original');
+        mockStorageService.readFile.mockImplementation(async (p: string) =>
+          Buffer.from(p),
+        );
+
+        await service.getImageFile(image, { blur: true });
+
+        expect(mockStorageService.blurImage).toHaveBeenCalledWith(
+          Buffer.from(path('original')),
+        );
+      });
+
+      it.each([
+        ['a full render queue', new RenderBusyException()],
+        ['an unreadable source', new UnprocessableEntityException()],
+      ])('never serves the original on %s', async (_, error) => {
+        existing('thumb', 'original');
+        mockStorageService.blurImage.mockRejectedValue(error);
+
+        await expect(service.getImageFile(image, { blur: true })).rejects.toBe(
+          error,
+        );
+        expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      });
+
+      it('422s when the source cannot be read', async () => {
+        existing();
+        mockStorageService.readFile.mockRejectedValueOnce(new Error('ENOENT'));
+
+        await expect(
+          service.getImageFile(image, { blur: true }),
+        ).rejects.toBeInstanceOf(UnprocessableEntityException);
+        expect(mockStorageService.blurImage).not.toHaveBeenCalled();
+      });
     });
   });
 

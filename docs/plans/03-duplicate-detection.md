@@ -1,10 +1,10 @@
 ---
 type: plan
 service: fileharbor
-status: in-progress
+status: done
 estimate: 2d
-updated: 2026-10-25
-verified: 4774bd3
+updated: 2026-10-29
+verified: 636ff71
 ---
 
 # 03 · Immagini duplicate (FX4)
@@ -194,5 +194,7 @@ ricompressa male può non combaciare più. Con la distanza 0 resta il compromess
       gruppo da 2; la stessa immagine su un client fuori scope non compare né cambia `count`.
 - [x] `crossClient=true` da non-`fullAccess` → 403.
 - [x] `GET /admin/images/duplicates` risponde `{ data, meta }`.
-- [ ] Meridian: dalla pagina duplicati apro il gruppo, seleziono la copia più nuova e la cancello col
+- [x] Meridian: dalla pagina duplicati apro il gruppo, seleziono la copia più nuova e la cancello col
       bulk-delete; il gruppo sparisce. Un AUTHOR vede la pagina ma non la bulk bar di delete.
+
+Verificato in prod il 2026-10-29: tutto funziona.

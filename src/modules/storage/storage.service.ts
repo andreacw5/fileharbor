@@ -51,6 +51,12 @@ import * as os from 'os';
 import { randomUUID } from 'crypto';
 import fluentFfmpeg from 'fluent-ffmpeg';
 import { Semaphore } from '@/utils/semaphore';
+import {
+  BLUR_OUTPUT_SIZE,
+  BLUR_QUALITY,
+  BLUR_SIGMA,
+  BLUR_SOURCE_SIZE,
+} from '@/modules/image/image-variants';
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -152,9 +158,11 @@ export class StorageService {
   private sanitizePathComponent(component: string): string {
     // Remove path separators, parent directory references, and null bytes
     // Allow dots for domain names but block ".." sequences
-    return component
+    const sanitized = component
       .replace(/\.\./g, '_') // Block parent directory traversal
       .replace(/[/\\\0]/g, '_'); // Block path separators and null bytes
+    // "." or "" would resolve to the parent dir: deleting `images/.` wipes them all.
+    return sanitized === '' || sanitized === '.' ? '_' : sanitized;
   }
 
   /**
@@ -226,7 +234,7 @@ export class StorageService {
   getImageFilePath(
     domain: string,
     imageId: string,
-    variant: 'original' | 'thumb' = 'original',
+    variant: 'original' | 'thumb' | 'blurred' = 'original',
   ): string {
     return `${this.getImagePath(domain, imageId)}/${variant}.webp`;
   }
@@ -267,6 +275,17 @@ export class StorageService {
       );
     }
     await this.saveFile(this.getImageFilePath(domain, imageId, 'thumb'), thumb);
+    // Best-effort: a missing blurred.webp is rebuilt on the next ?blur=1, so a
+    // failure drops the old one rather than keep it under the new ETag.
+    const blurredPath = this.getImageFilePath(domain, imageId, 'blurred');
+    await this.blurImage(thumb)
+      .then((blurred) => this.saveFile(blurredPath, blurred))
+      .catch(async (error: unknown) => {
+        this.logger.warn(
+          `[regenerateImageThumb] Blurred of ${imageId} not rebuilt: ${error instanceof Error ? error.message : error}`,
+        );
+        await fs.rm(blurredPath, { force: true }).catch(() => undefined);
+      });
     await this.clearImageVariants(domain, imageId).catch((error: unknown) =>
       this.logger.warn(
         `[regenerateImageThumb] Variants of ${imageId} not cleared: ${error instanceof Error ? error.message : error}`,
@@ -386,6 +405,7 @@ export class StorageService {
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
+      this.validatePath(filePath);
       await fs.access(filePath);
       return true;
     } catch {
@@ -805,6 +825,40 @@ export class StorageService {
       () => {
         this.logger.warn(
           `[resizeImage] Render queue full (${this.renderLimiter.pending} waiting)`,
+        );
+        return new RenderBusyException();
+      },
+    );
+  }
+
+  /**
+   * The `?blur=1` rendition (plan 11), first frame only. Two passes: sharp keeps
+   * a single resize() per pipeline, so chaining 32 then 480 would blur the full
+   * source (partly invertible). Same limiter as resizeImage; an unreadable source
+   * is a 422, never a reason to serve anything else.
+   */
+  async blurImage(source: Buffer): Promise<Buffer> {
+    return this.renderLimiter.run(
+      async () => {
+        try {
+          const small = await openImage(source, false)
+            .resize(BLUR_SOURCE_SIZE, BLUR_SOURCE_SIZE, { fit: 'inside' })
+            .png()
+            .toBuffer();
+          return await sharp(small)
+            .resize(BLUR_OUTPUT_SIZE, BLUR_OUTPUT_SIZE, { fit: 'inside' })
+            .blur(BLUR_SIGMA)
+            .webp({ quality: BLUR_QUALITY })
+            .toBuffer();
+        } catch {
+          throw new UnprocessableEntityException(
+            'Image file is not a readable image',
+          );
+        }
+      },
+      () => {
+        this.logger.warn(
+          `[blurImage] Render queue full (${this.renderLimiter.pending} waiting)`,
         );
         return new RenderBusyException();
       },

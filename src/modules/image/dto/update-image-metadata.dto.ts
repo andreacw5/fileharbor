@@ -34,4 +34,12 @@ export class UpdateImageMetadataDto {
   @ValidateIf((o) => o.isPrivate !== undefined)
   @IsBoolean()
   isPrivate?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Serve the ?blur=1 preview to anyone, even when the image is private. The original keeps its own access.',
+  })
+  @ValidateIf((o) => o.blurPublic !== undefined)
+  @IsBoolean()
+  blurPublic?: boolean;
 }
