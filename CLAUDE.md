@@ -445,10 +445,13 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   with it every transform is ignored, ETag variant `blur`, never a view (304 included). `StorageService.blurImage`:
   two passes (32 px `toBuffer()`, then 480 px + `blur(6)`), because sharp keeps one `resize()` per pipeline and a
   single pass would blur the full source; constants in `image-variants.ts`, `BLUR_SOURCE_SIZE` is the knob. Source is
-  the thumb (original only if the thumb is gone), first frame. Pre-generated on upload for every image (best-effort),
-  rebuilt by regenerate, built and saved on the fly when missing, behind `renderLimiter`. The branch is closed:
+  the thumb (original only if the thumb is gone), first frame. Pre-generated only where a site shows it: on upload when
+  `isPrivate || blurPublic`, after a `PATCH` (client or admin) that leaves it private or `blurPublic` (fire-and-forget,
+  only if missing); public images get it on the first `?blur=1`. All best-effort; built and saved on the fly when
+  missing, behind `renderLimiter`. Eager for private ones because a gallery's first visit would otherwise 503 past the
+  render queue. The branch is closed:
   `422`/`503`, **never** a fall-through to the original. Not in storage bytes or metrics.
-- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` (and `blurred.webp`, best-effort) from the
+- **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` (and `blurred.webp` if one exists, best-effort) from the
   stored original and empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
   without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
   it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).

@@ -269,11 +269,23 @@ describe('ImageService', () => {
       expect(mockStorageService.encodeWebpWithThumbnail).toHaveBeenCalledTimes(
         1,
       );
-      expect(mockStorageService.saveFile).toHaveBeenCalledTimes(3); // original + thumbnail + blurred
+      expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2); // original + thumbnail
+      expect(mockStorageService.blurImage).not.toHaveBeenCalled(); // public: lazy
     });
 
-    it('pre-generates blurred.webp from the thumbnail', async () => {
-      await service.uploadImage(mockClientId, mockExternalUserId, mockFile);
+    const uploadPrivate = () =>
+      service.uploadImage(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+
+    it('pre-generates blurred.webp from the thumbnail for a private image', async () => {
+      await uploadPrivate();
 
       expect(mockStorageService.blurImage).toHaveBeenCalledWith(
         Buffer.from('thumb-data'),
@@ -307,9 +319,7 @@ describe('ImageService', () => {
     it('still uploads when the blur fails', async () => {
       mockStorageService.blurImage.mockRejectedValue(new RenderBusyException());
 
-      await expect(
-        service.uploadImage(mockClientId, mockExternalUserId, mockFile),
-      ).resolves.toBeDefined();
+      await expect(uploadPrivate()).resolves.toBeDefined();
       expect(mockStorageService.saveFile).toHaveBeenCalledTimes(2);
     });
 
@@ -1128,6 +1138,56 @@ describe('ImageService', () => {
       );
     });
 
+    describe('blurred.webp warm-up', () => {
+      const patchPrivate = async (isPrivate: boolean) => {
+        mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+        mockPrismaService.image.update.mockResolvedValue({
+          ...mockImage,
+          isPrivate,
+          blurPublic: false,
+          imageTags: [],
+          client: { domain: mockDomain },
+        });
+        mockStorageService.getImageFilePath.mockImplementation(
+          (domain, imageId, variant) =>
+            `storage/${domain}/images/${imageId}/${variant}.webp`,
+        );
+        mockStorageService.readFile.mockResolvedValue(Buffer.from('thumb'));
+        mockStorageService.blurImage.mockResolvedValue(Buffer.from('blurred'));
+        mockStorageService.saveFile.mockResolvedValue(undefined);
+        await service.updateImageMetadata(
+          mockImageId,
+          mockClientId,
+          mockExternalUserId,
+          undefined,
+          undefined,
+          isPrivate,
+        );
+        await new Promise(setImmediate); // fire-and-forget
+      };
+
+      it('builds a missing one when the PATCH makes the image private', async () => {
+        mockStorageService.fileExists.mockResolvedValue(false);
+        await patchPrivate(true);
+        expect(mockStorageService.saveFile).toHaveBeenCalledWith(
+          `storage/${mockDomain}/images/${mockImageId}/blurred.webp`,
+          Buffer.from('blurred'),
+        );
+      });
+
+      it('leaves an existing one alone', async () => {
+        mockStorageService.fileExists.mockResolvedValue(true);
+        await patchPrivate(true);
+        expect(mockStorageService.blurImage).not.toHaveBeenCalled();
+      });
+
+      it('builds nothing for a PATCH to public', async () => {
+        mockStorageService.fileExists.mockResolvedValue(false);
+        await patchPrivate(false);
+        expect(mockStorageService.blurImage).not.toHaveBeenCalled();
+      });
+    });
+
     it('an unknown creator gets 404 and writes nothing', async () => {
       mockPrismaService.creator.findUnique.mockResolvedValue(null);
 
@@ -1193,6 +1253,7 @@ describe('ImageService', () => {
               },
             },
           },
+          client: { select: { domain: true } },
         },
       });
     });

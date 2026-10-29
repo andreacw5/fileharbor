@@ -54,9 +54,11 @@ Vogliamo che un utente free veda le opere riservate **sfocate** e che un subscri
   sia al volo. Si usa l'originale solo se il thumb manca. Così si decodificano pochi pixel e il
   contenuto è sempre lo stesso sotto lo stesso ETag. A 32 px il risultato equivale a quello che si
   otterrebbe partendo dalla sorgente.
-- **Pre-generato all'upload, per ogni immagine.** `images/{id}/blurred.webp`, accanto a
-  `thumb.webp`. Va generato sempre, non solo per le private: costa pochi KB e copre il `PATCH` che
-  porta `isPrivate` a `true` più tardi. Best-effort: un errore dà un `warn` e l'upload riesce comunque.
+- **Pre-generato all'upload solo se `isPrivate || blurPublic`.** `images/{id}/blurred.webp`, accanto a
+  `thumb.webp`. Il `PATCH` (client o admin) che porta `isPrivate`/`blurPublic` a `true` lo genera dopo la
+  risposta, solo se manca; le pubbliche lo ricevono alla prima `?blur=1`. (Prima: per ogni immagine;
+  cambiato il 2026-10-29, le copie pubbliche non lo mostrano mai.) Best-effort: un errore dà un `warn` e
+  l'upload riesce comunque.
 - **Generato al volo se manca.** Immagini caricate prima di questo piano, o una generazione fallita:
   alla prima richiesta `?blur=1` si costruisce dentro `renderLimiter` e si salva. **Nessuno script di
   backfill.** Due richieste concorrenti sullo stesso file mancante lo generano entrambe: `saveFile` fa
@@ -160,14 +162,14 @@ helper nuovo.
 
 ## Verifica
 
-1. Upload privato → `blurred.webp` su disco, pochi KB, ≤ 480 px, illeggibile nei dettagli.
+1. Upload privato → `blurred.webp` su disco (upload pubblico → nessuno), pochi KB, ≤ 480 px, illeggibile nei dettagli.
 2. `GET /images/:id?blur=1` con chiave + `X-User-Id` del proprietario (come Almanac) → `200` sfocata,
    view invariate.
 3. Stessa richiesta senza chiave, o con un altro client → lucchetto
    (`X-FileHarbor-Fallback: permission_denied`).
 4. Cancellare `blurred.webp` → `?blur=1` lo rigenera dal thumb e lo salva.
 5. Cancellare anche `thumb.webp` → rigenera dall'originale.
-6. `POST admin/images/:id/regenerate` → `thumb.webp` e `blurred.webp` riscritti.
+6. `POST admin/images/:id/regenerate` → `thumb.webp` riscritto, `blurred.webp` solo se c'era.
 
 ## Addendum `blurPublic`
 
