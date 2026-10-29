@@ -223,6 +223,18 @@ describe('StorageService.validatePath', () => {
     'rejects %s',
     (target) => expect(() => storage.validatePath(target)).toThrow(),
   );
+
+  it.each(['.', '', '..', '../x', 'a/b'])(
+    'never lets the id %p name the parent dir',
+    (id) =>
+      expect(storage.getImagePath('example.com', id)).toMatch(
+        /^\/srv\/storage\/example\.com\/images\/[^/]+$/,
+      ),
+  );
+
+  it('fileExists is false outside the storage root', async () => {
+    await expect(storage.fileExists('/etc/hosts')).resolves.toBe(false);
+  });
 });
 
 describe('StorageService.computeDHash', () => {

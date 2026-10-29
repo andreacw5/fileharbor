@@ -158,9 +158,11 @@ export class StorageService {
   private sanitizePathComponent(component: string): string {
     // Remove path separators, parent directory references, and null bytes
     // Allow dots for domain names but block ".." sequences
-    return component
+    const sanitized = component
       .replace(/\.\./g, '_') // Block parent directory traversal
       .replace(/[/\\\0]/g, '_'); // Block path separators and null bytes
+    // "." or "" would resolve to the parent dir: deleting `images/.` wipes them all.
+    return sanitized === '' || sanitized === '.' ? '_' : sanitized;
   }
 
   /**
@@ -403,6 +405,7 @@ export class StorageService {
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
+      this.validatePath(filePath);
       await fs.access(filePath);
       return true;
     } catch {
