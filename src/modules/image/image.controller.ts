@@ -54,7 +54,7 @@ import {
 } from './dto';
 import { Readable } from 'node:stream';
 import { contentDisposition } from '@/utils/content-disposition';
-import { snapQuality, snapSize } from './image-variants';
+import { snapBlurSize, snapQuality, snapSize } from './image-variants';
 import {
   ApiCreatedData,
   ApiOkData,
@@ -230,7 +230,7 @@ export class ImageController {
     const clientId = req['clientId'];
     const creatorId = req['externalCreatorId'];
     // The blurred preview (plan 11): info and download win over it, and it wins
-    // over every transform.
+    // over thumb and quality.
     const blur = !!query.blur && !query.info && !query.download;
     const requestType = query.info
       ? 'metadata'
@@ -306,8 +306,17 @@ export class ImageController {
       // A public blurred preview is the same for everyone and safe to cache.
       const restricted =
         !(blur && image.blurPublic) && (image.isPrivate || !!query.token);
+      const blurWidth = snapBlurSize(query.width);
+      const blurHeight = snapBlurSize(query.height);
       const variant = blur
-        ? 'blur'
+        ? blurWidth || blurHeight || (query.format ?? 'webp') !== 'webp'
+          ? [
+              'blur',
+              blurWidth ?? '',
+              blurHeight ?? '',
+              query.format || 'webp',
+            ].join('-')
+          : 'blur'
         : query.thumb
           ? 'thumb'
           : [
@@ -352,8 +361,8 @@ export class ImageController {
       const xAccel = this.config.get<boolean>('image.xAccelRedirect');
       const { buffer, mimeType, filePath } =
         await this.imageService.getImageFile(image, {
-          width: query.thumb ? undefined : query.width,
-          height: query.thumb ? undefined : query.height,
+          width: query.thumb && !blur ? undefined : query.width,
+          height: query.thumb && !blur ? undefined : query.height,
           format: query.format || 'webp',
           quality: query.quality,
           thumb: query.thumb,

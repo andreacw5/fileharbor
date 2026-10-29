@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.1.2] – 2026-10-30
+
+Rebuild the image: nothing else to deploy, no migration.
+
+### Fixed
+- **`?blur=1` honors `format`.** `jpeg`/`png` used to come back as WebP; the blurred preview is now
+  converted per request (not cached, behind the render limiter). `blurred.webp` stays the stored file.
+
+### Changed
+- **`?blur=1` honors `width`/`height`.** Snapped like other variants and only ever downscaled: sizes from
+  480 px up are dropped, since the preview is already that size. `thumb` and `quality` stay ignored.
+- **Blur ETag** carries the transform (`blur-<w>-<h>-<format>`) when one applies; plain `blur` otherwise,
+  so existing cached previews keep their ETag.
+
+---
+
 ## [4.1.1] – 2026-10-29
 
 Rebuild the image: nothing else to deploy, no migration.

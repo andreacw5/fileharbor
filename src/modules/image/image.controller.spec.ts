@@ -129,12 +129,29 @@ describe('ImageController.getImage ?blur=1', () => {
     );
 
     it('asks for the blur, never counts a view, tags its own ETag', async () => {
-      await get({ blur: true, width: 800, thumb: true });
+      await get({ blur: true, thumb: true });
 
       expect(fileOptions()).toMatchObject({ blur: true });
       expect(imageService.incrementViews).not.toHaveBeenCalled();
       expect(headers.ETag).toBe('"img-1-blur-0"');
       expect(headers['Cache-Control']).toBe('private, no-store');
+    });
+
+    it('passes width/height/format through, even over thumb, and tags them', async () => {
+      await get({ blur: true, thumb: true, width: 300, format: 'jpeg' });
+
+      expect(fileOptions()).toMatchObject({
+        blur: true,
+        width: 300,
+        format: 'jpeg',
+      });
+      expect(headers.ETag).toBe('"img-1-blur-320--jpeg-0"');
+    });
+
+    it('gives sizes from 480 up the plain blur ETag', async () => {
+      await get({ blur: true, width: 1000, height: 480 });
+
+      expect(headers.ETag).toBe('"img-1-blur-0"');
     });
 
     it('does not count a view on a 304 either', async () => {

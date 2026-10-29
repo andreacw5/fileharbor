@@ -34,7 +34,13 @@ import {
   extractTagNames,
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
-import { buildSrcset, snapQuality, snapSize } from './image-variants';
+import {
+  BLUR_QUALITY,
+  buildSrcset,
+  snapBlurSize,
+  snapQuality,
+  snapSize,
+} from './image-variants';
 
 // On-demand resizes cached per image; past this many, new ones are served but
 // not stored, so arbitrary width/height/quality combinations can't fill the disk.
@@ -48,7 +54,7 @@ export interface ImageFileOptions {
   format?: 'webp' | 'jpeg' | 'png';
   quality?: number;
   thumb?: boolean;
-  /** The `?blur=1` rendition (plan 11): every other option but skipDiskRead is ignored. */
+  /** The `?blur=1` rendition (plan 11): only width, height, format and skipDiskRead apply. */
   blur?: boolean;
   /** Return only `filePath` when the file is already on disk (X-Accel-Redirect). */
   skipDiskRead?: boolean;
@@ -375,7 +381,22 @@ export class ImageService implements OnModuleDestroy {
     });
 
     if (blur) {
-      return this.getBlurredFile(domain, image.id, fromDisk);
+      const blurWidth = snapBlurSize(requestedWidth);
+      const blurHeight = snapBlurSize(requestedHeight);
+      const blurred = await this.getBlurredFile(domain, image.id, fromDisk);
+      if (format === 'webp' && !blurWidth && !blurHeight) return blurred;
+      // Resized/converted per request, not cached: blurred.webp stays the one
+      // file. Quality stays BLUR_QUALITY.
+      return {
+        mimeType: `image/${format}`,
+        buffer: await this.storage.resizeImage(
+          blurred.buffer ?? (await this.storage.readFile(blurred.filePath!)),
+          blurWidth,
+          blurHeight,
+          format,
+          BLUR_QUALITY,
+        ),
+      };
     }
 
     if (thumb) {

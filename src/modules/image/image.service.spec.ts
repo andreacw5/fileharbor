@@ -731,8 +731,8 @@ describe('ImageService', () => {
 
         const result = await service.getImageFile(image, {
           blur: true,
-          width: 800,
-          format: 'png',
+          width: 1000,
+          quality: 100,
           thumb: true,
         });
 
@@ -742,6 +742,57 @@ describe('ImageService', () => {
         });
         expect(mockStorageService.blurImage).not.toHaveBeenCalled();
         expect(mockStorageService.resizeImage).not.toHaveBeenCalled();
+      });
+
+      it('resizes/converts blurred.webp per request, uncached, quality fixed', async () => {
+        existing('blurred');
+        mockStorageService.readFile.mockResolvedValue(Buffer.from('blurred'));
+        mockStorageService.resizeImage.mockResolvedValue(Buffer.from('jpeg'));
+
+        const result = await service.getImageFile(image, {
+          blur: true,
+          width: 300,
+          quality: 100,
+          format: 'jpeg',
+          skipDiskRead: true,
+        });
+
+        expect(mockStorageService.resizeImage).toHaveBeenCalledWith(
+          Buffer.from('blurred'),
+          320,
+          undefined,
+          'jpeg',
+          50,
+        );
+        expect(result).toEqual({
+          mimeType: 'image/jpeg',
+          buffer: Buffer.from('jpeg'),
+        });
+        expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      });
+
+      it('converts a freshly built one from its buffer', async () => {
+        existing('thumb');
+        mockStorageService.readFile.mockResolvedValue(Buffer.from('thumb'));
+        mockStorageService.resizeImage.mockResolvedValue(Buffer.from('jpeg'));
+
+        const result = await service.getImageFile(image, {
+          blur: true,
+          format: 'jpeg',
+        });
+
+        expect(mockStorageService.resizeImage).toHaveBeenCalledWith(
+          Buffer.from('blurred'),
+          undefined,
+          undefined,
+          'jpeg',
+          50,
+        );
+        expect(mockStorageService.readFile).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+          mimeType: 'image/jpeg',
+          buffer: Buffer.from('jpeg'),
+        });
       });
 
       it('builds a missing one from the thumb and stores it', async () => {
