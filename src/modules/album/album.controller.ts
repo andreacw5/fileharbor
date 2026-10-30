@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiSecurity, ApiBody } from '@nestjs/swagger';
 import { AlbumService } from './album.service';
+import { CreatorService } from '@/modules/creator/creator.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import {
   ClientId,
@@ -51,8 +52,24 @@ export class AlbumController {
 
   constructor(
     private albumService: AlbumService,
+    private creatorService: CreatorService,
     private audit: BastionAuditService,
   ) {}
+
+  /**
+   * X-User-Id → internal Creator.id, created on first use like image and video
+   * uploads: Album.creatorId is a FK to Creator.id, and ownership compares it.
+   */
+  private async ownerId(
+    clientId: string,
+    externalId: string | undefined,
+  ): Promise<string> {
+    if (!externalId)
+      throw new BadRequestException(
+        'Creator ID is required (X-User-Id header)',
+      );
+    return (await this.creatorService.resolveCreator(clientId, externalId)).id;
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new album' })
@@ -62,11 +79,8 @@ export class AlbumController {
     @CreatorExternalId() creatorId: string,
     @Body() dto: CreateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
-    return this.albumService.createAlbum(clientId, creatorId, dto);
+    const ownerId = await this.ownerId(clientId, creatorId);
+    return this.albumService.createAlbum(clientId, ownerId, dto);
   }
 
   @Get()
@@ -105,7 +119,11 @@ export class AlbumController {
     @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
   ): Promise<AlbumResponseDto> {
-    return this.albumService.getAlbumWithItems(albumId, clientId, creatorId);
+    return this.albumService.getAlbumWithItems(
+      albumId,
+      clientId,
+      await this.albumService.findCreatorId(clientId, creatorId),
+    );
   }
 
   @Patch(':albumId')
@@ -117,11 +135,8 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
-    return this.albumService.updateAlbum(albumId, clientId, creatorId, dto);
+    const ownerId = await this.ownerId(clientId, creatorId);
+    return this.albumService.updateAlbum(albumId, clientId, ownerId, dto);
   }
 
   @Delete(':albumId')
@@ -132,14 +147,11 @@ export class AlbumController {
     @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     const result = await this.albumService.deleteAlbum(
       albumId,
       clientId,
-      creatorId,
+      ownerId,
     );
     auditClientWrite(this.audit, 'fh_album.deleted', clientId, creatorId, {
       albumId,
@@ -160,12 +172,9 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto: AddAlbumItemsDto,
   ): Promise<AddAlbumItemsResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     return this.albumService.addItemsToAlbum(albumId, clientId, dto.items, {
-      creatorId,
+      creatorId: ownerId,
     });
   }
 
@@ -179,15 +188,12 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto: RemoveAlbumItemsDto,
   ) {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     return this.albumService.removeItemsFromAlbum(
       albumId,
       clientId,
       dto.items,
-      { creatorId },
+      { creatorId: ownerId },
     );
   }
 
@@ -215,14 +221,11 @@ export class AlbumController {
     @Param('albumId') albumId: string,
     @Body() dto?: CreateAlbumTokenDto,
   ): Promise<AlbumTokenResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     return this.albumService.generateAlbumToken(
       albumId,
       clientId,
-      creatorId,
+      ownerId,
       dto?.expiresInDays,
     );
   }
@@ -235,11 +238,8 @@ export class AlbumController {
     @CreatorExternalId() creatorId: string,
     @Param('albumId') albumId: string,
   ): Promise<DeleteAlbumResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
-    return this.albumService.revokeAlbumToken(albumId, clientId, creatorId);
+    const ownerId = await this.ownerId(clientId, creatorId);
+    return this.albumService.revokeAlbumToken(albumId, clientId, ownerId);
   }
 
   // ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ export class AlbumController {
     return this.albumService.getAlbumWithItemsByExternalId(
       externalAlbumId,
       clientId,
-      creatorId,
+      await this.albumService.findCreatorId(clientId, creatorId),
     );
   }
 
@@ -270,14 +270,11 @@ export class AlbumController {
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: UpdateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     return this.albumService.updateAlbumByExternalId(
       externalAlbumId,
       clientId,
-      creatorId,
+      ownerId,
       dto,
     );
   }
@@ -291,15 +288,12 @@ export class AlbumController {
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: AddAlbumItemsDto,
   ): Promise<AddAlbumItemsResponseDto> {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     return this.albumService.addItemsToAlbumByExternalId(
       externalAlbumId,
       clientId,
       dto.items,
-      { creatorId },
+      { creatorId: ownerId },
     );
   }
 
@@ -313,15 +307,12 @@ export class AlbumController {
     @Param('externalAlbumId') externalAlbumId: string,
     @Body() dto: RemoveAlbumItemsDto,
   ) {
-    if (!creatorId)
-      throw new BadRequestException(
-        'Creator ID is required (X-User-Id header)',
-      );
+    const ownerId = await this.ownerId(clientId, creatorId);
     return this.albumService.removeItemsFromAlbumByExternalId(
       externalAlbumId,
       clientId,
       dto.items,
-      { creatorId },
+      { creatorId: ownerId },
     );
   }
 }

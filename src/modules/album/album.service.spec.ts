@@ -68,6 +68,7 @@ describe('AlbumService', () => {
   };
 
   const mockPrismaService = {
+    creator: { findUnique: jest.fn() },
     album: {
       create: jest.fn(),
       findFirst: jest.fn(),
@@ -209,6 +210,31 @@ describe('AlbumService', () => {
   });
 
   // ---------------------------------------------------------------------------
+
+  describe('findCreatorId', () => {
+    it('maps X-User-Id to Creator.id within the client', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue({ id: 'cr-1' });
+      await expect(service.findCreatorId(mockClientId, 'ext-1')).resolves.toBe(
+        'cr-1',
+      );
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
+        where: {
+          clientId_externalId: { clientId: mockClientId, externalId: 'ext-1' },
+        },
+        select: { id: true },
+      });
+    });
+
+    it('is undefined for an unknown id or no header', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+      await expect(
+        service.findCreatorId(mockClientId, 'nobody'),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.findCreatorId(mockClientId, undefined),
+      ).resolves.toBeUndefined();
+    });
+  });
 
   describe('assertAlbumExists', () => {
     it('looks the album up in the same client', async () => {

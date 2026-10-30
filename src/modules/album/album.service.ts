@@ -163,6 +163,22 @@ export class AlbumService {
     return this.formatAlbumResponse(album);
   }
 
+  /**
+   * Creator.id behind an X-User-Id, for read-side ownership checks: undefined
+   * when the header is missing or this client never saw it (owns nothing).
+   */
+  async findCreatorId(
+    clientId: string,
+    externalId: string | undefined,
+  ): Promise<string | undefined> {
+    if (!externalId) return undefined;
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId } },
+      select: { id: true },
+    });
+    return creator?.id;
+  }
+
   /** 404 unless the album exists in this client; uploads call it before writing anything. */
   async assertAlbumExists(albumId: string, clientId: string): Promise<void> {
     const album = await this.prisma.album.findFirst({

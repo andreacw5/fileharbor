@@ -42,6 +42,12 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   now unlinks it however the request ends.
 - **Tinify output URL pinned to `https://api.tinify.com`.** The compressed file was downloaded, with the
   client's Tinify key, from whatever URL the upstream JSON named; any other origin is now refused.
+- **Albums resolve `X-User-Id` into a Creator**, like images and videos. The header was stored raw as
+  `Album.creatorId` (a FK to `Creator.id`) and compared raw for ownership: `POST /albums` was a 500 with a
+  normal external id, and anyone who knew an internal `Creator.id` (exposed by `GET /creators`) acted as
+  that creator on albums. ⚠️ Callers that worked around it by sending the internal Creator id as
+  `X-User-Id` must send their own user id again. No migration: the FK means every existing row already
+  holds a real `Creator.id`.
 
 ### Changed
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to
