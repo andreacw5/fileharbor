@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   Body,
+  HttpCode,
   UseGuards,
   BadRequestException,
   NotFoundException,
@@ -20,6 +21,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
+  ApiResponse,
   ApiBearerAuth,
   ApiQuery,
   ApiConsumes,
@@ -55,6 +57,7 @@ import { AdminUpdateVideoDto } from '../dto/admin-update-video.dto';
 import {
   AdminDeleteResponseDto,
   AdminVideoResponseDto,
+  RegenerateResponseDto,
 } from '../dto/admin-response.dto';
 import {
   ApiCreatedData,
@@ -340,6 +343,38 @@ export class VideosAdminController {
         download: download === 'true',
         xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
       },
+    );
+  }
+
+  @Post(':id/regenerate')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Regenerate the thumbnail',
+    description:
+      'Rebuilds thumb.webp from the stored original (first frame, VIDEO_THUMBNAIL_QUALITY); id, original and metadata are untouched. Same contract as POST admin/images/:id/regenerate.',
+  })
+  @ApiOkData(RegenerateResponseDto)
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'Video or original file not found' })
+  @ApiResponse({
+    status: 422,
+    description: 'Original file is not a readable video',
+  })
+  @Audit('fh_video.regenerated', {
+    metadata: (_r: unknown, req: AuditRequest) => ({ videoId: req.params.id }),
+  })
+  async regenerateVideo(
+    @Param('id') id: string,
+    @CurrentAdminUser() adminUser: AdminJwtPayload,
+  ): Promise<RegenerateResponseDto> {
+    const video = await this.videoService.findAdminVideoById(id);
+    if (!video) throw new NotFoundException('Video not found');
+    assertClientAccess(adminUser, video.clientId);
+
+    return plainToInstance(
+      RegenerateResponseDto,
+      await this.videoService.regenerateThumbnail(video),
+      { excludeExtraneousValues: true },
     );
   }
 

@@ -56,6 +56,11 @@ export const removeVideoTempFile = {
  * nginx and sends an empty body, which only works behind an nginx that declares
  * the `/internal-videos/` internal location. Everywhere else the caller gets
  * `video/mp4` with zero bytes and the player reports an unsupported format.
+ *
+ * The flag is global but the caller is not: Meridian's BFF reaches the container
+ * on the Docker network, nginx never in between. So the hand-off also needs
+ * `X-Original-URI`, which our nginx sets on every proxied location and no
+ * internal caller forwards; without it the file is sent from here.
  */
 export function sendVideo(
   res: Response,
@@ -67,8 +72,9 @@ export function sendVideo(
     cacheControl?: string;
   },
 ): void {
+  const xAccel = opts.xAccelRedirect && !!res.req?.headers['x-original-uri'];
   if (
-    opts.xAccelRedirect &&
+    xAccel &&
     (video.storagePath.includes('..') || video.storagePath.startsWith('/'))
   ) {
     throw new ForbiddenException('Invalid storage path');
@@ -83,7 +89,7 @@ export function sendVideo(
     ...(opts.cacheControl && { 'Cache-Control': opts.cacheControl }),
   });
 
-  if (opts.xAccelRedirect) {
+  if (xAccel) {
     res.set(
       'X-Accel-Redirect',
       `/internal-videos/${video.storagePath}/original.mp4`,

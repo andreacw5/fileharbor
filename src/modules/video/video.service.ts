@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  UnprocessableEntityException,
   Logger,
   OnModuleDestroy,
 } from '@nestjs/common';
@@ -413,6 +414,44 @@ export class VideoService implements OnModuleDestroy {
     }));
 
     return paginate(data, total, params);
+  }
+
+  /**
+   * Rebuilds thumb.webp from the stored original (POST admin/videos/:id/regenerate),
+   * the video counterpart of ImageService.regenerateRenditions: 404 without an
+   * original, 422 when ffmpeg can't read it. Fills the thumb of uploads made without
+   * the ffmpeg binary (images before 4.0.1), or after a VIDEO_THUMBNAIL_QUALITY change.
+   */
+  async regenerateThumbnail(video: {
+    id: string;
+    clientId: string;
+    client?: { domain: string | null } | null;
+  }): Promise<{ id: string; updatedAt: Date }> {
+    const domain = video.client?.domain || video.clientId;
+    const original = this.storage.getVideoFilePath(
+      domain,
+      video.id,
+      'original',
+    );
+    if (!(await this.storage.fileExists(original))) {
+      throw new NotFoundException('Original file missing');
+    }
+    try {
+      await this.storage.extractVideoThumbnail(
+        original,
+        this.storage.getVideoFilePath(domain, video.id, 'thumb'),
+        this.thumbnailQuality,
+      );
+    } catch {
+      throw new UnprocessableEntityException(
+        'Original file is not a readable video',
+      );
+    }
+    return this.prisma.video.update({
+      where: { id: video.id },
+      data: { updatedAt: new Date() },
+      select: { id: true, updatedAt: true },
+    });
   }
 
   async findAdminVideoById(videoId: string, actorId?: string) {

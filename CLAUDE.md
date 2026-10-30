@@ -105,7 +105,9 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 `node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
 (same shape, resumable on `dHash IS NULL`, `--rehash` redoes every row) fills `dHash` for images uploaded before plan 03 or emptied by the 256-bit migration. `src/scripts/regenerate-thumbnails.ts`
 (same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
-which otherwise applies to new uploads only. Every `@Cron` job runs inside
+which otherwise applies to new uploads only. `src/scripts/backfill-video-thumbnails.ts` (same shape, `[--apply] [--client <id>] [--force]`)
+extracts `thumb.webp` for videos that have none: uploads made with an image built before 4.0.1 (no ffmpeg binary) kept
+only `original.mp4`. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
 
@@ -435,7 +437,9 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 
 - **Delivery**: a file already on disk is never read into memory. With `IMAGE_X_ACCEL_REDIRECT=true` the
   controller answers `X-Accel-Redirect: /internal-images/<storage-relative path>` and nginx serves it;
-  otherwise Node streams it (`createReadStream`, `Content-Length` from `stat`). Only a fresh render (or a blur
+  otherwise Node streams it (`createReadStream`, `Content-Length` from `stat`). Videos use the same
+  hand-off only when the request carries `X-Original-URI` (our nginx sets it, Meridian's BFF on the Docker
+  network does not): the flag alone would answer an internal caller with an empty body. Only a fresh render (or a blur
   resized per request) comes back as a buffer. Prod keeps X-Accel **off** for images on purpose: nginx never
   `proxy_cache`s an X-Accel response, and the image cache (HIT = no upstream, no DB) is worth more. Videos use
   it (`VIDEO_X_ACCEL_REDIRECT=true`).
@@ -472,7 +476,9 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` (and `blurred.webp` if one exists, best-effort) from the
   stored original and empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
   without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
-  it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).
+  it, so the console reloads with `?t=<updatedAt>`. `POST admin/videos/:id/regenerate` is the video counterpart
+  (`VideoService.regenerateThumbnail`): `thumb.webp` from the first frame at `VIDEO_THUMBNAIL_QUALITY`, same codes,
+  `fh_video.regenerated`. Avatars re-upload on the same URL.
 
 ## DB Entities
 

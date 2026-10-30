@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.1.4] – 2026-10-30
+
+### Fixed
+- **Video stream with `VIDEO_X_ACCEL_REDIRECT=true` and no nginx in front.** The hand-off was decided by
+  the flag alone, so a caller on the Docker network (Meridian's BFF) got `video/mp4` with an empty
+  body and the player reported an unsupported format. `X-Accel-Redirect` is now sent only when the request
+  carries `X-Original-URI` (set by our nginx on every proxied location, forwarded by no internal caller);
+  otherwise the bytes are sent from Node as with the flag off.
+- **`backfill-video-thumbnails` script.** Images built before 4.0.1 had no ffmpeg binary, so the videos uploaded
+  with them have `original.mp4` and no `thumb.webp` (no poster in the console, `…/thumb` is a 404).
+  `node dist/scripts/backfill-video-thumbnails.js --apply` extracts the missing ones; dry run by default.
+
+### Added
+- **`POST admin/videos/:id/regenerate`**, the video counterpart of the image one: rebuilds `thumb.webp` from the
+  stored original (`404` without it, `422` when ffmpeg can't read it), touches `updatedAt`, audited as
+  `fh_video.regenerated`. Swagger schema `RegenerateImageResponseDto` is now `RegenerateResponseDto`, shared by both.
+
+---
+
 ## [4.1.3] – 2026-10-30
 
 Rebuild the image, no migration. Placeholder images moved from `storage/defaults.fileharbor/` into the

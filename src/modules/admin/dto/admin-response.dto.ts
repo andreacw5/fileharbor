@@ -211,7 +211,7 @@ export class AdminBulkDeleteResponseDto {
   failed: AdminBulkDeleteFailureDto[];
 }
 
-export class RegenerateImageResponseDto {
+export class RegenerateResponseDto {
   @ApiProperty() @Expose() id: string;
   @ApiProperty({ description: 'New value, use it as the ?t= cache-buster' })
   @Expose()

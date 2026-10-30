@@ -3396,7 +3396,7 @@
                   ],
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/RegenerateImageResponseDto"
+                      "$ref": "#/components/schemas/RegenerateResponseDto"
                     }
                   }
                 }
@@ -5607,6 +5607,60 @@
         ]
       }
     },
+    "/admin/videos/{id}/regenerate": {
+      "post": {
+        "description": "Rebuilds thumb.webp from the stored original (first frame, VIDEO_THUMBNAIL_QUALITY); id, original and metadata are untouched. Same contract as POST admin/images/:id/regenerate.",
+        "operationId": "VideosAdminController_regenerateVideo",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RegenerateResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "404": {
+            "description": "Video or original file not found"
+          },
+          "422": {
+            "description": "Original file is not a readable video"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Regenerate the thumbnail",
+        "tags": [
+          "Admin - Videos"
+        ]
+      }
+    },
     "/admin/stats": {
       "get": {
         "operationId": "StatisticsController_getGlobalStats",
@@ -6013,7 +6067,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "4.1.3",
+    "version": "4.1.4",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
@@ -7996,7 +8050,7 @@
           "message"
         ]
       },
-      "RegenerateImageResponseDto": {
+      "RegenerateResponseDto": {
         "type": "object",
         "properties": {
           "id": {
