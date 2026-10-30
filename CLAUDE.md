@@ -458,7 +458,8 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
   the original width, then the original itself (no render, no cache slot). Omitted for private images.
 - **Render cap**: every `StorageService.resizeImage` call (image variants and avatar jpeg/png conversion,
   which is never cached) goes through a `Semaphore` (`utils/semaphore.ts`): `RENDER_CONCURRENCY` (default 2)
-  at once, `RENDER_QUEUE_LIMIT` (default 20) waiting, the rest get `503` with `Retry-After: 1`
+  at once, `RENDER_QUEUE_LIMIT` (default 200: a gallery page asks for 50-100 cold variants at once, and waiters hold no bytes,
+  the variant source is read only once the slot is acquired) waiting, the rest get `503` with `Retry-After: 1`
   (`RenderBusyException`: its `retryAfterSeconds: 1` becomes the header only, never the body). A view is counted only after the file is served. The optimize jobs don't
   use it; upload and regenerate do, for the blurred preview only (best-effort: a full queue skips it).
 - **Blurred preview** (plan 11, `?blur=1`): `blurred.webp` beside the thumb, a rendition and not an access rule:

@@ -126,7 +126,7 @@ export class StorageService {
       this.configService.get<number>('RENDER_CONCURRENCY') || 2;
     this.renderLimiter = new Semaphore(
       renderConcurrency,
-      this.configService.get<number>('RENDER_QUEUE_LIMIT') ?? 20,
+      this.configService.get<number>('RENDER_QUEUE_LIMIT') ?? 200,
     );
     // libvips threads per pipeline default to the CPU count: RENDER_CONCURRENCY
     // pipelines at once would oversubscribe every core and starve fs reads
@@ -810,17 +810,26 @@ export class StorageService {
    * Render a resized/re-encoded copy for a request (image variants, avatar
    * format conversion). Runs behind `renderLimiter`: past RENDER_CONCURRENCY
    * renders callers wait, past RENDER_QUEUE_LIMIT waiters they get a 503.
-   * Waiters already hold their source buffer, hence the small queue.
+   * Pass a loader instead of a Buffer and the source is read only once the
+   * render slot is acquired: waiters then hold no bytes, so the queue can be
+   * long enough for a whole gallery page of cold variants.
    */
   async resizeImage(
-    buffer: Buffer,
+    source: Buffer | (() => Promise<Buffer>),
     width?: number,
     height?: number,
     format: 'webp' | 'jpeg' | 'png' = 'webp',
     quality: number = 85,
   ): Promise<Buffer> {
     return this.renderLimiter.run(
-      () => this.render(buffer, width, height, format, quality),
+      async () =>
+        this.render(
+          typeof source === 'function' ? await source() : source,
+          width,
+          height,
+          format,
+          quality,
+        ),
       () => {
         this.logger.warn(
           `[resizeImage] Render queue full (${this.renderLimiter.pending} waiting)`,

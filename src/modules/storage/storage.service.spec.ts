@@ -512,4 +512,26 @@ describe('StorageService.blurImage', () => {
     );
     await first;
   });
+
+  it('reads a lazy resize source only once the render slot is acquired', async () => {
+    const one = new StorageService({
+      get: (key: string) =>
+        ({ RENDER_CONCURRENCY: 1, RENDER_QUEUE_LIMIT: 5 })[key],
+    } as unknown as ConfigService);
+    const png = await sharp({
+      create: { width: 64, height: 64, channels: 3, background: '#fff' },
+    })
+      .png()
+      .toBuffer();
+    const load = jest.fn(async () => png);
+
+    const first = one.blurImage(png);
+    const second = one.resizeImage(load, 16, undefined, 'webp', 60);
+    await new Promise((r) => setImmediate(r));
+    expect(load).not.toHaveBeenCalled();
+
+    await first;
+    await expect(second).resolves.toBeInstanceOf(Buffer);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
 });

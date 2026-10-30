@@ -713,7 +713,7 @@ describe('ImageService', () => {
       });
 
       expect(mockStorageService.resizeImage).toHaveBeenCalledWith(
-        Buffer.from('image-data'),
+        expect.any(Function),
         960,
         16,
         'png',
