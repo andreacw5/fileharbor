@@ -43,10 +43,15 @@ import {
   normalizeTagNames,
 } from '@/modules/tag/tag.utils';
 import { VideoService } from '@/modules/video/video.service';
-import { sendVideo, videoMulterOptions } from '@/modules/video/video-delivery';
+import {
+  sendVideo,
+  videoMulterOptions,
+  removeVideoTempFile,
+} from '@/modules/video/video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { AdminVideoListQuery } from '../dto/admin-list-query.dto';
+import { AdminUpdateVideoDto } from '../dto/admin-update-video.dto';
 import {
   AdminDeleteResponseDto,
   AdminVideoResponseDto,
@@ -93,7 +98,10 @@ export class VideosAdminController {
     },
   })
   @ApiCreatedData(AdminVideoResponseDto)
-  @UseInterceptors(FileInterceptor('file', videoMulterOptions))
+  @UseInterceptors(
+    removeVideoTempFile,
+    FileInterceptor('file', videoMulterOptions),
+  )
   @Audit('fh_video.uploaded', {
     metadata: (r: { id?: string }, req: AuditRequest) => ({
       videoId: r?.id,
@@ -230,17 +238,6 @@ export class VideosAdminController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update video metadata (admin)' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        originalName: { type: 'string' },
-        isPrivate: { type: 'boolean' },
-        description: { type: 'string', nullable: true },
-        tags: { type: 'array', items: { type: 'string' } },
-      },
-    },
-  })
   @ApiOkData(AdminVideoResponseDto)
   @Audit('fh_video.updated', {
     metadata: (_r: unknown, req: AuditRequest) => ({
@@ -250,13 +247,7 @@ export class VideosAdminController {
   })
   async updateVideo(
     @Param('id') id: string,
-    @Body()
-    dto: {
-      originalName?: string;
-      isPrivate?: boolean;
-      description?: string;
-      tags?: string[];
-    },
+    @Body() dto: AdminUpdateVideoDto,
     @CurrentAdminUser() adminUser: AdminJwtPayload,
   ): Promise<AdminVideoResponseDto> {
     const existing = await this.videoService.getVideoById(id);

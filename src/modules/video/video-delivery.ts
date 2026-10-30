@@ -1,5 +1,13 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  CallHandler,
+  ExecutionContext,
+  ForbiddenException,
+  NestInterceptor,
+} from '@nestjs/common';
 import { diskStorage } from 'multer';
+import { unlink } from 'fs/promises';
+import { finalize } from 'rxjs';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -20,6 +28,26 @@ export const videoMulterOptions = {
   },
   limits: { fileSize: parseInt(process.env.MAX_VIDEO_SIZE || '524288000') },
 };
+
+/**
+ * Deletes multer's temp file once the request is over, however it ended. Multer
+ * writes up to MAX_VIDEO_SIZE to disk before the handler runs, so a 400 from the
+ * ValidationPipe or an admin 403 would otherwise leave it in the tmpdir.
+ * `VideoService.uploadVideo` unlinks it too on its own path; this covers the rest.
+ * List it before the FileInterceptor, so it wraps it.
+ */
+export const removeVideoTempFile = {
+  intercept(context: ExecutionContext, next: CallHandler) {
+    const req = context
+      .switchToHttp()
+      .getRequest<{ file?: { path?: string } }>();
+    return next.handle().pipe(
+      finalize(() => {
+        if (req.file?.path) void unlink(req.file.path).catch(() => {});
+      }),
+    );
+  },
+} satisfies NestInterceptor;
 
 /**
  * Sends an MP4, with Range support, for the client and admin stream routes.

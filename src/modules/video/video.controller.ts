@@ -29,7 +29,11 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { VideoService } from './video.service';
-import { sendVideo, videoMulterOptions } from './video-delivery';
+import {
+  sendVideo,
+  videoMulterOptions,
+  removeVideoTempFile,
+} from './video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { BastionAuditService } from '@heyatom/bastion-client/nest';
@@ -83,7 +87,10 @@ export class VideoController {
     },
   })
   @ApiCreatedData(VideoResponseDto)
-  @UseInterceptors(FileInterceptor('file', videoMulterOptions))
+  @UseInterceptors(
+    removeVideoTempFile,
+    FileInterceptor('file', videoMulterOptions),
+  )
   async uploadVideo(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,

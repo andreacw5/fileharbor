@@ -35,6 +35,11 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   capped at 365 (`1e15` was a 500) and defaults to 7 (it used to mean "never"). An expired share link
   and an expired album token both answer `403` with a domain code (`SHARE_LINK_EXPIRED` /
   `TOKEN_EXPIRED`); the share link one used to be a `400` swallowed into a bare `403`.
+- **`PATCH /admin/videos/:id` validates its body** (`AdminUpdateVideoDto`, same rules as images): the inline
+  type let any `originalName` length through and turned a string `tags` into one tag per character.
+- **Video upload temp files are always removed.** Multer writes up to `MAX_VIDEO_SIZE` to the tmpdir before the
+  handler; a `400` from validation or an admin `403` left it there. An interceptor on both upload routes
+  now unlinks it however the request ends.
 
 ### Changed
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to
