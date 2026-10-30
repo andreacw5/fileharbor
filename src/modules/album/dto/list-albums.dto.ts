@@ -5,7 +5,8 @@ import { PageParams } from '@heyatom/nest-common';
 
 export class ListAlbumsDto extends PageParams {
   @ApiPropertyOptional({
-    description: 'Filter by creator ID',
+    description:
+      'Filter by the internal Creator.id (the `creatorId` returned in album and image responses), not the X-User-Id',
     example: 'creator-123',
   })
   @IsOptional()

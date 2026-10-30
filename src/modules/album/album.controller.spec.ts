@@ -12,7 +12,10 @@ const creatorService = {
 };
 
 describe('AlbumController client-surface audit', () => {
-  const albumService = { deleteAlbum: jest.fn() };
+  const albumService = {
+    deleteAlbum: jest.fn(),
+    findCreatorId: jest.fn().mockResolvedValue('creator-1'),
+  };
   const audit = { write: jest.fn().mockResolvedValue(undefined) };
   const controller = new AlbumController(
     albumService as unknown as AlbumService,
@@ -95,6 +98,16 @@ describe('AlbumController X-User-Id resolution', () => {
       [],
       { creatorId: 'creator-<user-1>' },
     );
+  });
+
+  it('refuses a write from an unknown creator without creating one', async () => {
+    albumService.findCreatorId.mockResolvedValueOnce(undefined);
+
+    await expect(
+      controller.updateAlbum('client-1', 'nobody', 'album-1', {} as any),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(creatorService.resolveCreator).not.toHaveBeenCalled();
+    expect(albumService.updateAlbum).not.toHaveBeenCalled();
   });
 
   it('reads with a lookup, never creating a creator', async () => {

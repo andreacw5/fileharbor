@@ -437,10 +437,14 @@ export class ImageController {
 
           res.set({
             'Content-Type': mimeType,
-            // A denial depends on who asks: don't let a cache replay it to the
-            // owner. Anonymous misses share that policy, or it would tell them apart.
-            'Cache-Control':
-              defaultType === 'permission_denied' || anonymous
+            // Anonymous: miss and denial are the same placeholder, so both can
+            // sit briefly in a shared cache (scanner bursts never reach Node)
+            // while a private→public flip shows within a minute. The owner's
+            // key bypasses nginx's cache (proxy_cache_bypass on X-API-Key).
+            // Keyed denial: depends on who asks, never cached.
+            'Cache-Control': anonymous
+              ? 'public, max-age=60'
+              : defaultType === 'permission_denied'
                 ? 'private, no-store'
                 : 'public, max-age=3600',
             'X-FileHarbor-Fallback': defaultType,

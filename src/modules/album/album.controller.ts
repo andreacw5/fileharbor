@@ -9,6 +9,7 @@ import {
   Query,
   UseInterceptors,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiSecurity, ApiBody } from '@nestjs/swagger';
@@ -57,18 +58,26 @@ export class AlbumController {
   ) {}
 
   /**
-   * X-User-Id → internal Creator.id, created on first use like image and video
-   * uploads: Album.creatorId is a FK to Creator.id, and ownership compares it.
+   * X-User-Id → internal Creator.id: Album.creatorId is a FK to Creator.id,
+   * and ownership compares it. Created on first use only by POST /albums (like
+   * image and video uploads); every other write only looks it up, so a wrong
+   * X-User-Id on PATCH/DELETE gets 403 without leaving a phantom Creator row.
    */
   private async ownerId(
     clientId: string,
     externalId: string | undefined,
+    { create = false } = {},
   ): Promise<string> {
     if (!externalId)
       throw new BadRequestException(
         'Creator ID is required (X-User-Id header)',
       );
-    return (await this.creatorService.resolveCreator(clientId, externalId)).id;
+    if (create)
+      return (await this.creatorService.resolveCreator(clientId, externalId))
+        .id;
+    const id = await this.albumService.findCreatorId(clientId, externalId);
+    if (!id) throw new ForbiddenException('Not the album owner');
+    return id;
   }
 
   @Post()
@@ -79,7 +88,7 @@ export class AlbumController {
     @CreatorExternalId() creatorId: string,
     @Body() dto: CreateAlbumDto,
   ): Promise<AlbumResponseDto> {
-    const ownerId = await this.ownerId(clientId, creatorId);
+    const ownerId = await this.ownerId(clientId, creatorId, { create: true });
     return this.albumService.createAlbum(clientId, ownerId, dto);
   }
 

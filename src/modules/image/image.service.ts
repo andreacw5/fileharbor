@@ -1676,6 +1676,8 @@ export class ImageService implements OnModuleDestroy {
               Authorization: `Basic ${authString}`,
             },
             responseType: 'arraybuffer',
+            // The origin was checked on the URL above; a redirect would undo it
+            maxRedirects: 0,
           }),
         );
 

@@ -133,7 +133,16 @@ export class ImageCleanupJob {
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
     await this.storage.saveFile(originalPath, optimizedBuffer);
-    await this.storage.clearImageVariants(domain, imageId);
+    // Best-effort: the original is already rewritten, so a failure here must
+    // not fail the row (the next run would re-encode the q85 file). A stale
+    // variant dir only costs disk until the next miss or regenerate.
+    await this.storage
+      .clearImageVariants(domain, imageId)
+      .catch((e: unknown) =>
+        this.logger.warn(
+          `[optimizeImage] ${imageId}: variants not cleared: ${e instanceof Error ? e.message : e}`,
+        ),
+      );
 
     return optimizedBuffer.length;
   }

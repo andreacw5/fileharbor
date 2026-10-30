@@ -222,6 +222,8 @@ describe('ImageController.getImage ?blur=1', () => {
 
     expect(denied).toEqual(headers);
     expect(denied['X-FileHarbor-Fallback']).toBe('not_found');
+    // Briefly cacheable: scanner bursts stop at nginx, a flip shows in a minute
+    expect(denied['Cache-Control']).toBe('public, max-age=60');
     expect(storageService.getDefaultImage).toHaveBeenNthCalledWith(
       1,
       'not_found',

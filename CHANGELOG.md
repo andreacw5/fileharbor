@@ -54,6 +54,12 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   are no longer cacheable (`public, max-age=3600` before), the price of looking the same.
 
 ### Changed
+- **Anonymous placeholders are `public, max-age=60`** (miss and denial alike): scanner bursts stop at
+  nginx, a private→public flip shows within a minute. A keyed denial stays `private, no-store`.
+- **Album writes never create a creator** except `POST /albums`: a wrong `X-User-Id` on
+  `PATCH`/`DELETE`/items/token is a 403, not a phantom `Creator` row.
+- Optimize job: clearing the variant cache is best-effort once the original is rewritten.
+- Tinify download does not follow redirects (the origin check would otherwise be bypassed).
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to
   render it once each behind the semaphore; now they share one render.
 - **Small variants come from the thumb.** A variant that fits inside `THUMBNAIL_SIZE` (and is not q100) is
