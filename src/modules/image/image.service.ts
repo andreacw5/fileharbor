@@ -16,7 +16,7 @@ import {
   OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
-import { Prisma } from '@prisma/client';
+import { AlbumResourceType, Prisma } from '@prisma/client';
 import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
@@ -35,6 +35,7 @@ import {
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { ClientService } from '@/modules/client/client.service';
+import { AlbumService } from '@/modules/album/album.service';
 import {
   BLUR_QUALITY,
   buildSrcset,
@@ -104,6 +105,7 @@ export class ImageService implements OnModuleDestroy {
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private clientService: ClientService,
+    private albumService: AlbumService,
   ) {
     // Original should be high quality to preserve image fidelity
     this.originalQuality = parseInt(
@@ -156,6 +158,9 @@ export class ImageService implements OnModuleDestroy {
         throw new BadRequestException('Client not found');
       }
       const domain = client.domain || clientId;
+
+      // Before any write: a missing album must not leave an orphan image behind
+      if (albumId) await this.albumService.assertAlbumExists(albumId, clientId);
 
       // Get or create creator
       let creator;
@@ -303,7 +308,12 @@ export class ImageService implements OnModuleDestroy {
         this.logger.debug(
           `[uploadImage] Adding to album - ID: ${imageId}, Album: ${albumId}`,
         );
-        await this.addImageToAlbum(imageId, albumId, clientId);
+        await this.albumService.addItemsToAlbum(
+          albumId,
+          clientId,
+          [{ id: imageId, resourceType: AlbumResourceType.IMAGE }],
+          { force: true },
+        );
       }
 
       this.logger.log(
@@ -703,36 +713,6 @@ export class ImageService implements OnModuleDestroy {
       );
       throw error;
     }
-  }
-
-  /**
-   * Add image to album
-   */
-  async addImageToAlbum(imageId: string, albumId: string, clientId: string) {
-    // Verify image and album belong to same client
-    await this.getImageById(imageId, clientId); // Only for validation, no need to assign
-    const album = await this.prisma.album.findFirst({
-      where: { id: albumId, clientId },
-    });
-
-    if (!album) {
-      throw new NotFoundException('Album not found');
-    }
-
-    const maxOrder = await this.prisma.albumItem.findFirst({
-      where: { albumId },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
-
-    return this.prisma.albumItem.create({
-      data: {
-        albumId,
-        imageId,
-        resourceType: 'IMAGE',
-        order: (maxOrder?.order || 0) + 1,
-      },
-    });
   }
 
   /**

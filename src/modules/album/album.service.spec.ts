@@ -210,6 +210,24 @@ describe('AlbumService', () => {
 
   // ---------------------------------------------------------------------------
 
+  describe('assertAlbumExists', () => {
+    it('looks the album up in the same client', async () => {
+      mockPrismaService.album.findFirst.mockResolvedValue({ id: mockAlbumId });
+      await service.assertAlbumExists(mockAlbumId, mockClientId);
+      expect(mockPrismaService.album.findFirst).toHaveBeenCalledWith({
+        where: { id: mockAlbumId, clientId: mockClientId },
+        select: { id: true },
+      });
+    });
+
+    it('404s when the album is missing', async () => {
+      mockPrismaService.album.findFirst.mockResolvedValue(null);
+      await expect(
+        service.assertAlbumExists(mockAlbumId, mockClientId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getAlbumById', () => {
     it('should return album when found', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
@@ -491,6 +509,19 @@ describe('AlbumService', () => {
         mockPrismaService.albumItem.createManyAndReturn,
       ).toHaveBeenCalledTimes(1);
       expect(mockPrismaService.albumItem.update).not.toHaveBeenCalled();
+    });
+
+    it('gives the first item of an empty album order 0', async () => {
+      await service.addItemsToAlbum(
+        mockAlbumId,
+        mockClientId,
+        [{ id: mockImageId, resourceType: AlbumResourceType.IMAGE }],
+        { force: true },
+      );
+
+      expect(
+        mockPrismaService.albumItem.createManyAndReturn.mock.calls[0][0].data,
+      ).toEqual([expect.objectContaining({ imageId: mockImageId, order: 0 })]);
     });
 
     it('should add a video to album', async () => {

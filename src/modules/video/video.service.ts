@@ -15,6 +15,8 @@ import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 import { randomUUID } from 'crypto';
+import { AlbumResourceType } from '@prisma/client';
+import { AlbumService } from '@/modules/album/album.service';
 import { plainToInstance } from 'class-transformer';
 import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { VideoResponseDto, DeleteVideoResponseDto } from './dto';
@@ -37,6 +39,7 @@ export class VideoService implements OnModuleDestroy {
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private metrics: FileharborMetrics,
+    private albumService: AlbumService,
   ) {
     this.thumbnailQuality = parseInt(
       this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80',
@@ -73,6 +76,9 @@ export class VideoService implements OnModuleDestroy {
       });
       if (!client) throw new BadRequestException('Client not found');
       const domain = client.domain || clientId;
+
+      // Before the copy: a missing album must not leave an orphan video behind
+      if (albumId) await this.albumService.assertAlbumExists(albumId, clientId);
 
       let creator;
       if (externalId) {
@@ -153,7 +159,12 @@ export class VideoService implements OnModuleDestroy {
         this.logger.debug(
           `[uploadVideo] Adding to album - ID: ${videoId}, Album: ${albumId}`,
         );
-        await this.addVideoToAlbum(videoId, albumId, clientId);
+        await this.albumService.addItemsToAlbum(
+          albumId,
+          clientId,
+          [{ id: videoId, resourceType: AlbumResourceType.VIDEO }],
+          { force: true },
+        );
       }
 
       this.logger.log(
@@ -163,23 +174,6 @@ export class VideoService implements OnModuleDestroy {
     } finally {
       await fs.unlink(file.path).catch(() => {});
     }
-  }
-
-  async addVideoToAlbum(videoId: string, albumId: string, clientId: string) {
-    const album = await this.prisma.album.findFirst({
-      where: { id: albumId, clientId },
-    });
-    if (!album) throw new NotFoundException(`Album ${albumId} not found`);
-
-    const maxItem = await this.prisma.albumItem.findFirst({
-      where: { albumId },
-      orderBy: { order: 'desc' },
-    });
-    const order = maxItem ? maxItem.order + 1 : 0;
-
-    return this.prisma.albumItem.create({
-      data: { albumId, videoId, resourceType: 'VIDEO', order },
-    });
   }
 
   async getVideoById(videoId: string, clientId?: string) {

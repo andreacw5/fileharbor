@@ -17,6 +17,7 @@ import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { ClientService } from '@/modules/client/client.service';
 import { RouteHelperService } from '@/utils/route.utils';
+import { AlbumService } from '@/modules/album/album.service';
 
 describe('ImageService', () => {
   let service: ImageService;
@@ -182,6 +183,11 @@ describe('ImageService', () => {
     findOrCreate: jest.fn(),
   };
 
+  const mockAlbumService = {
+    assertAlbumExists: jest.fn(),
+    addItemsToAlbum: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -206,6 +212,7 @@ describe('ImageService', () => {
           provide: CreatorService,
           useValue: mockCreatorServiceMock,
         },
+        { provide: AlbumService, useValue: mockAlbumService },
         {
           provide: ClientService,
           useValue: { storageDomain: jest.fn().mockResolvedValue(mockDomain) },
@@ -431,38 +438,47 @@ describe('ImageService', () => {
       ).rejects.toThrow('Client not found');
     });
 
-    it('should upload image with album association', async () => {
-      const albumId = 'album-123';
+    it('adds to the album through AlbumService once the image exists', async () => {
       const createdImage = { ...mockImage, id: 'new-image-123' };
-      const mockAlbum = {
-        id: albumId,
-        clientId: mockClientId,
-        creatorId: mockCreatorExternalId,
-        name: 'Test Album',
-        isPublic: false,
-        createdAt: new Date(),
-      };
-
-      // Need to mock the newly created image for addImageToAlbum
       mockPrismaService.image.create.mockResolvedValue(createdImage);
-      mockPrismaService.image.findFirst.mockResolvedValue(createdImage);
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.findFirst.mockResolvedValue({ order: 0 });
-      mockPrismaService.albumItem.create.mockResolvedValue({
-        albumId,
-        imageId: createdImage.id,
-        order: 1,
-      });
 
       const result = await service.uploadImage(
         mockClientId,
         mockExternalUserId,
         mockFile,
-        albumId,
+        'album-123',
       );
 
       expect(result).toBeDefined();
-      expect(mockPrismaService.albumItem.create).toHaveBeenCalled();
+      expect(mockAlbumService.assertAlbumExists).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+      );
+      expect(mockAlbumService.addItemsToAlbum).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+        [{ id: expect.any(String), resourceType: 'IMAGE' }],
+        { force: true },
+      );
+    });
+
+    it('404s on an unknown album before writing anything', async () => {
+      mockAlbumService.assertAlbumExists.mockRejectedValueOnce(
+        new NotFoundException('Album not found'),
+      );
+
+      await expect(
+        service.uploadImage(
+          mockClientId,
+          mockExternalUserId,
+          mockFile,
+          'missing',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockStorageService.encodeWebpWithThumbnail).not.toHaveBeenCalled();
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.create).not.toHaveBeenCalled();
+      expect(mockCreatorServiceMock.resolveCreator).not.toHaveBeenCalled();
     });
 
     it('should upload image with tags and description', async () => {

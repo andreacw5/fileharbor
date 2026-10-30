@@ -14,6 +14,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 import { MetricsService } from '@heyatom/nest-common/metrics';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 import { PageParams } from '@heyatom/nest-common';
+import { AlbumService } from '@/modules/album/album.service';
 
 jest.mock('fs/promises');
 
@@ -143,6 +144,11 @@ describe('VideoService', () => {
     resolveCreator: jest.fn(),
   };
 
+  const mockAlbumService = {
+    assertAlbumExists: jest.fn(),
+    addItemsToAlbum: jest.fn(),
+  };
+
   const mockRouteHelperService = {
     path: jest.fn((...segments: string[]) => '/' + segments.join('/')),
     fullUrl: jest.fn(
@@ -161,6 +167,7 @@ describe('VideoService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: CreatorService, useValue: mockCreatorService },
         { provide: RouteHelperService, useValue: mockRouteHelperService },
+        { provide: AlbumService, useValue: mockAlbumService },
         FileharborMetrics,
         {
           provide: MetricsService,
@@ -323,6 +330,46 @@ describe('VideoService', () => {
           }),
         }),
       );
+    });
+
+    it('adds to the album through AlbumService once the video exists', async () => {
+      await service.uploadVideo(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        'album-123',
+      );
+
+      expect(mockAlbumService.addItemsToAlbum).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+        [{ id: expect.any(String), resourceType: 'VIDEO' }],
+        { force: true },
+      );
+    });
+
+    it('404s on an unknown album before copying the file', async () => {
+      mockAlbumService.assertAlbumExists.mockRejectedValueOnce(
+        new NotFoundException('Album not found'),
+      );
+
+      await expect(
+        service.uploadVideo(
+          mockClientId,
+          mockExternalUserId,
+          mockFile,
+          undefined,
+          undefined,
+          undefined,
+          'missing',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockStorageService.copyFromTemp).not.toHaveBeenCalled();
+      expect(mockPrismaService.video.create).not.toHaveBeenCalled();
+      expect(fsPromises.unlink).toHaveBeenCalledWith(mockFile.path);
     });
 
     it('should store video with tags when provided', async () => {

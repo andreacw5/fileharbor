@@ -159,6 +159,15 @@ export class AlbumService {
     return this.formatAlbumResponse(album);
   }
 
+  /** 404 unless the album exists in this client; uploads call it before writing anything. */
+  async assertAlbumExists(albumId: string, clientId: string): Promise<void> {
+    const album = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+      select: { id: true },
+    });
+    if (!album) throw new NotFoundException('Album not found');
+  }
+
   async getAlbumById(albumId: string, clientId: string) {
     const album = await this.prisma.album.findFirst({
       where: { id: albumId, clientId },
@@ -349,6 +358,10 @@ export class AlbumService {
         );
     }
 
+    // The only place an item's order is computed (uploads with albumId come
+    // through here too): appended items continue from max + 1, the first one is 0.
+    // No lock: two concurrent adds can read the same max and share an `order`
+    // ([albumId, order] is an index, not unique) and the two keep no defined order.
     const records = await this.prisma.$transaction(async (tx) => {
       const maxOrder = await tx.albumItem.findFirst({
         where: { albumId },

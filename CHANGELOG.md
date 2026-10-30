@@ -21,6 +21,11 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   the old avatar instead of a row pointing at an empty dir.
 - **Video views** counted one per playback (first Range request), buffered and flushed every 10s like
   image views, instead of one `UPDATE` per Range chunk.
+- **Upload into an unknown album is a clean 404.** `POST /images` / `POST /videos` with an `albumId` that
+  doesn't exist in the client used to write the file and the row first, then 404: the asset existed and a
+  retry duplicated it. The album is now checked before anything is written.
+- **One album order.** Uploads with `albumId` go through the same code as `POST /albums/:id/items`: the
+  first item of an empty album is `0` (uploads used to start at `1`).
 
 ### Changed
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to
