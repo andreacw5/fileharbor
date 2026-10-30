@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [4.1.3] – 2026-10-30
 
 Rebuild the image, no migration. Placeholder images moved from `storage/defaults.fileharbor/` into the
 image (`defaults/`): the storage volume no longer needs them (the old dir can be deleted).
