@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Query,
+  Headers,
   Body,
   Res,
   BadRequestException,
@@ -28,7 +29,11 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { VideoService } from './video.service';
-import { sendVideo, videoMulterOptions } from './video-delivery';
+import {
+  sendVideo,
+  videoMulterOptions,
+  removeVideoTempFile,
+} from './video-delivery';
 import { StorageService } from '@/modules/storage/storage.service';
 import { ClientInterceptor } from '@/modules/client/interceptors/client.interceptor';
 import { BastionAuditService } from '@heyatom/bastion-client/nest';
@@ -82,7 +87,10 @@ export class VideoController {
     },
   })
   @ApiCreatedData(VideoResponseDto)
-  @UseInterceptors(FileInterceptor('file', videoMulterOptions))
+  @UseInterceptors(
+    removeVideoTempFile,
+    FileInterceptor('file', videoMulterOptions),
+  )
   async uploadVideo(
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,
@@ -168,9 +176,15 @@ export class VideoController {
     @Param('id') id: string,
     @ClientId() clientId: string,
     @Query('download') download: string,
+    @Headers('range') range: string | undefined,
     @Res() res: Response,
   ) {
-    const video = await this.videoService.getVideoStreamPath(id, clientId);
+    // One view per playback, not per Range chunk
+    const video = await this.videoService.getVideoStreamPath(
+      id,
+      clientId,
+      !range || /^bytes=0-/.test(range),
+    );
     sendVideo(
       res,
       {

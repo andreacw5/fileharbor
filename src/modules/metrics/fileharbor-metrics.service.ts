@@ -11,6 +11,9 @@ import {
   totalBytes,
 } from '@/modules/statistics/storage-usage';
 
+/** How long a `fileharbor_storage_bytes` collection is reused across scrapes. */
+export const STORAGE_GAUGE_MEMO_MS = 60_000;
+
 const MEDIA_KINDS = ['image', 'avatar'] as const;
 type MediaKind = (typeof MEDIA_KINDS)[number];
 
@@ -147,16 +150,21 @@ export class FileharborMetrics {
   // scrape drop out, and a failed query keeps the previous values.
   private registerStorageGauge(): void {
     const name = 'fileharbor_storage_bytes';
+    // Three sum(size) sequential scans per scrape: at a 15s interval that is a
+    // full pass over images every 15s. Storage moves slowly; 60s is plenty.
+    let computedAt = 0;
     const gauge = new Gauge({
       name,
       help: 'Bytes of stored originals (images + videos + avatars) per client; excludes thumbnails and cached variants',
       labelNames: ['client'],
       registers: [this.metrics.registry],
       collect: async () => {
+        if (Date.now() - computedAt < STORAGE_GAUGE_MEMO_MS) return;
         try {
           const usage = await storageUsageByClient(this.prisma);
           gauge.reset();
           for (const [client, u] of usage) gauge.set({ client }, totalBytes(u));
+          computedAt = Date.now();
         } catch (err) {
           this.logger.warn(
             `${name} collection failed: ${err instanceof Error ? err.message : String(err)}`,

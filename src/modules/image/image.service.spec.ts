@@ -15,7 +15,9 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
+import { ClientService } from '@/modules/client/client.service';
 import { RouteHelperService } from '@/utils/route.utils';
+import { AlbumService } from '@/modules/album/album.service';
 
 describe('ImageService', () => {
   let service: ImageService;
@@ -181,6 +183,11 @@ describe('ImageService', () => {
     findOrCreate: jest.fn(),
   };
 
+  const mockAlbumService = {
+    assertAlbumExists: jest.fn(),
+    addItemsToAlbum: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -204,6 +211,11 @@ describe('ImageService', () => {
         {
           provide: CreatorService,
           useValue: mockCreatorServiceMock,
+        },
+        { provide: AlbumService, useValue: mockAlbumService },
+        {
+          provide: ClientService,
+          useValue: { storageDomain: jest.fn().mockResolvedValue(mockDomain) },
         },
         {
           provide: RouteHelperService,
@@ -426,38 +438,47 @@ describe('ImageService', () => {
       ).rejects.toThrow('Client not found');
     });
 
-    it('should upload image with album association', async () => {
-      const albumId = 'album-123';
+    it('adds to the album through AlbumService once the image exists', async () => {
       const createdImage = { ...mockImage, id: 'new-image-123' };
-      const mockAlbum = {
-        id: albumId,
-        clientId: mockClientId,
-        creatorId: mockCreatorExternalId,
-        name: 'Test Album',
-        isPublic: false,
-        createdAt: new Date(),
-      };
-
-      // Need to mock the newly created image for addImageToAlbum
       mockPrismaService.image.create.mockResolvedValue(createdImage);
-      mockPrismaService.image.findFirst.mockResolvedValue(createdImage);
-      mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.albumItem.findFirst.mockResolvedValue({ order: 0 });
-      mockPrismaService.albumItem.create.mockResolvedValue({
-        albumId,
-        imageId: createdImage.id,
-        order: 1,
-      });
 
       const result = await service.uploadImage(
         mockClientId,
         mockExternalUserId,
         mockFile,
-        albumId,
+        'album-123',
       );
 
       expect(result).toBeDefined();
-      expect(mockPrismaService.albumItem.create).toHaveBeenCalled();
+      expect(mockAlbumService.assertAlbumExists).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+      );
+      expect(mockAlbumService.addItemsToAlbum).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+        [{ id: expect.any(String), resourceType: 'IMAGE' }],
+        { force: true },
+      );
+    });
+
+    it('404s on an unknown album before writing anything', async () => {
+      mockAlbumService.assertAlbumExists.mockRejectedValueOnce(
+        new NotFoundException('Album not found'),
+      );
+
+      await expect(
+        service.uploadImage(
+          mockClientId,
+          mockExternalUserId,
+          mockFile,
+          'missing',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockStorageService.encodeWebpWithThumbnail).not.toHaveBeenCalled();
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.create).not.toHaveBeenCalled();
+      expect(mockCreatorServiceMock.resolveCreator).not.toHaveBeenCalled();
     });
 
     it('should upload image with tags and description', async () => {
@@ -533,14 +554,14 @@ describe('ImageService', () => {
 
       const result = await service.getImageById(mockImageId, mockClientId);
 
-      expect(result).toEqual(mockImage);
+      // Storage dir from ClientService's cache, not a relation load
+      expect(result).toEqual({ ...mockImage, client: { domain: mockDomain } });
       expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
         where: {
           id: mockImageId,
           clientId: mockClientId,
         },
         include: {
-          client: { select: { domain: true } },
           imageTags: {
             include: {
               tag: {
@@ -883,10 +904,40 @@ describe('ImageService', () => {
     });
   });
 
+  describe('getImageByShareToken', () => {
+    it('answers an expired link with 403 SHARE_LINK_EXPIRED', async () => {
+      mockPrismaService.imageShareLink.findUnique.mockResolvedValue({
+        readToken: 't',
+        expiresAt: new Date(Date.now() - 1000),
+        image: mockImage,
+      });
+
+      await expect(service.getImageByShareToken('t')).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'SHARE_LINK_EXPIRED' },
+      });
+    });
+  });
+
   describe('createShareLink', () => {
     beforeEach(() => {
       mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+      mockPrismaService.image.findFirst.mockResolvedValue({
+        ...mockImage,
+        isPrivate: true,
+      });
+    });
+
+    it('refuses a public image with IMAGE_NOT_PRIVATE, like the console', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+
+      await expect(
+        service.createShareLink(mockImageId, mockClientId, mockExternalUserId),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { code: 'IMAGE_NOT_PRIVATE' },
+      });
+      expect(mockPrismaService.imageShareLink.create).not.toHaveBeenCalled();
     });
 
     it('should create share link for image owner', async () => {
@@ -1438,7 +1489,11 @@ describe('ImageService', () => {
     it('reserves the quota slot in one conditional update', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockHttpService.post.mockReturnValue(
-        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+        of({
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 600 },
+          },
+        }),
       );
       mockHttpService.get.mockReturnValue(of({ data: Buffer.alloc(600) }));
       mockStorageService.createThumbnail.mockResolvedValue(Buffer.alloc(10));
@@ -1487,10 +1542,29 @@ describe('ImageService', () => {
       });
     });
 
+    it('never downloads an output URL outside api.tinify.com', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({
+          data: { output: { url: 'http://169.254.169.254/latest', size: 600 } },
+        }),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+    });
+
     it('keeps the slot spent when failing after Tinify billed it', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockHttpService.post.mockReturnValue(
-        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+        of({
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 600 },
+          },
+        }),
       );
       mockHttpService.get.mockReturnValue(
         throwError(() => new Error('download failed')),
@@ -1505,7 +1579,11 @@ describe('ImageService', () => {
     it('keeps the original, still marked compressed, when Tinify saves nothing', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockHttpService.post.mockReturnValue(
-        of({ data: { output: { url: 'https://t/x', size: 1200 } } }),
+        of({
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 1200 },
+          },
+        }),
       );
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
@@ -1529,7 +1607,9 @@ describe('ImageService', () => {
       mockHttpService.post.mockReturnValue(
         of({
           headers: { 'compression-count': '42' },
-          data: { output: { url: 'https://t/x', size: 1200 } },
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 1200 },
+          },
         }),
       );
       mockPrismaService.image.update.mockResolvedValue({

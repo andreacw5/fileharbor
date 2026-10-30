@@ -3,7 +3,9 @@ import type { Server } from 'http';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { sendVideo } from './video-delivery';
+import { lastValueFrom, of, throwError } from 'rxjs';
+import { BadRequestException, ExecutionContext } from '@nestjs/common';
+import { removeVideoTempFile, sendVideo } from './video-delivery';
 
 describe('sendVideo', () => {
   // A dot-directory in the path, as STORAGE_PATH may have.
@@ -100,5 +102,47 @@ describe('sendVideo', () => {
     const missing = await fetch(`${base}/missing.mp4?cc=public`);
     expect(missing.status).toBe(404);
     expect(missing.headers.get('cache-control')).toBeNull();
+  });
+});
+
+describe('removeVideoTempFile', () => {
+  const run = (filePath: string, handle: () => any) =>
+    lastValueFrom(
+      removeVideoTempFile.intercept(
+        {
+          switchToHttp: () => ({
+            getRequest: () => ({ file: { path: filePath } }),
+          }),
+        } as unknown as ExecutionContext,
+        { handle },
+      ),
+    );
+  const tmp = () => {
+    const p = path.join(
+      os.tmpdir(),
+      `fh-upload-${Date.now()}-${Math.random()}.tmp`,
+    );
+    fs.writeFileSync(p, 'x');
+    return p;
+  };
+  // the unlink is fire-and-forget inside finalize
+  const gone = async (p: string) => {
+    for (let i = 0; i < 50 && fs.existsSync(p); i++)
+      await new Promise((r) => setTimeout(r, 10));
+    return !fs.existsSync(p);
+  };
+
+  it('removes the temp file when the request is refused before the service', async () => {
+    const p = tmp();
+    await expect(
+      run(p, () => throwError(() => new BadRequestException())),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(await gone(p)).toBe(true);
+  });
+
+  it('removes it after a successful upload too', async () => {
+    const p = tmp();
+    await run(p, () => of({ id: 'v' }));
+    expect(await gone(p)).toBe(true);
   });
 });

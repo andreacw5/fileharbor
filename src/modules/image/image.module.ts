@@ -5,6 +5,7 @@ import { ImageController } from './image.controller';
 import { ClientModule } from '../client/client.module';
 import { StorageModule } from '../storage/storage.module';
 import { CreatorModule } from '../creator/creator.module';
+import { AlbumModule } from '../album/album.module';
 import { ImageCleanupJob } from '@/modules/image/jobs/image.cleanup.job';
 import { TinifyResetJob } from '@/modules/image/jobs/tinify-reset.job';
 import { TinifyAutoJob } from '@/modules/image/jobs/tinify-auto.job';
@@ -18,6 +19,7 @@ import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.mo
     // A timeout has no response, so its quota slot is refunded.
     HttpModule.register({ timeout: 60_000 }),
     CreatorModule,
+    AlbumModule,
     FileharborMetricsModule,
   ],
   controllers: [ImageController],

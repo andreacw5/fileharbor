@@ -47,7 +47,7 @@ Restituito da create, get, update e dalla lista.
   id: string;                    // UUID interno FileHarbor
   externalAlbumId: string | null; // il vostro id, unico per client
   clientId: string;
-  creatorId: string;             // id interno del Creator (vedi Problemi noti)
+  creatorId: string;             // id interno del Creator (non l'X-User-Id)
   name: string;
   description: string | null;
   isPublic: boolean;
@@ -194,10 +194,11 @@ Ordine: `order` asc. `200` → `{ data: AlbumItem[], meta }`.
 ### `POST /albums/:albumId/token`
 
 `X-User-Id` obbligatorio, deve essere il creator. Body opzionale: `{ "expiresInDays": 7 }`
-(intero ≥ 1). **Se omesso il token non scade** (la descrizione Swagger "default: 7" è sbagliata).
+(da 1 a 365, altrimenti `400`). Se omesso vale **7**: ogni token scade.
 Si possono avere più token attivi per album.
 
-`201` → `{ token, albumId, expiresAt: string | null, url: "/albums/shared/<token>" }`.
+`201` → `{ token, albumId, expiresAt: string, url: "/albums/shared/<token>" }`. I token creati prima
+di questa regola possono ancora avere `expiresAt: null` (non scadono).
 
 ### `DELETE /albums/:albumId/token`
 
@@ -207,8 +208,9 @@ I token scaduti sono cancellati ogni notte alle 04:00 (`AlbumCleanupJob`).
 
 ### `GET /albums/shared/:token` — pubblica
 
-Nessun header richiesto. `200` → `Album` con contatori e `coverUrl`. Token inesistente o scaduto →
-`403 Invalid token` / `403 Token expired`.
+Nessun header richiesto. `200` → `Album` con contatori e `coverUrl`. Token inesistente → `403 Invalid
+token`; scaduto → `403` con `code: "TOKEN_EXPIRED"` (lo stesso status di uno share link immagine
+scaduto, `SHARE_LINK_EXPIRED`).
 
 Restituisce solo i metadati: gli item si leggono con `GET /albums/:albumId/items`, che richiede la
 API key.
@@ -301,20 +303,15 @@ reagire a un cambiamento fa polling.
 
 Verificati sul codice; non ancora corretti.
 
-1. **`X-User-Id` non viene risolto in un Creator.** Immagini e video passano l'id esterno a
-   `CreatorService.resolveCreator` e salvano l'id interno; il servizio album usa il valore dell'header
-   così com'è, sia come `Album.creatorId` (FK su `Creator.id`) sia nei confronti di proprietà. Effetti
-   con un `X-User-Id` "normale" (l'id dell'utente nel sistema chiamante):
-   - `POST /albums` fallisce sulla foreign key → `500`;
-   - `POST …/items` filtra immagini e video per `creatorId = <id esterno>` → `404` su ogni item;
-   - per un album esistente, le scritture e la lettura degli album privati rispondono `403`.
-
-   Funziona solo passando come `X-User-Id` l'id **interno** del Creator. I test unitari
-   (`album.service.spec.ts`) usano lo stesso valore per i due id e non lo rilevano.
+1. ~~`X-User-Id` non viene risolto in un Creator~~: corretto. Come per immagini e video, l'header è
+   l'id **esterno** (dell'utente nel sistema chiamante): le scritture lo risolvono in un Creator
+   (creato al primo uso) e salvano/confrontano il suo id interno, le letture lo cercano soltanto. Chi
+   aggirava il problema passando l'id interno del Creator come `X-User-Id` deve tornare all'id esterno:
+   l'id interno ora viene trattato come un utente nuovo e non possiede più i propri album.
 2. **Duplicato `externalAlbumId` → `500`** invece di `409` (vedi Errori).
 3. **`GET /albums` e `GET /albums/:albumId/items` ignorano la privacy**: qualunque detentore della API
    key elenca album privati e ne legge gli item.
 4. **`coverImageId` in creazione è ignorato**, e solo il GET per `externalAlbumId` lo usa per `coverUrl`.
-5. **`expiresInDays` omesso → token senza scadenza**, contro il "default: 7" dichiarato nel DTO.
+5. ~~`expiresInDays` omesso → token senza scadenza~~: corretto, default 7 e massimo 365.
 6. Il DTO di risposta Swagger dichiara un campo `images` che nessuna route restituisce, e non dichiara
    `clientId`, che invece c'è.

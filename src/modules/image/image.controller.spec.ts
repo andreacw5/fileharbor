@@ -3,8 +3,12 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  StreamableFile,
   ValidationPipe,
 } from '@nestjs/common';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { UpdateImageMetadataDto } from './dto/update-image-metadata.dto';
 import type { BastionAuditService } from '@heyatom/bastion-client/nest';
 import { Response, Request } from 'express';
@@ -55,6 +59,36 @@ describe('ImageController.getImage counters', () => {
     await controller.getImage('img-1', {} as GetImageDto, res, req);
 
     expect(imageService.incrementViews).toHaveBeenCalledWith('img-1');
+  });
+
+  it('streams a file already on disk instead of buffering it', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fh-stream-'));
+    const filePath = path.join(dir, 'original.webp');
+    await fs.writeFile(filePath, Buffer.alloc(1234));
+    imageService.getImageFile.mockResolvedValue({
+      mimeType: 'image/webp',
+      filePath,
+    });
+
+    const out = await controller.getImage('img-1', {} as GetImageDto, res, req);
+
+    expect(out).toBeInstanceOf(StreamableFile);
+    expect((out as StreamableFile).getHeaders().length).toBe(1234);
+    expect(imageService.incrementViews).toHaveBeenCalledWith('img-1');
+    (out as StreamableFile).getStream().destroy();
+    await fs.rm(dir, { recursive: true });
+  });
+
+  it('is a 500, not a view, when the file behind the row is gone', async () => {
+    imageService.getImageFile.mockResolvedValue({
+      mimeType: 'image/webp',
+      filePath: path.join(os.tmpdir(), 'fh-missing', 'original.webp'),
+    });
+
+    await expect(
+      controller.getImage('img-1', {} as GetImageDto, res, req),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(imageService.incrementViews).not.toHaveBeenCalled();
   });
 
   it('does not count a view when the render queue is full', async () => {
@@ -175,7 +209,39 @@ describe('ImageController.getImage ?blur=1', () => {
     await get({ blur: true });
 
     expect(imageService.getImageFile).not.toHaveBeenCalled();
+    expect(headers['X-FileHarbor-Fallback']).toBe('not_found');
+  });
+
+  // No existence oracle: anonymous "private" and "missing" are the same response
+  it('answers an anonymous denial exactly like a miss', async () => {
+    await get({});
+    const denied = { ...headers };
+    headers = {};
+    imageService.getImageById.mockRejectedValueOnce(new NotFoundException());
+    await get({});
+
+    expect(denied).toEqual(headers);
+    expect(denied['X-FileHarbor-Fallback']).toBe('not_found');
+    // Briefly cacheable: scanner bursts stop at nginx, a flip shows in a minute
+    expect(denied['Cache-Control']).toBe('public, max-age=60');
+    expect(storageService.getDefaultImage).toHaveBeenNthCalledWith(
+      1,
+      'not_found',
+    );
+    expect(storageService.getDefaultImage).toHaveBeenNthCalledWith(
+      2,
+      'not_found',
+    );
+  });
+
+  it('still tells a caller with a valid key it was denied', async () => {
+    await controller.getImage('img-1', {} as GetImageDto, res, {
+      headers: {},
+      clientId: 'client-2',
+    } as unknown as Request);
+
     expect(headers['X-FileHarbor-Fallback']).toBe('permission_denied');
+    expect(headers['Cache-Control']).toBe('private, no-store');
   });
 
   describe('blurPublic', () => {
@@ -205,7 +271,7 @@ describe('ImageController.getImage ?blur=1', () => {
       await get(query);
 
       expect(imageService.getImageFile).not.toHaveBeenCalled();
-      expect(headers['X-FileHarbor-Fallback']).toBe('permission_denied');
+      expect(headers['X-FileHarbor-Fallback']).toBe('not_found');
     });
 
     it("keeps the owner's original private: never public-cached", async () => {
@@ -222,7 +288,7 @@ describe('ImageController.getImage ?blur=1', () => {
 
       expect(imageService.validateImageAccess).toHaveBeenCalled();
       expect(imageService.getImageFile).not.toHaveBeenCalled();
-      expect(headers['X-FileHarbor-Fallback']).toBe('permission_denied');
+      expect(headers['X-FileHarbor-Fallback']).toBe('not_found');
     });
 
     it('still serves only the blur behind an unknown token', async () => {
@@ -237,6 +303,26 @@ describe('ImageController.getImage ?blur=1', () => {
         ForbiddenException,
       );
     });
+  });
+
+  it('answers a private image behind an expired link with SHARE_LINK_EXPIRED', async () => {
+    const expired = new ForbiddenException({ code: 'SHARE_LINK_EXPIRED' });
+    imageService.getImageByShareToken.mockRejectedValueOnce(expired);
+
+    await expect(get({ token: 'old', info: true })).rejects.toBe(expired);
+  });
+
+  it('still serves a public image behind an expired link', async () => {
+    imageService.getImageByShareToken.mockRejectedValueOnce(
+      new ForbiddenException({ code: 'SHARE_LINK_EXPIRED' }),
+    );
+    imageService.getImageById.mockResolvedValueOnce({
+      ...image,
+      isPrivate: false,
+    });
+
+    await get({ token: 'old', info: true });
+    expect(imageService.getImageMetadata).toHaveBeenCalled();
   });
 });
 

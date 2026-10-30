@@ -53,6 +53,8 @@ import {
   DeleteResponseDto,
 } from './dto';
 import { Readable } from 'node:stream';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { contentDisposition } from '@/utils/content-disposition';
 import { snapBlurSize, snapQuality, snapSize } from './image-variants';
 import {
@@ -250,14 +252,17 @@ export class ImageController {
     try {
       let image;
       let viaShareLink = false;
+      let expiredLink: ForbiddenException | undefined;
       if (query.token) {
         try {
           // Try share link first
           image = await this.imageService.getImageByShareToken(query.token);
           imageId = image.id;
           viaShareLink = true;
-        } catch {
-          // Fallback to normal access with token validation
+        } catch (error) {
+          // Expired (403 SHARE_LINK_EXPIRED) or unknown: fall back to normal
+          // access with token validation.
+          if (error instanceof ForbiddenException) expiredLink = error;
           image = await this.imageService.getImageById(
             imageId,
             undefined,
@@ -273,14 +278,13 @@ export class ImageController {
       }
       // blurPublic opens the blurred preview to anyone. Safe without a check:
       // the blur branch of getImageFile never falls back to the original.
+      // A refusal behind an expired link says so (403 SHARE_LINK_EXPIRED).
       if (!viaShareLink && !(blur && image.blurPublic))
-        await this.imageService.validateImageAccess(
-          image,
-          imageId,
-          clientId,
-          creatorId,
-          query.token,
-        );
+        await this.imageService
+          .validateImageAccess(image, imageId, clientId, creatorId, query.token)
+          .catch((error: unknown) => {
+            throw expiredLink ?? error;
+          });
 
       // Handle metadata request early return
       if (query.info) {
@@ -356,9 +360,9 @@ export class ImageController {
         return;
       }
 
-      // Behind nginx, hand files already on disk to it instead of streaming
-      // them from Node (see IMAGE_X_ACCEL_REDIRECT)
-      const xAccel = this.config.get<boolean>('image.xAccelRedirect');
+      // A file already on disk is never read into memory: nginx serves it
+      // (IMAGE_X_ACCEL_REDIRECT) or Node streams it. Only a fresh render, or a
+      // blur resized per request, comes back as a buffer.
       const { buffer, mimeType, filePath } =
         await this.imageService.getImageFile(image, {
           width: query.thumb && !blur ? undefined : query.width,
@@ -367,30 +371,45 @@ export class ImageController {
           quality: query.quality,
           thumb: query.thumb,
           blur,
-          skipDiskRead: xAccel,
+          skipDiskRead: true,
         });
-      await countHit();
       headers['Content-Type'] = mimeType;
-      res.set(headers);
 
-      if (!buffer) {
+      if (buffer) {
+        await countHit();
+        res.set(headers);
+        this.logger.debug(
+          `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,
+        );
+        return new StreamableFile(Readable.from(buffer), {
+          type: mimeType,
+          length: buffer.length,
+        });
+      }
+
+      if (this.config.get<boolean>('image.xAccelRedirect')) {
+        await countHit();
+        res.set(headers);
         res.set(
           'X-Accel-Redirect',
           `/internal-images/${this.storageService.toStorageRelative(filePath!)}`,
         );
-        this.logger.log(
+        this.logger.debug(
           `[GetImage] ${requestType} | ${imageId} | ${mimeType} | x-accel | client:${clientId || 'public'}`,
         );
         return;
       }
 
-      this.logger.log(
-        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,
+      // stat before counting: a row whose file is gone is a 500, not a view
+      const { size } = await stat(filePath!);
+      await countHit();
+      res.set(headers);
+      this.logger.debug(
+        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(size / 1024)}KB | stream | client:${clientId || 'public'}`,
       );
-
-      return new StreamableFile(Readable.from(buffer), {
+      return new StreamableFile(createReadStream(filePath!), {
         type: mimeType,
-        length: buffer.length,
+        length: size,
       });
     } catch (error) {
       // Return default images for 404 and 403 errors (only for file requests, not metadata)
@@ -399,13 +418,17 @@ export class ImageController {
         (error instanceof NotFoundException ||
           error instanceof ForbiddenException)
       ) {
+        // Without a client context a denial looks exactly like a miss (file,
+        // header and cache policy), so an anonymous caller can't tell "private"
+        // from "doesn't exist". The log keeps the real reason.
+        const anonymous = !clientId;
         const defaultType =
-          error instanceof NotFoundException
+          error instanceof NotFoundException || anonymous
             ? 'not_found'
             : 'permission_denied';
 
         this.logger.warn(
-          `[GetImage] ${defaultType.toUpperCase()} | ${imageId} | Returning default image | ${error.message}`,
+          `[GetImage] ${error instanceof NotFoundException ? 'NOT_FOUND' : 'PERMISSION_DENIED'} | ${imageId} | Returning ${defaultType} | ${error.message}`,
         );
 
         try {
@@ -414,9 +437,14 @@ export class ImageController {
 
           res.set({
             'Content-Type': mimeType,
-            // A denial depends on who asks: don't let a cache replay it to the owner.
-            'Cache-Control':
-              defaultType === 'permission_denied'
+            // Anonymous: miss and denial are the same placeholder, so both can
+            // sit briefly in a shared cache (scanner bursts never reach Node)
+            // while a private→public flip shows within a minute. The owner's
+            // key bypasses nginx's cache (proxy_cache_bypass on X-API-Key).
+            // Keyed denial: depends on who asks, never cached.
+            'Cache-Control': anonymous
+              ? 'public, max-age=60'
+              : defaultType === 'permission_denied'
                 ? 'private, no-store'
                 : 'public, max-age=3600',
             'X-FileHarbor-Fallback': defaultType,

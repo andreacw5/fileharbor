@@ -14,6 +14,7 @@ import { RouteHelperService } from '@/utils/route.utils';
 import { MetricsService } from '@heyatom/nest-common/metrics';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 import { PageParams } from '@heyatom/nest-common';
+import { AlbumService } from '@/modules/album/album.service';
 
 jest.mock('fs/promises');
 
@@ -143,6 +144,11 @@ describe('VideoService', () => {
     resolveCreator: jest.fn(),
   };
 
+  const mockAlbumService = {
+    assertAlbumExists: jest.fn(),
+    addItemsToAlbum: jest.fn(),
+  };
+
   const mockRouteHelperService = {
     path: jest.fn((...segments: string[]) => '/' + segments.join('/')),
     fullUrl: jest.fn(
@@ -161,6 +167,7 @@ describe('VideoService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: CreatorService, useValue: mockCreatorService },
         { provide: RouteHelperService, useValue: mockRouteHelperService },
+        { provide: AlbumService, useValue: mockAlbumService },
         FileharborMetrics,
         {
           provide: MetricsService,
@@ -325,6 +332,46 @@ describe('VideoService', () => {
       );
     });
 
+    it('adds to the album through AlbumService once the video exists', async () => {
+      await service.uploadVideo(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        'album-123',
+      );
+
+      expect(mockAlbumService.addItemsToAlbum).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+        [{ id: expect.any(String), resourceType: 'VIDEO' }],
+        { force: true },
+      );
+    });
+
+    it('404s on an unknown album before copying the file', async () => {
+      mockAlbumService.assertAlbumExists.mockRejectedValueOnce(
+        new NotFoundException('Album not found'),
+      );
+
+      await expect(
+        service.uploadVideo(
+          mockClientId,
+          mockExternalUserId,
+          mockFile,
+          undefined,
+          undefined,
+          undefined,
+          'missing',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockStorageService.copyFromTemp).not.toHaveBeenCalled();
+      expect(mockPrismaService.video.create).not.toHaveBeenCalled();
+      expect(fsPromises.unlink).toHaveBeenCalledWith(mockFile.path);
+    });
+
     it('should store video with tags when provided', async () => {
       await service.uploadVideo(mockClientId, mockExternalUserId, mockFile, [
         'comedy',
@@ -433,27 +480,33 @@ describe('VideoService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should increment view count non-blocking', async () => {
+    it('buffers views and flushes them in one UPDATE', async () => {
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
       await service.getVideoStreamPath(mockVideoId, mockClientId);
+      await service.getVideoStreamPath(mockVideoId, mockClientId);
+      // A Range continuation is not a view
+      await service.getVideoStreamPath(mockVideoId, mockClientId, false);
+      expect(mockPrismaService.$executeRaw).not.toHaveBeenCalled();
+
+      await service.flushViews();
 
       // Raw SQL, not prisma.video.update: that would bump updatedAt per view
       expect(mockPrismaService.video.update).not.toHaveBeenCalled();
-      const [sql, id] = mockPrismaService.$executeRaw.mock.calls[0];
-      expect(sql.join('?')).toContain('SET views = views + 1');
-      expect(id).toBe(mockVideoId);
+      const [sql, ids, counts] = mockPrismaService.$executeRaw.mock.calls[0];
+      expect(sql.join('?')).toContain('views = v.views + n.n');
+      expect(ids).toEqual([mockVideoId]);
+      expect(counts).toEqual([2]);
+
+      await service.flushViews();
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
     });
 
     it('should use clientId as domain when client has no domain', async () => {
-      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.client.findUnique.mockResolvedValue({
-        ...mockClient,
-        domain: null,
+      mockPrismaService.video.findFirst.mockResolvedValue({
+        ...mockVideo,
+        client: { ...mockVideo.client, domain: null },
       });
-      mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
       const result = await service.getVideoStreamPath(
         mockVideoId,

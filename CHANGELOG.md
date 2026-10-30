@@ -6,7 +6,76 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [4.1.3] – 2026-10-30
+
+Rebuild the image, no migration. Placeholder images moved from `storage/defaults.fileharbor/` into the
+image (`defaults/`): the storage volume no longer needs them (the old dir can be deleted).
+
+### Fixed
+- **Placeholders shipped with the image.** A fresh storage volume turned every public 404/403 into a 500.
+  Read once and memoized.
+- **500 bodies no longer carry the storage path.** Disk/sharp failures answered with the OS message
+  (`ENOENT: ... '/srv/storage/<domain>/images/<id>/original.webp'`); now a generic message, detail in the log.
+- **Avatar ETag** includes `updatedAt`: a browser revalidating after a re-upload used to get 304 forever.
+- **Avatar re-upload** no longer deletes the old files first: no 404 window, and an encode failure keeps
+  the old avatar instead of a row pointing at an empty dir.
+- **Video views** counted one per playback (first Range request), buffered and flushed every 10s like
+  image views, instead of one `UPDATE` per Range chunk.
+- **Upload into an unknown album is a clean 404.** `POST /images` / `POST /videos` with an `albumId` that
+  doesn't exist in the client used to write the file and the row first, then 404: the asset existed and a
+  retry duplicated it. The album is now checked before anything is written.
+- **Optimize jobs write nothing until both files are encoded.** A thumb failure used to leave the original
+  already re-encoded but not marked, so the next run re-encoded a q85 file again (up to 3 times). Now the
+  thumb is encoded first and the original is written last.
+- **One album order.** Uploads with `albumId` go through the same code as `POST /albums/:id/items`: the
+  first item of an empty album is `0` (uploads used to start at `1`).
+- **Share links and album tokens: limits and codes.** `POST /images/:imageId/share` refuses a public image
+  (`400 IMAGE_NOT_PRIVATE`, as the console does: a link on a public image would silently grant access the
+  day it turns private) and an `expiresAt` more than 365 days out. `expiresInDays` on album tokens is
+  capped at 365 (`1e15` was a 500) and defaults to 7 (it used to mean "never"). An expired share link
+  and an expired album token both answer `403` with a domain code (`SHARE_LINK_EXPIRED` /
+  `TOKEN_EXPIRED`); the share link one used to be a `400` swallowed into a bare `403`.
+- **`PATCH /admin/videos/:id` validates its body** (`AdminUpdateVideoDto`, same rules as images): the inline
+  type let any `originalName` length through and turned a string `tags` into one tag per character.
+- **Video upload temp files are always removed.** Multer writes up to `MAX_VIDEO_SIZE` to the tmpdir before the
+  handler; a `400` from validation or an admin `403` left it there. An interceptor on both upload routes
+  now unlinks it however the request ends.
+- **Tinify output URL pinned to `https://api.tinify.com`.** The compressed file was downloaded, with the
+  client's Tinify key, from whatever URL the upstream JSON named; any other origin is now refused.
+- **Albums resolve `X-User-Id` into a Creator**, like images and videos. The header was stored raw as
+  `Album.creatorId` (a FK to `Creator.id`) and compared raw for ownership: `POST /albums` was a 500 with a
+  normal external id, and anyone who knew an internal `Creator.id` (exposed by `GET /creators`) acted as
+  that creator on albums. ⚠️ Callers that worked around it by sending the internal Creator id as
+  `X-User-Id` must send their own user id again. No migration: the FK means every existing row already
+  holds a real `Creator.id`.
+- **No existence oracle on public image delivery.** Without a valid `X-API-Key`, a private image now gets
+  the same response as a missing one (`not_found` placeholder, `X-FileHarbor-Fallback: not_found`,
+  `private, no-store`). With a valid key a denial is still `permission_denied`. Anonymous 404 placeholders
+  are no longer cacheable (`public, max-age=3600` before), the price of looking the same.
+
+### Changed
+- **Anonymous placeholders are `public, max-age=60`** (miss and denial alike): scanner bursts stop at
+  nginx, a private→public flip shows within a minute. A keyed denial stays `private, no-store`.
+- **Album writes never create a creator** except `POST /albums`: a wrong `X-User-Id` on
+  `PATCH`/`DELETE`/items/token is a 403, not a phantom `Creator` row.
+- Optimize job: clearing the variant cache is best-effort once the original is rewritten.
+- Tinify download does not follow redirects (the origin check would otherwise be bypassed).
+- **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to
+  render it once each behind the semaphore; now they share one render.
+- **Small variants come from the thumb.** A variant that fits inside `THUMBNAIL_SIZE` (and is not q100) is
+  cut from `thumb.webp` instead of decoding the original: the common `srcset` widths cost ~10x less.
+- **One query less per public image.** The storage dir comes from a 30 s cache in `ClientService`, not a
+  relation load on every `GET /images/:id`.
+- `sharp.concurrency` set to `cpus / RENDER_CONCURRENCY`; `UV_THREADPOOL_SIZE=8` in the Docker image.
+- `fileharbor_storage_bytes` reuses its collection for 60 s across scrapes.
+- Album item lists run their two reads in parallel; the shared-album route drops a duplicate token lookup.
+- **On-disk images are streamed, not buffered.** `GET /images/:id` used to `readFile` the whole file into
+  memory; now `createReadStream` (or `X-Accel-Redirect` when enabled). A row whose file is gone is a 500
+  and not a view.
+- Per-asset "served" log lines (images, avatars) demoted to `debug`.
+- `keepAliveTimeout` 65s / `headersTimeout` 66s, above nginx's upstream keepalive.
+- Job lock connection has a 5s connect timeout.
+- Video stream drops a redundant client lookup.
 
 ---
 

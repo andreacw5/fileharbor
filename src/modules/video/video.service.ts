@@ -4,7 +4,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  OnModuleDestroy,
 } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import * as fs from 'fs/promises';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
@@ -13,6 +15,8 @@ import { CreatorService } from '@/modules/creator/creator.service';
 import { RouteHelperService } from '@/utils/route.utils';
 import { FileharborMetrics } from '@/modules/metrics/fileharbor-metrics.service';
 import { randomUUID } from 'crypto';
+import { AlbumResourceType } from '@prisma/client';
+import { AlbumService } from '@/modules/album/album.service';
 import { plainToInstance } from 'class-transformer';
 import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { VideoResponseDto, DeleteVideoResponseDto } from './dto';
@@ -22,9 +26,11 @@ import {
 } from '@/modules/tag/tag.utils';
 
 @Injectable()
-export class VideoService {
+export class VideoService implements OnModuleDestroy {
   private readonly logger = new Logger(VideoService.name);
   private readonly thumbnailQuality: number;
+  // ponytail: views buffered in memory like images, up to 10s of counts lost on a crash
+  private pendingViews = new Map<string, number>();
 
   constructor(
     private prisma: PrismaService,
@@ -33,6 +39,7 @@ export class VideoService {
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private metrics: FileharborMetrics,
+    private albumService: AlbumService,
   ) {
     this.thumbnailQuality = parseInt(
       this.config.get('VIDEO_THUMBNAIL_QUALITY') || '80',
@@ -69,6 +76,9 @@ export class VideoService {
       });
       if (!client) throw new BadRequestException('Client not found');
       const domain = client.domain || clientId;
+
+      // Before the copy: a missing album must not leave an orphan video behind
+      if (albumId) await this.albumService.assertAlbumExists(albumId, clientId);
 
       let creator;
       if (externalId) {
@@ -149,7 +159,12 @@ export class VideoService {
         this.logger.debug(
           `[uploadVideo] Adding to album - ID: ${videoId}, Album: ${albumId}`,
         );
-        await this.addVideoToAlbum(videoId, albumId, clientId);
+        await this.albumService.addItemsToAlbum(
+          albumId,
+          clientId,
+          [{ id: videoId, resourceType: AlbumResourceType.VIDEO }],
+          { force: true },
+        );
       }
 
       this.logger.log(
@@ -159,23 +174,6 @@ export class VideoService {
     } finally {
       await fs.unlink(file.path).catch(() => {});
     }
-  }
-
-  async addVideoToAlbum(videoId: string, albumId: string, clientId: string) {
-    const album = await this.prisma.album.findFirst({
-      where: { id: albumId, clientId },
-    });
-    if (!album) throw new NotFoundException(`Album ${albumId} not found`);
-
-    const maxItem = await this.prisma.albumItem.findFirst({
-      where: { albumId },
-      orderBy: { order: 'desc' },
-    });
-    const order = maxItem ? maxItem.order + 1 : 0;
-
-    return this.prisma.albumItem.create({
-      data: { albumId, videoId, resourceType: 'VIDEO', order },
-    });
   }
 
   async getVideoById(videoId: string, clientId?: string) {
@@ -195,9 +193,14 @@ export class VideoService {
     return video;
   }
 
+  /**
+   * `countView`: a playback is dozens of Range requests, so the controller
+   * counts only the first one (no Range, or `bytes=0-`).
+   */
   async getVideoStreamPath(
     videoId: string,
     clientId: string,
+    countView = true,
   ): Promise<{ storagePath: string; domain: string; originalName: string }> {
     const video = await this.getVideoById(videoId, clientId);
 
@@ -205,22 +208,38 @@ export class VideoService {
       throw new ForbiddenException('This video is private');
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-    const domain = client?.domain || clientId;
+    const domain = video.client?.domain || clientId;
 
-    // Raw SQL on purpose: Prisma would bump updatedAt on every view
-    this.prisma.$executeRaw`
-      UPDATE videos SET views = views + 1 WHERE id = ${videoId}`.catch((e) =>
-      this.logger.warn(`[getVideoStreamPath] View not counted: ${e.message}`),
-    );
+    if (countView) {
+      this.pendingViews.set(videoId, (this.pendingViews.get(videoId) ?? 0) + 1);
+    }
 
     return {
       storagePath: video.storagePath,
       domain,
       originalName: video.originalName,
     };
+  }
+
+  /** Same shape as ImageService.flushViews: one UPDATE … FROM unnest() every 10s. */
+  @Interval(10_000)
+  async flushViews() {
+    if (this.pendingViews.size === 0) return;
+    const batch = this.pendingViews;
+    this.pendingViews = new Map();
+    // Raw SQL on purpose: Prisma would bump updatedAt
+    await this.prisma.$executeRaw`
+      UPDATE videos AS v SET views = v.views + n.n
+      FROM unnest(${[...batch.keys()]}::text[], ${[...batch.values()]}::int[]) AS n(id, n)
+      WHERE v.id = n.id`.catch((e) =>
+      this.logger.warn(
+        `[flushViews] Dropped ${batch.size} counts: ${e.message}`,
+      ),
+    );
+  }
+
+  async onModuleDestroy() {
+    await this.flushViews();
   }
 
   async listVideos(

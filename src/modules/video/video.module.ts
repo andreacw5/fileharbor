@@ -5,6 +5,7 @@ import { StorageModule } from '@/modules/storage/storage.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { CreatorModule } from '@/modules/creator/creator.module';
 import { ClientModule } from '@/modules/client/client.module';
+import { AlbumModule } from '@/modules/album/album.module';
 import { RouteHelperModule } from '@/utils/route.utils';
 import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.module';
 
@@ -14,6 +15,7 @@ import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.mo
     PrismaModule,
     CreatorModule,
     ClientModule,
+    AlbumModule,
     RouteHelperModule,
     FileharborMetricsModule,
   ],

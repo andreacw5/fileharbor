@@ -40,6 +40,9 @@ FROM node:24.15.0-slim AS prod
 
 # Set the NODE_ENV to production
 ENV NODE_ENV=production
+# libuv pool shared by sharp and every fs call (default 4): renders must not
+# queue disk reads behind them.
+ENV UV_THREADPOOL_SIZE=8
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -51,6 +54,8 @@ RUN groupadd -g 1001 app && useradd -u 1001 -g app -m app
 COPY --chown=app:app package.json pnpm-lock.yaml ./
 COPY --from=builder --chown=app:app /usr/src/app/prisma ./prisma
 COPY --from=builder --chown=app:app /usr/src/app/dist ./dist
+# Placeholder images (404/403 fallback): part of the image, never of the storage volume
+COPY --from=builder --chown=app:app /usr/src/app/defaults ./defaults
 COPY --from=builder --chown=app:app /usr/src/app/node_modules ./node_modules
 
 # Switch to non-root user

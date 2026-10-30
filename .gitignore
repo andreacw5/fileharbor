@@ -39,7 +39,5 @@ lerna-debug.log*
 
 # Storage - ignore all except defaults
 storage/*
-!/storage/defaults.fileharbor/
-!/storage/defaults.fileharbor/**
 
 graphify-out/

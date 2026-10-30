@@ -109,15 +109,9 @@ export class AvatarService {
         },
       });
 
-      // Delete old avatar files if exists
-      if (existingAvatar) {
-        this.logger.debug(
-          `[uploadAvatar] Deleting old avatar - Client: ${clientId}, Creator: ${creatorId}`,
-        );
-        const oldAvatarPath = this.storage.getAvatarPath(domain, creatorId);
-        await this.storage.deleteDirectory(oldAvatarPath);
-      }
-
+      // No pre-delete of the old files: saveFile renames over them, so the
+      // public URL never 404s mid-upload and an encode failure leaves the old
+      // avatar in place instead of a row pointing at an empty dir.
       const avatarId = existingAvatar?.id || randomUUID();
       const avatarPath = this.storage.getAvatarPath(domain, creatorId);
 
@@ -209,7 +203,7 @@ export class AvatarService {
     externalId: string,
     thumbnail: boolean = false,
     format: 'webp' | 'jpeg' | 'png' = 'webp',
-  ): Promise<{ buffer: Buffer; mimeType: string }> {
+  ): Promise<{ buffer: Buffer; mimeType: string; updatedAt: Date }> {
     const { creator, avatar } = await this.findAvatar(clientId, externalId);
     const domain = clientRef(avatar.client);
 
@@ -223,7 +217,7 @@ export class AvatarService {
 
     const buffer = await this.storage.readFile(filePath);
     if (format === 'webp') {
-      return { buffer, mimeType: avatar.mimeType };
+      return { buffer, mimeType: avatar.mimeType, updatedAt: avatar.updatedAt };
     }
 
     // Stored as WebP: convert on demand (e.g. Satori OG images cannot decode WebP)
@@ -233,7 +227,11 @@ export class AvatarService {
       undefined,
       format,
     );
-    return { buffer: converted, mimeType: `image/${format}` };
+    return {
+      buffer: converted,
+      mimeType: `image/${format}`,
+      updatedAt: avatar.updatedAt,
+    };
   }
 
   /**

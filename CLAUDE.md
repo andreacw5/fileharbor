@@ -32,6 +32,9 @@ Multi-tenant NestJS 11 image management API. All data scoped by `clientId`. Auth
 
 **Security Note:** `X-Client-Id` header no longer accepted. Only `X-API-Key` auth supported.
 
+`ClientService.storageDomain(clientId)` gives the storage dir name (`domain || id`), cached 30 s like the
+API-key lookup and cleared on a client update: `getImageById` uses it instead of a relation load.
+
 Every non-`@Public()` controller goes through `ClientInterceptor` (`src/modules/client/interceptors/client.interceptor.ts`):
 1. Reads `X-API-Key` → resolves `client` → attaches `request.clientId` and `request.client`
 2. Reads `X-User-Id` (or falls back to `request.query.externalUserId` / `request.body.externalUserId`) → attaches `request.externalCreatorId`
@@ -62,7 +65,8 @@ storage/{client.domain || clientId}/avatars/{creatorId}/original.webp
 ```
 `StorageService.validatePath()` blocks directory traversal. `sanitizePathComponent()` strips `..`, `/`, `\`, and null bytes.
 
-Default fallback images live at `storage/defaults.fileharbor/`. `GET /images/:id` returns `fileharbor_not_found.webp` or `fileharbor_permission_denided.webp` (note: typo in filename is intentional/existing) instead of 4xx for non-`info` requests.
+Default fallback images live at `defaults/` (repo root, copied into the Docker image: never in the storage volume, read once and memoized). `GET /images/:id` returns `fileharbor_not_found.webp` or `fileharbor_permission_denided.webp` (note: typo in filename is intentional/existing) instead of 4xx for non-`info` requests. Without a client context (no valid `X-API-Key`) a 403 gets the `not_found` placeholder and the same
+`private, no-store` as an anonymous 404: no existence oracle for private ids (the log keeps the real reason).
 
 ## DTO / Response Pattern
 
@@ -390,6 +394,9 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 - Enforce `MAX_FILE_SIZE` from env
 - EXIF metadata removed during optimization
 - Sanitize file paths (handled by `StorageService`)
+- Share links (client and console) only on private images (`400 IMAGE_NOT_PRIVATE`), `expiresAt` at most
+  `ADMIN_SHARE_LINK_MAX_DAYS` (365) out; album tokens `expiresInDays` 1–365, default 7. Expired → `403` with
+  `code` `SHARE_LINK_EXPIRED` / `TOKEN_EXPIRED`.
 - Rate limiting via `@nestjs/throttler` — configured by `THROTTLE_TTL` and `THROTTLE_LIMIT` env vars
 - A request with a **valid** `X-API-Key` skips the throttler (`ClientThrottlerGuard`, `client/guards/`): callers are
   trusted services running batches from one IP. Missing or invalid keys stay IP-throttled (key guessing).
@@ -426,11 +433,22 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 
 `GET /images/:id` is public and `@SkipThrottle()`, so its transforms are bounded instead of rate-limited:
 
+- **Delivery**: a file already on disk is never read into memory. With `IMAGE_X_ACCEL_REDIRECT=true` the
+  controller answers `X-Accel-Redirect: /internal-images/<storage-relative path>` and nginx serves it;
+  otherwise Node streams it (`createReadStream`, `Content-Length` from `stat`). Only a fresh render (or a blur
+  resized per request) comes back as a buffer. Prod keeps X-Accel **off** for images on purpose: nginx never
+  `proxy_cache`s an X-Accel response, and the image cache (HIT = no upstream, no DB) is worth more. Videos use
+  it (`VIDEO_X_ACCEL_REDIRECT=true`).
+
 - **Snapped, never rejected** (`image/image-variants.ts`): width/height round **up** to the next of
   `VARIANT_SIZES` (16 … 4096), quality to the nearest of `VARIANT_QUALITIES` (40/60/75/85/100). Old URLs
   keep working; close values share one cached file and one ETag (the controller snaps too).
 - **Cache**: at most `MAX_CACHED_VARIANTS` (20) files under `{imageDir}/variants/`; past that a variant is
-  rendered but not stored.
+  rendered but not stored. Concurrent misses on one variant (or one blur) share a single render
+  (`ImageService.dedupe`, keyed on the target path). A variant that fits inside the thumb (both dims ≤
+  `THUMBNAIL_SIZE`, quality < 100) is cut from `thumb.webp` (q70 source, ~10x less to decode); larger or q100
+  ones from the original. `sharp.concurrency` is set once to `cpus / RENDER_CONCURRENCY`, `UV_THREADPOOL_SIZE=8`
+  in the Dockerfile.
 - **`srcset`** (`buildSrcset`, plan 09): `ImageResponseDto` and album image items carry a ready-made
   `srcset` built on `fullPath` (absolute): the fixed `SRCSET_WIDTHS` (320/640/960/1280/1920) strictly below
   the original width, then the original itself (no render, no cache slot). Omitted for private images.
@@ -556,7 +574,8 @@ Swagger UI: `http://localhost:3000/docs` (when `ENABLE_SWAGGER` resolves to true
   - `fileharbor_unoptimized_media{kind}` — rows the job will still retry (`isOptimized = false`, `optimizeAttempts < 3`).
   - `fileharbor_unoptimized_oldest_age_seconds{kind}` — `now - min(queued at)` over the same rows, `0` when there are none. Queued at = `createdAt` for images, `updatedAt` for avatars (a re-upload is an upsert that keeps the original `createdAt`). Alert: `fileharbor_unoptimized_oldest_age_seconds > 3*3600` for 30m (job stalled or behind: a failing row is given up after 3 hourly runs, so it can't hold this up).
   - `fileharbor_optimize_given_up{kind}` — rows the job stopped retrying (`optimizeAttempts >= 3`). Only leave via a reset (`POST admin/{images,avatars}/:id/reoptimize`, `…/reoptimize-failed`, or SQL `optimizeAttempts = 0`), deletion, or an avatar re-upload (which resets it), so it's a standing count, not an event. Alert: `fileharbor_optimize_given_up > 0` — fires until someone fixes/resets/deletes the rows; `increase()` would go silent after a day with the rows still broken.
-- `fileharbor_storage_bytes{client}` — bytes of originals per client (images + videos + avatars, no thumbs or cached variants: same number as the console's `totalStorage`, via `storageUsageByClient`). Label = `Client.id` (immutable; `domain`/`name` can change), personal clients included. Lazy like the gauges above, three `groupBy` per scrape; reset after each successful query, so deleted clients drop out, while a failed one keeps the previous values. Says who grows, not how much disk is left. Alert: `delta(fileharbor_storage_bytes[24h]) > 5 GiB` for 1h (threshold to tune on prod).
+- `fileharbor_storage_bytes{client}` — bytes of originals per client. One collection is reused for
+  `STORAGE_GAUGE_MEMO_MS` (60 s): three `sum(size)` scans per scrape were too much at a 15 s interval. (images + videos + avatars, no thumbs or cached variants: same number as the console's `totalStorage`, via `storageUsageByClient`). Label = `Client.id` (immutable; `domain`/`name` can change), personal clients included. Lazy like the gauges above, three `groupBy` per scrape; reset after each successful query, so deleted clients drop out, while a failed one keeps the previous values. Says who grows, not how much disk is left. Alert: `delta(fileharbor_storage_bytes[24h]) > 5 GiB` for 1h (threshold to tune on prod).
 - Alert rules for all of the above live in `monitoring/alerts.yml` (load it via `rule_files`). Change a metric or threshold → change it there too.
 
 ## Health
@@ -605,6 +624,7 @@ Knowledge graph at `graphify-out/` with god nodes, community structure, and cros
 ## Docs
 
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — lavoro da fare senza piano, bloccanti pre-deploy
+- [`docs/reviews/README.md`](docs/reviews/README.md) — review del prodotto e finding di sicurezza aperti
 - [`docs/external-album-api.md`](docs/external-album-api.md) — API album lato client (route, payload, errori, problemi noti)
 - [`../docs/integrations/fileharbor.md`](../docs/integrations/fileharbor.md) — integration guide per altri servizi (fonte di verità)
 - [`../docs/integrations/bastion.md`](../docs/integrations/bastion.md) — Bastion JWT/JWKS guide (importata sotto)

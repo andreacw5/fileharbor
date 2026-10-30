@@ -98,10 +98,9 @@ export class AvatarCleanupJob {
       this.originalQuality,
     );
 
-    // Save back
-    await this.storage.saveFile(originalPath, optimizedBuffer);
-
-    // Re-create thumbnail with optimization
+    // Both encoded before anything is written, the original written last: a
+    // failure leaves the original untouched, so the next run doesn't re-encode
+    // an already q85 file (generation loss).
     const thumbPath = this.storage.getAvatarFilePath(
       domain,
       avatar.creatorId,
@@ -113,6 +112,7 @@ export class AvatarCleanupJob {
       this.thumbnailQuality,
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
+    await this.storage.saveFile(originalPath, optimizedBuffer);
 
     return optimizedBuffer.length;
   }

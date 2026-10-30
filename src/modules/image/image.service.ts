@@ -16,7 +16,7 @@ import {
   OPTIMIZE_RETRYABLE_WHERE,
   StorageService,
 } from '@/modules/storage/storage.service';
-import { Prisma } from '@prisma/client';
+import { AlbumResourceType, Prisma } from '@prisma/client';
 import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
@@ -34,6 +34,8 @@ import {
   extractTagNames,
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
+import { ClientService } from '@/modules/client/client.service';
+import { AlbumService } from '@/modules/album/album.service';
 import {
   BLUR_QUALITY,
   buildSrcset,
@@ -85,6 +87,7 @@ export interface DuplicateGroup {
 
 /** `code` of the 400 thrown when the client's monthly Tinify slots are used up. */
 export const TINIFY_LIMIT_REACHED = 'TINIFY_LIMIT_REACHED';
+const TINIFY_ORIGIN = 'https://api.tinify.com';
 
 @Injectable()
 export class ImageService implements OnModuleDestroy {
@@ -102,6 +105,8 @@ export class ImageService implements OnModuleDestroy {
     private httpService: HttpService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
+    private clientService: ClientService,
+    private albumService: AlbumService,
   ) {
     // Original should be high quality to preserve image fidelity
     this.originalQuality = parseInt(
@@ -154,6 +159,9 @@ export class ImageService implements OnModuleDestroy {
         throw new BadRequestException('Client not found');
       }
       const domain = client.domain || clientId;
+
+      // Before any write: a missing album must not leave an orphan image behind
+      if (albumId) await this.albumService.assertAlbumExists(albumId, clientId);
 
       // Get or create creator
       let creator;
@@ -301,7 +309,12 @@ export class ImageService implements OnModuleDestroy {
         this.logger.debug(
           `[uploadImage] Adding to album - ID: ${imageId}, Album: ${albumId}`,
         );
-        await this.addImageToAlbum(imageId, albumId, clientId);
+        await this.albumService.addItemsToAlbum(
+          albumId,
+          clientId,
+          [{ id: imageId, resourceType: AlbumResourceType.IMAGE }],
+          { force: true },
+        );
       }
 
       this.logger.log(
@@ -325,11 +338,11 @@ export class ImageService implements OnModuleDestroy {
       where.clientId = clientId;
     }
 
-    // Tags cost two more queries; serving the file doesn't need them
+    // Tags cost two more queries; serving the file doesn't need them. The
+    // client's storage dir comes from ClientService's cache, not a relation load.
     const image = await this.prisma.image.findFirst({
       where,
       include: {
-        client: { select: { domain: true } },
         imageTags: withTags && {
           include: {
             tag: {
@@ -346,7 +359,20 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Image not found');
     }
 
-    return image;
+    const domain = await this.clientService.storageDomain(image.clientId);
+    return { ...image, client: { domain } };
+  }
+
+  // Concurrent first hits on one uncached variant (a srcset deploy, a cache
+  // purge) used to render it N times behind the semaphore: one render, shared.
+  private readonly inflight = new Map<string, Promise<Buffer>>();
+
+  private dedupe(key: string, render: () => Promise<Buffer>): Promise<Buffer> {
+    const running = this.inflight.get(key);
+    if (running) return running;
+    const run = render().finally(() => this.inflight.delete(key));
+    this.inflight.set(key, run);
+    return run;
   }
 
   /**
@@ -426,20 +452,41 @@ export class ImageService implements OnModuleDestroy {
       return fromDisk(variantPath, mimeType);
     }
 
-    const buffer = await this.storage.resizeImage(
-      await this.storage.readFile(originalPath),
-      width,
-      height,
-      format,
-      quality,
-    );
-    if ((await this.storage.countEntries(variantsDir)) < MAX_CACHED_VARIANTS) {
-      this.storage
-        .saveFile(variantPath, buffer)
-        .catch((e) =>
-          this.logger.warn(`[getImageFile] Variant not cached: ${e.message}`),
-        );
-    }
+    const buffer = await this.dedupe(variantPath, async () => {
+      // A variant that fits inside the thumb (≤ THUMBNAIL_SIZE, not q100) is cut
+      // from thumb.webp: ~10x less to decode than the original for the common
+      // srcset widths. q100 and anything larger still come from the original.
+      const fitsThumb =
+        (width ?? 0) <= this.thumbnailSize &&
+        (height ?? 0) <= this.thumbnailSize &&
+        quality < 100;
+      const thumbPath = this.storage.getImageFilePath(
+        domain,
+        image.id,
+        'thumb',
+      );
+      const sourcePath =
+        fitsThumb && (await this.storage.fileExists(thumbPath))
+          ? thumbPath
+          : originalPath;
+      const rendered = await this.storage.resizeImage(
+        await this.storage.readFile(sourcePath),
+        width,
+        height,
+        format,
+        quality,
+      );
+      if (
+        (await this.storage.countEntries(variantsDir)) < MAX_CACHED_VARIANTS
+      ) {
+        this.storage
+          .saveFile(variantPath, rendered)
+          .catch((e) =>
+            this.logger.warn(`[getImageFile] Variant not cached: ${e.message}`),
+          );
+      }
+      return rendered;
+    });
     return { mimeType, buffer };
   }
 
@@ -511,8 +558,11 @@ export class ImageService implements OnModuleDestroy {
     const source = await this.storage.readFile(sourcePath).catch(() => {
       throw new UnprocessableEntityException('Image file is not readable');
     });
-    // Two concurrent misses both write: saveFile renames, the content is the same.
-    const buffer = await this.storage.blurImage(source);
+    // Concurrent misses share one render (dedupe); saveFile renames, so a
+    // late second write is harmless.
+    const buffer = await this.dedupe(blurredPath, () =>
+      this.storage.blurImage(source),
+    );
     this.storage
       .saveFile(blurredPath, buffer)
       .catch((e) =>
@@ -664,36 +714,6 @@ export class ImageService implements OnModuleDestroy {
       );
       throw error;
     }
-  }
-
-  /**
-   * Add image to album
-   */
-  async addImageToAlbum(imageId: string, albumId: string, clientId: string) {
-    // Verify image and album belong to same client
-    await this.getImageById(imageId, clientId); // Only for validation, no need to assign
-    const album = await this.prisma.album.findFirst({
-      where: { id: albumId, clientId },
-    });
-
-    if (!album) {
-      throw new NotFoundException('Album not found');
-    }
-
-    const maxOrder = await this.prisma.albumItem.findFirst({
-      where: { albumId },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
-
-    return this.prisma.albumItem.create({
-      data: {
-        albumId,
-        imageId,
-        resourceType: 'IMAGE',
-        order: (maxOrder?.order || 0) + 1,
-      },
-    });
   }
 
   /**
@@ -901,6 +921,15 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Image not found');
     }
 
+    // Same rule as the console: a link on a public image adds nothing today,
+    // and would silently grant access the day the image turns private.
+    if (!image.isPrivate) {
+      throw new BadRequestException({
+        code: 'IMAGE_NOT_PRIVATE',
+        message: 'Share links can only be created on private images',
+      });
+    }
+
     const shareLink = await this.createShareLinkFor(imageId, expiresAt);
 
     this.logger.log(
@@ -1014,9 +1043,12 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Share link not found');
     }
 
-    // Check if link has expired
+    // Same status and shape as an expired album token
     if (shareLink.expiresAt && shareLink.expiresAt < new Date()) {
-      throw new BadRequestException('Share link has expired');
+      throw new ForbiddenException({
+        code: 'SHARE_LINK_EXPIRED',
+        message: 'Share link has expired',
+      });
     }
 
     return shareLink.image;
@@ -1593,7 +1625,7 @@ export class ImageService implements OnModuleDestroy {
         `[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`,
       );
       const uploadResponse = await lastValueFrom(
-        this.httpService.post('https://api.tinify.com/shrink', originalBuffer, {
+        this.httpService.post(`${TINIFY_ORIGIN}/shrink`, originalBuffer, {
           headers,
           responseType: 'json',
         }),
@@ -1602,11 +1634,13 @@ export class ImageService implements OnModuleDestroy {
       billed = true;
       await this.syncTinifyUsage(client.id, uploadResponse.headers);
 
-      // Check for successful upload
+      // Check for successful upload. The output URL is downloaded with the
+      // client's key: anything but Tinify's own origin is refused (SSRF, key leak).
+      const outputUrl = uploadResponse.data?.output?.url;
       if (
-        !uploadResponse.data ||
-        !uploadResponse.data.output ||
-        !uploadResponse.data.output.url
+        typeof outputUrl !== 'string' ||
+        !URL.canParse(outputUrl) ||
+        new URL(outputUrl).origin !== TINIFY_ORIGIN
       ) {
         this.logger.error(
           `[compressImageWithTinify] Invalid response from Tinify API - ID: ${imageId}`,
@@ -1614,7 +1648,7 @@ export class ImageService implements OnModuleDestroy {
         throw new BadRequestException('Failed to compress image with Tinify');
       }
 
-      const compressedUrl = uploadResponse.data.output.url;
+      const compressedUrl = outputUrl;
       // No gain: keep our file. Still marked compressed (and counted): Tinify billed it.
       const kept = uploadResponse.data.output.size >= originalSize;
       const compressedSize = kept
@@ -1642,6 +1676,8 @@ export class ImageService implements OnModuleDestroy {
               Authorization: `Basic ${authString}`,
             },
             responseType: 'arraybuffer',
+            // The origin was checked on the URL above; a redirect would undo it
+            maxRedirects: 0,
           }),
         );
 

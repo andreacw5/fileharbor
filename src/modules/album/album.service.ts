@@ -10,6 +10,10 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 import { randomUUID } from 'crypto';
 import { paginate, PageParams } from '@heyatom/nest-common';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
+import { ALBUM_TOKEN_DEFAULT_DAYS } from './dto/create-album-token.dto';
+
+// Same status and shape as an expired image share link
+const TOKEN_EXPIRED = { code: 'TOKEN_EXPIRED', message: 'Token expired' };
 import { RouteHelperService } from '@/utils/route.utils';
 import { buildSrcset } from '@/modules/image/image-variants';
 
@@ -157,6 +161,31 @@ export class AlbumService {
 
     this.logger.log(`[createAlbum] Success - Album ID: ${album.id}`);
     return this.formatAlbumResponse(album);
+  }
+
+  /**
+   * Creator.id behind an X-User-Id, for read-side ownership checks: undefined
+   * when the header is missing or this client never saw it (owns nothing).
+   */
+  async findCreatorId(
+    clientId: string,
+    externalId: string | undefined,
+  ): Promise<string | undefined> {
+    if (!externalId) return undefined;
+    const creator = await this.prisma.creator.findUnique({
+      where: { clientId_externalId: { clientId, externalId } },
+      select: { id: true },
+    });
+    return creator?.id;
+  }
+
+  /** 404 unless the album exists in this client; uploads call it before writing anything. */
+  async assertAlbumExists(albumId: string, clientId: string): Promise<void> {
+    const album = await this.prisma.album.findFirst({
+      where: { id: albumId, clientId },
+      select: { id: true },
+    });
+    if (!album) throw new NotFoundException('Album not found');
   }
 
   async getAlbumById(albumId: string, clientId: string) {
@@ -349,6 +378,10 @@ export class AlbumService {
         );
     }
 
+    // The only place an item's order is computed (uploads with albumId come
+    // through here too): appended items continue from max + 1, the first one is 0.
+    // No lock: two concurrent adds can read the same max and share an `order`
+    // ([albumId, order] is an index, not unique) and the two keep no defined order.
     const records = await this.prisma.$transaction(async (tx) => {
       const maxOrder = await tx.albumItem.findFirst({
         where: { albumId },
@@ -490,7 +523,9 @@ export class AlbumService {
     const where: any = { albumId };
     if (params.resourceType) where.resourceType = params.resourceType;
 
-    const [rows, total] = await this.prisma.$transaction([
+    // Two independent reads: Promise.all runs them on two connections, a
+    // $transaction array would serialize them on one.
+    const [rows, total] = await Promise.all([
       this.prisma.albumItem.findMany({
         where,
         orderBy: { order: 'asc' },
@@ -550,16 +585,16 @@ export class AlbumService {
       );
 
     const token = randomUUID();
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
-      : null;
+    const expiresAt = new Date(
+      Date.now() + (expiresInDays ?? ALBUM_TOKEN_DEFAULT_DAYS) * 86_400_000,
+    );
 
     await this.prisma.albumToken.create({
       data: { albumId, token, expiresAt },
     });
 
     this.logger.log(
-      `[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
+      `[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt.toISOString()}`,
     );
     return {
       token,
@@ -576,7 +611,7 @@ export class AlbumService {
     if (!albumToken || albumToken.albumId !== albumId)
       throw new ForbiddenException('Invalid token');
     if (albumToken.expiresAt && albumToken.expiresAt < new Date())
-      throw new ForbiddenException('Token expired');
+      throw new ForbiddenException(TOKEN_EXPIRED);
     return true;
   }
 
@@ -585,8 +620,8 @@ export class AlbumService {
       where: { token },
     });
     if (!tokenRecord) throw new ForbiddenException('Invalid token');
-
-    await this.validateAlbumToken(tokenRecord.albumId, token);
+    if (tokenRecord.expiresAt && tokenRecord.expiresAt < new Date())
+      throw new ForbiddenException(TOKEN_EXPIRED);
 
     const album = await this.prisma.album.findUnique({
       where: { id: tokenRecord.albumId },

@@ -195,12 +195,13 @@ export class AvatarController {
       }
 
       // Otherwise return the file
-      const { buffer, mimeType } = await this.avatarService.getAvatarFile(
-        clientId,
-        externalUserId,
-        query.thumb,
-        query.format,
-      );
+      const { buffer, mimeType, updatedAt } =
+        await this.avatarService.getAvatarFile(
+          clientId,
+          externalUserId,
+          query.thumb,
+          query.format,
+        );
 
       // Variant suffix keeps thumb/format variants apart in caches and filenames
       const format = query.format ?? 'webp';
@@ -208,7 +209,9 @@ export class AvatarController {
       const headers: Record<string, string> = {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=86400',
-        ETag: `"avatar-${externalUserId}${variant}"`,
+        // updatedAt moves on every re-upload (upsert): without it a browser
+        // revalidating after max-age would get 304 and keep the old avatar forever.
+        ETag: `"avatar-${externalUserId}${variant}-${updatedAt.getTime()}"`,
         ...extraHeaders,
       };
 
@@ -222,7 +225,7 @@ export class AvatarController {
         );
       }
 
-      this.logger.log(
+      this.logger.debug(
         `[getAvatar] Success - Creator: ${externalUserId}, Thumb: ${query.thumb}, Size: ${buffer.length} bytes`,
       );
 
