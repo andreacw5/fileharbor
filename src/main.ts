@@ -60,6 +60,11 @@ async function bootstrap() {
     if (swagger) setupSwagger(app, SWAGGER_OPTIONS);
 
     await app.listen(port);
+    // Above nginx's upstream keepalive (60s default): if Node closed an idle
+    // socket first, nginx would reuse it and get a reset (sporadic 502).
+    const server = app.getHttpServer();
+    server.keepAliveTimeout = 65_000;
+    server.headersTimeout = 66_000;
 
     const logger = new Logger('Bootstrap');
     logger.log(`FileHarbor started successfully!`);

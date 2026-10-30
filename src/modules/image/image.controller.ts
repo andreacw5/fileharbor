@@ -53,6 +53,8 @@ import {
   DeleteResponseDto,
 } from './dto';
 import { Readable } from 'node:stream';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { contentDisposition } from '@/utils/content-disposition';
 import { snapBlurSize, snapQuality, snapSize } from './image-variants';
 import {
@@ -356,9 +358,9 @@ export class ImageController {
         return;
       }
 
-      // Behind nginx, hand files already on disk to it instead of streaming
-      // them from Node (see IMAGE_X_ACCEL_REDIRECT)
-      const xAccel = this.config.get<boolean>('image.xAccelRedirect');
+      // A file already on disk is never read into memory: nginx serves it
+      // (IMAGE_X_ACCEL_REDIRECT) or Node streams it. Only a fresh render, or a
+      // blur resized per request, comes back as a buffer.
       const { buffer, mimeType, filePath } =
         await this.imageService.getImageFile(image, {
           width: query.thumb && !blur ? undefined : query.width,
@@ -367,30 +369,45 @@ export class ImageController {
           quality: query.quality,
           thumb: query.thumb,
           blur,
-          skipDiskRead: xAccel,
+          skipDiskRead: true,
         });
-      await countHit();
       headers['Content-Type'] = mimeType;
-      res.set(headers);
 
-      if (!buffer) {
+      if (buffer) {
+        await countHit();
+        res.set(headers);
+        this.logger.debug(
+          `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,
+        );
+        return new StreamableFile(Readable.from(buffer), {
+          type: mimeType,
+          length: buffer.length,
+        });
+      }
+
+      if (this.config.get<boolean>('image.xAccelRedirect')) {
+        await countHit();
+        res.set(headers);
         res.set(
           'X-Accel-Redirect',
           `/internal-images/${this.storageService.toStorageRelative(filePath!)}`,
         );
-        this.logger.log(
+        this.logger.debug(
           `[GetImage] ${requestType} | ${imageId} | ${mimeType} | x-accel | client:${clientId || 'public'}`,
         );
         return;
       }
 
-      this.logger.log(
-        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(buffer.length / 1024)}KB | client:${clientId || 'public'}`,
+      // stat before counting: a row whose file is gone is a 500, not a view
+      const { size } = await stat(filePath!);
+      await countHit();
+      res.set(headers);
+      this.logger.debug(
+        `[GetImage] ${requestType} | ${imageId} | ${mimeType} | ${Math.round(size / 1024)}KB | stream | client:${clientId || 'public'}`,
       );
-
-      return new StreamableFile(Readable.from(buffer), {
+      return new StreamableFile(createReadStream(filePath!), {
         type: mimeType,
-        length: buffer.length,
+        length: size,
       });
     } catch (error) {
       // Return default images for 404 and 403 errors (only for file requests, not metadata)

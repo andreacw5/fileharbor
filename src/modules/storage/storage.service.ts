@@ -177,9 +177,7 @@ export class StorageService {
         `[ensureDirectory] Failed to create directory: ${dirPath}`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to create directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to create directory`);
     }
   }
 
@@ -200,25 +198,34 @@ export class StorageService {
   }
 
   /**
-   * Get default fallback image path
+   * Default fallback image path. Shipped with the app (`defaults/` at the repo
+   * root, copied into the Docker image), never read from the storage volume: a
+   * fresh volume would otherwise turn every miss into a 500.
    */
   getDefaultImagePath(type: 'not_found' | 'permission_denied'): string {
     const filename =
       type === 'not_found'
         ? 'fileharbor_not_found.webp'
         : 'fileharbor_permission_denided.webp';
-    return path.join(this.storagePath, 'defaults.fileharbor', filename);
+    return path.resolve(__dirname, '../../../defaults', filename);
   }
 
+  private readonly defaultImages = new Map<string, Buffer>();
+
   /**
-   * Get default fallback image buffer
+   * Default fallback image buffer, read once: a scanner hitting random ids must
+   * not cost a disk read per miss.
    */
   async getDefaultImage(
     type: 'not_found' | 'permission_denied',
   ): Promise<Buffer> {
+    const cached = this.defaultImages.get(type);
+    if (cached) return cached;
     const imagePath = this.getDefaultImagePath(type);
     try {
-      return await fs.readFile(imagePath);
+      const buffer = await fs.readFile(imagePath);
+      this.defaultImages.set(type, buffer);
+      return buffer;
     } catch (error) {
       this.logger.error(
         `[getDefaultImage] Failed to read default image: ${imagePath}`,
@@ -360,9 +367,7 @@ export class StorageService {
         `[saveFile] Failed to save file: ${filePath}`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to save file`);
     }
   }
 
@@ -378,9 +383,7 @@ export class StorageService {
         `[readFile] Failed to read file: ${filePath}`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to read file`);
     }
   }
 
@@ -397,9 +400,7 @@ export class StorageService {
         `[deleteDirectory] Failed to delete directory: ${dirPath}`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to delete directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to delete directory`);
     }
   }
 
@@ -493,9 +494,7 @@ export class StorageService {
         `[copyFromTemp] Failed: ${destPath}`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to store file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to store file`);
     }
   }
 
@@ -537,9 +536,7 @@ export class StorageService {
       this.logger.error(
         `[extractVideoThumbnail] Failed: ${error instanceof Error ? error.message : error}`,
       );
-      throw new InternalServerErrorException(
-        `Failed to extract thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to extract thumbnail`);
     } finally {
       await fs.unlink(tmpJpeg).catch(() => {});
     }
@@ -577,9 +574,7 @@ export class StorageService {
         `[convertToWebP] Failed to convert image to WebP`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to convert image to WebP: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to convert image to WebP`);
     }
   }
 
@@ -612,9 +607,7 @@ export class StorageService {
         `[encodeWebpWithThumbnail] Failed to encode image`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to encode image: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to encode image`);
     }
   }
 
@@ -683,9 +676,7 @@ export class StorageService {
         `[createThumbnail] Failed to create thumbnail`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to create thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to create thumbnail`);
     }
   }
 
@@ -801,11 +792,8 @@ export class StorageService {
         })
         .toBuffer();
     } catch (error) {
-      // Provide more detailed error information
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
       throw new InternalServerErrorException(
-        `Failed to optimize image: ${errorMessage}. The image may be corrupted or in an unsupported format.`,
+        'Failed to optimize image. The image may be corrupted or in an unsupported format.',
       );
     }
   }
@@ -898,9 +886,7 @@ export class StorageService {
         `[resizeImage] Failed to resize image`,
         error instanceof Error ? error.stack : error,
       );
-      throw new InternalServerErrorException(
-        `Failed to resize image: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      throw new InternalServerErrorException(`Failed to resize image`);
     }
   }
 }

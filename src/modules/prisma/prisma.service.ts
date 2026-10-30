@@ -47,7 +47,11 @@ export class PrismaService
     job: string,
     fn: () => Promise<unknown>,
   ): Promise<boolean> {
-    const conn = new PgClient({ connectionString: process.env.DATABASE_URL });
+    const conn = new PgClient({
+      connectionString: process.env.DATABASE_URL,
+      // A hung connect would otherwise block this job's tick for good
+      connectionTimeoutMillis: 5_000,
+    });
     // An idle client that loses its socket emits 'error'; unhandled, it kills the process
     conn.on('error', (err) =>
       this.logger.warn(`Job ${job} lock connection lost: ${err.message}`),

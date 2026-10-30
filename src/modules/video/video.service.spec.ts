@@ -433,27 +433,33 @@ describe('VideoService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should increment view count non-blocking', async () => {
+    it('buffers views and flushes them in one UPDATE', async () => {
       mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.client.findUnique.mockResolvedValue(mockClient);
-      mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
       await service.getVideoStreamPath(mockVideoId, mockClientId);
+      await service.getVideoStreamPath(mockVideoId, mockClientId);
+      // A Range continuation is not a view
+      await service.getVideoStreamPath(mockVideoId, mockClientId, false);
+      expect(mockPrismaService.$executeRaw).not.toHaveBeenCalled();
+
+      await service.flushViews();
 
       // Raw SQL, not prisma.video.update: that would bump updatedAt per view
       expect(mockPrismaService.video.update).not.toHaveBeenCalled();
-      const [sql, id] = mockPrismaService.$executeRaw.mock.calls[0];
-      expect(sql.join('?')).toContain('SET views = views + 1');
-      expect(id).toBe(mockVideoId);
+      const [sql, ids, counts] = mockPrismaService.$executeRaw.mock.calls[0];
+      expect(sql.join('?')).toContain('views = v.views + n.n');
+      expect(ids).toEqual([mockVideoId]);
+      expect(counts).toEqual([2]);
+
+      await service.flushViews();
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
     });
 
     it('should use clientId as domain when client has no domain', async () => {
-      mockPrismaService.video.findFirst.mockResolvedValue(mockVideo);
-      mockPrismaService.client.findUnique.mockResolvedValue({
-        ...mockClient,
-        domain: null,
+      mockPrismaService.video.findFirst.mockResolvedValue({
+        ...mockVideo,
+        client: { ...mockVideo.client, domain: null },
       });
-      mockPrismaService.video.update.mockResolvedValue(mockVideo);
 
       const result = await service.getVideoStreamPath(
         mockVideoId,

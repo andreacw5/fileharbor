@@ -2,13 +2,12 @@
 
 | Data | Review | Stato | Finding aperti |
 |---|---|---|---|
-| 2026-10-30 | [Product review 4.1.2](2026-10-30-product-review.md) — performance consegna, sicurezza, correttezza, job, infra, API | open | 3 H perf/infra (byte serviti da Node e X-Accel video spento, views video per Range, placeholder fuori dall'immagine), 1 M security (path assoluto nei body 500), 9 L security |
+| 2026-10-30 | [Product review 4.1.2](2026-10-30-product-review.md) — performance consegna, sicurezza, correttezza, job, infra, API | in-progress | blocco "Subito" di §10 fatto (placeholder nell'immagine, stream da disco, views video, ETag avatar, 500 generici); restano i blocchi perf/correttezza e 9 L security |
 
 ## Finding di sicurezza aperti
 
 Dalla review 2026-10-30 (§4):
 
-- **M** `storage.service.ts:372` — `InternalServerErrorException` con `error.message` (path assoluto storage) nel body.
 - **L** share link da API key su immagini pubbliche e senza scadenza (`image.service.ts:885`).
 - **L** `expiresInDays` album token senza max, default eterno (`album.service.ts:552`).
 - **L** tmp video non rimosso su 400/403 prima del service (`video-delivery.ts:10`).

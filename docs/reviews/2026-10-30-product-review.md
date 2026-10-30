@@ -1,7 +1,7 @@
 ---
 type: review
 service: fileharbor
-status: open
+status: in-progress
 updated: 2026-10-30
 verified: 283a918
 ---
@@ -467,7 +467,7 @@ controller, `me/` (solo il guard; il 422 "no client mapped" no), admin controlle
 
 ## 10. Piano suggerito
 
-**Subito (un PR, mezza giornata)**: #1 env X-Accel (ops), #3 defaults nel Dockerfile, #5 messaggi
+**Subito (un PR, mezza giornata)** — fatto, vedi CHANGELOG `Unreleased`: #1 env X-Accel (ops), #3 defaults nel Dockerfile, #5 messaggi
 errore generici, #8 ETag avatar, #10 avatar pre-delete, `video.service.ts:208` lookup doppio, log
 per-asset a `debug`, `connectionTimeoutMillis`, `keepAliveTimeout`.
 

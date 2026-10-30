@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Query,
+  Headers,
   Body,
   Res,
   BadRequestException,
@@ -168,9 +169,15 @@ export class VideoController {
     @Param('id') id: string,
     @ClientId() clientId: string,
     @Query('download') download: string,
+    @Headers('range') range: string | undefined,
     @Res() res: Response,
   ) {
-    const video = await this.videoService.getVideoStreamPath(id, clientId);
+    // One view per playback, not per Range chunk
+    const video = await this.videoService.getVideoStreamPath(
+      id,
+      clientId,
+      !range || /^bytes=0-/.test(range),
+    );
     sendVideo(
       res,
       {

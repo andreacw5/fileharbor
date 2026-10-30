@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+Rebuild the image, no migration. Placeholder images moved from `storage/defaults.fileharbor/` into the
+image (`defaults/`): the storage volume no longer needs them (the old dir can be deleted).
+
+### Fixed
+- **Placeholders shipped with the image.** A fresh storage volume turned every public 404/403 into a 500.
+  Read once and memoized.
+- **500 bodies no longer carry the storage path.** Disk/sharp failures answered with the OS message
+  (`ENOENT: ... '/srv/storage/<domain>/images/<id>/original.webp'`); now a generic message, detail in the log.
+- **Avatar ETag** includes `updatedAt`: a browser revalidating after a re-upload used to get 304 forever.
+- **Avatar re-upload** no longer deletes the old files first: no 404 window, and an encode failure keeps
+  the old avatar instead of a row pointing at an empty dir.
+- **Video views** counted one per playback (first Range request), buffered and flushed every 10s like
+  image views, instead of one `UPDATE` per Range chunk.
+
+### Changed
+- **On-disk images are streamed, not buffered.** `GET /images/:id` used to `readFile` the whole file into
+  memory; now `createReadStream` (or `X-Accel-Redirect` when enabled). A row whose file is gone is a 500
+  and not a view.
+- Per-asset "served" log lines (images, avatars) demoted to `debug`.
+- `keepAliveTimeout` 65s / `headersTimeout` 66s, above nginx's upstream keepalive.
+- Job lock connection has a 5s connect timeout.
+- Video stream drops a redundant client lookup.
+
 ---
 
 ## [4.1.2] – 2026-10-30

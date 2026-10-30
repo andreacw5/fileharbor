@@ -62,7 +62,7 @@ storage/{client.domain || clientId}/avatars/{creatorId}/original.webp
 ```
 `StorageService.validatePath()` blocks directory traversal. `sanitizePathComponent()` strips `..`, `/`, `\`, and null bytes.
 
-Default fallback images live at `storage/defaults.fileharbor/`. `GET /images/:id` returns `fileharbor_not_found.webp` or `fileharbor_permission_denided.webp` (note: typo in filename is intentional/existing) instead of 4xx for non-`info` requests.
+Default fallback images live at `defaults/` (repo root, copied into the Docker image: never in the storage volume, read once and memoized). `GET /images/:id` returns `fileharbor_not_found.webp` or `fileharbor_permission_denided.webp` (note: typo in filename is intentional/existing) instead of 4xx for non-`info` requests.
 
 ## DTO / Response Pattern
 
@@ -425,6 +425,13 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 ### On-demand variants — bounded by design
 
 `GET /images/:id` is public and `@SkipThrottle()`, so its transforms are bounded instead of rate-limited:
+
+- **Delivery**: a file already on disk is never read into memory. With `IMAGE_X_ACCEL_REDIRECT=true` the
+  controller answers `X-Accel-Redirect: /internal-images/<storage-relative path>` and nginx serves it;
+  otherwise Node streams it (`createReadStream`, `Content-Length` from `stat`). Only a fresh render (or a blur
+  resized per request) comes back as a buffer. Prod keeps X-Accel **off** for images on purpose: nginx never
+  `proxy_cache`s an X-Accel response, and the image cache (HIT = no upstream, no DB) is worth more. Videos use
+  it (`VIDEO_X_ACCEL_REDIRECT=true`).
 
 - **Snapped, never rejected** (`image/image-variants.ts`): width/height round **up** to the next of
   `VARIANT_SIZES` (16 … 4096), quality to the nearest of `VARIANT_QUALITIES` (40/60/75/85/100). Old URLs

@@ -3,8 +3,12 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  StreamableFile,
   ValidationPipe,
 } from '@nestjs/common';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { UpdateImageMetadataDto } from './dto/update-image-metadata.dto';
 import type { BastionAuditService } from '@heyatom/bastion-client/nest';
 import { Response, Request } from 'express';
@@ -55,6 +59,36 @@ describe('ImageController.getImage counters', () => {
     await controller.getImage('img-1', {} as GetImageDto, res, req);
 
     expect(imageService.incrementViews).toHaveBeenCalledWith('img-1');
+  });
+
+  it('streams a file already on disk instead of buffering it', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fh-stream-'));
+    const filePath = path.join(dir, 'original.webp');
+    await fs.writeFile(filePath, Buffer.alloc(1234));
+    imageService.getImageFile.mockResolvedValue({
+      mimeType: 'image/webp',
+      filePath,
+    });
+
+    const out = await controller.getImage('img-1', {} as GetImageDto, res, req);
+
+    expect(out).toBeInstanceOf(StreamableFile);
+    expect((out as StreamableFile).getHeaders().length).toBe(1234);
+    expect(imageService.incrementViews).toHaveBeenCalledWith('img-1');
+    (out as StreamableFile).getStream().destroy();
+    await fs.rm(dir, { recursive: true });
+  });
+
+  it('is a 500, not a view, when the file behind the row is gone', async () => {
+    imageService.getImageFile.mockResolvedValue({
+      mimeType: 'image/webp',
+      filePath: path.join(os.tmpdir(), 'fh-missing', 'original.webp'),
+    });
+
+    await expect(
+      controller.getImage('img-1', {} as GetImageDto, res, req),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(imageService.incrementViews).not.toHaveBeenCalled();
   });
 
   it('does not count a view when the render queue is full', async () => {
