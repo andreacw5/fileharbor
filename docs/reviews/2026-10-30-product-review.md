@@ -474,8 +474,11 @@ per-asset a `debug`, `connectionTimeoutMillis`, `keepAliveTimeout`.
 **Prossimo (perf, un PR)** — fatto, tranne la conversione avatar cachata (il `proxy_cache` nginx a 5 m la assorbe): #2 views video bufferizzate, #4 dedupe in-flight, #6 cache domain, #7
 threadpool/sharp, varianti ≤ thumb dalla thumb, conversione avatar cachata, memo `storage_bytes`.
 
-**Poi (correttezza)**: #9 album prima dell'upload + `order` unificato, ordine write dei job optimize,
-share link su pubbliche + scadenze massime, `AdminUpdateVideoDto`, tmp video in `finally`, origin check Tinify.
+**Poi (correttezza)** — fatto, vedi CHANGELOG `Unreleased`: #9 album prima dell'upload + `order` unificato, ordine write dei job optimize,
+share link su pubbliche + scadenze massime, `AdminUpdateVideoDto`, tmp video in `finally`, origin check Tinify;
+in più i Low di §4.2 `Album.creatorId` (risolto via `resolveCreator`) e placeholder anonimo (`not_found` per entrambi).
+Share link da API key: `expiresAt` resta facoltativo (cap 365 giorni solo se dato), la regola `IMAGE_NOT_PRIVATE`
+chiude lo scenario pubblica→privata.
 
 **Quando serve**: hash delle API key, split di `image.service.ts`, spec per bookmarks/creator/me,
 metrica `job_last_success`, alias `sort`/`order`.
