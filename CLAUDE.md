@@ -476,7 +476,9 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 - **Regenerate** (plan 06): `POST admin/images/:id/regenerate` rebuilds `thumb.webp` (and `blurred.webp` if one exists, best-effort) from the
   stored original and empties `variants/`; id, original, `size` and optimize state are untouched, `updatedAt` moves last (ETag). `404`
   without an original, `422` when it is unreadable. Public GETs are `immutable`: a cache holding the old thumb keeps
-  it, so the console reloads with `?t=<updatedAt>`. Images only (avatars re-upload on the same URL).
+  it, so the console reloads with `?t=<updatedAt>`. `POST admin/videos/:id/regenerate` is the video counterpart
+  (`VideoService.regenerateThumbnail`): `thumb.webp` from the first frame at `VIDEO_THUMBNAIL_QUALITY`, same codes,
+  `fh_video.regenerated`. Avatars re-upload on the same URL.
 
 ## DB Entities
 

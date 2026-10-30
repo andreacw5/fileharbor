@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   NotFoundException,
+  UnprocessableEntityException,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -125,6 +126,7 @@ describe('VideoService', () => {
   const mockStorageService = {
     getVideoFilePath: jest.fn(),
     getVideoPath: jest.fn(),
+    fileExists: jest.fn(),
     copyFromTemp: jest.fn(),
     extractVideoThumbnail: jest.fn(),
     getVideoMetadata: jest.fn(),
@@ -841,6 +843,59 @@ describe('VideoService', () => {
       const result = service.formatVideoResponse(mockVideo);
 
       expect(result.tags).toEqual([]);
+    });
+  });
+
+  describe('regenerateThumbnail', () => {
+    const video = {
+      id: mockVideoId,
+      clientId: mockClientId,
+      client: { domain: mockDomain },
+    };
+    const original = `storage/${mockDomain}/videos/${mockVideoId}/original.mp4`;
+    const thumb = `storage/${mockDomain}/videos/${mockVideoId}/thumb.webp`;
+
+    beforeEach(() => {
+      mockStorageService.getVideoFilePath.mockImplementation(
+        (_d: string, _id: string, v: string) =>
+          v === 'thumb' ? thumb : original,
+      );
+    });
+
+    it('extracts the thumb from the original and touches updatedAt', async () => {
+      mockStorageService.fileExists.mockResolvedValue(true);
+      mockStorageService.extractVideoThumbnail.mockResolvedValue(undefined);
+      const updatedAt = new Date();
+      mockPrismaService.video.update.mockResolvedValue({
+        id: mockVideoId,
+        updatedAt,
+      });
+
+      await expect(service.regenerateThumbnail(video)).resolves.toEqual({
+        id: mockVideoId,
+        updatedAt,
+      });
+      expect(mockStorageService.extractVideoThumbnail).toHaveBeenCalledWith(
+        original,
+        thumb,
+        80,
+      );
+    });
+
+    it('404 without an original, 422 when ffmpeg fails, nothing written either way', async () => {
+      mockStorageService.fileExists.mockResolvedValue(false);
+      await expect(service.regenerateThumbnail(video)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+
+      mockStorageService.fileExists.mockResolvedValue(true);
+      mockStorageService.extractVideoThumbnail.mockRejectedValue(
+        new Error('ffmpeg'),
+      );
+      await expect(service.regenerateThumbnail(video)).rejects.toBeInstanceOf(
+        UnprocessableEntityException,
+      );
+      expect(mockPrismaService.video.update).not.toHaveBeenCalled();
     });
   });
 });

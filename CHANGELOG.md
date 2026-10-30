@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   with them have `original.mp4` and no `thumb.webp` (no poster in the console, `…/thumb` is a 404).
   `node dist/scripts/backfill-video-thumbnails.js --apply` extracts the missing ones; dry run by default.
 
+### Added
+- **`POST admin/videos/:id/regenerate`**, the video counterpart of the image one: rebuilds `thumb.webp` from the
+  stored original (`404` without it, `422` when ffmpeg can't read it), touches `updatedAt`, audited as
+  `fh_video.regenerated`. Swagger schema `RegenerateImageResponseDto` is now `RegenerateResponseDto`, shared by both.
+
 ---
 
 ## [4.1.3] – 2026-10-30
