@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [4.1.4] – 2026-10-30
 
 ### Fixed
 - **Video stream with `VIDEO_X_ACCEL_REDIRECT=true` and no nginx in front.** The hand-off was decided by
