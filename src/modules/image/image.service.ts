@@ -87,6 +87,7 @@ export interface DuplicateGroup {
 
 /** `code` of the 400 thrown when the client's monthly Tinify slots are used up. */
 export const TINIFY_LIMIT_REACHED = 'TINIFY_LIMIT_REACHED';
+const TINIFY_ORIGIN = 'https://api.tinify.com';
 
 @Injectable()
 export class ImageService implements OnModuleDestroy {
@@ -1624,7 +1625,7 @@ export class ImageService implements OnModuleDestroy {
         `[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`,
       );
       const uploadResponse = await lastValueFrom(
-        this.httpService.post('https://api.tinify.com/shrink', originalBuffer, {
+        this.httpService.post(`${TINIFY_ORIGIN}/shrink`, originalBuffer, {
           headers,
           responseType: 'json',
         }),
@@ -1633,11 +1634,13 @@ export class ImageService implements OnModuleDestroy {
       billed = true;
       await this.syncTinifyUsage(client.id, uploadResponse.headers);
 
-      // Check for successful upload
+      // Check for successful upload. The output URL is downloaded with the
+      // client's key: anything but Tinify's own origin is refused (SSRF, key leak).
+      const outputUrl = uploadResponse.data?.output?.url;
       if (
-        !uploadResponse.data ||
-        !uploadResponse.data.output ||
-        !uploadResponse.data.output.url
+        typeof outputUrl !== 'string' ||
+        !URL.canParse(outputUrl) ||
+        new URL(outputUrl).origin !== TINIFY_ORIGIN
       ) {
         this.logger.error(
           `[compressImageWithTinify] Invalid response from Tinify API - ID: ${imageId}`,
@@ -1645,7 +1648,7 @@ export class ImageService implements OnModuleDestroy {
         throw new BadRequestException('Failed to compress image with Tinify');
       }
 
-      const compressedUrl = uploadResponse.data.output.url;
+      const compressedUrl = outputUrl;
       // No gain: keep our file. Still marked compressed (and counted): Tinify billed it.
       const kept = uploadResponse.data.output.size >= originalSize;
       const compressedSize = kept

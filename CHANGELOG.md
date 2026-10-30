@@ -40,6 +40,8 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
 - **Video upload temp files are always removed.** Multer writes up to `MAX_VIDEO_SIZE` to the tmpdir before the
   handler; a `400` from validation or an admin `403` left it there. An interceptor on both upload routes
   now unlinks it however the request ends.
+- **Tinify output URL pinned to `https://api.tinify.com`.** The compressed file was downloaded, with the
+  client's Tinify key, from whatever URL the upstream JSON named; any other origin is now refused.
 
 ### Changed
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to

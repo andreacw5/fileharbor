@@ -1489,7 +1489,11 @@ describe('ImageService', () => {
     it('reserves the quota slot in one conditional update', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockHttpService.post.mockReturnValue(
-        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+        of({
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 600 },
+          },
+        }),
       );
       mockHttpService.get.mockReturnValue(of({ data: Buffer.alloc(600) }));
       mockStorageService.createThumbnail.mockResolvedValue(Buffer.alloc(10));
@@ -1538,10 +1542,29 @@ describe('ImageService', () => {
       });
     });
 
+    it('never downloads an output URL outside api.tinify.com', async () => {
+      mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
+      mockHttpService.post.mockReturnValue(
+        of({
+          data: { output: { url: 'http://169.254.169.254/latest', size: 600 } },
+        }),
+      );
+
+      await expect(
+        service.compressImageWithTinify(mockImageId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+    });
+
     it('keeps the slot spent when failing after Tinify billed it', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockHttpService.post.mockReturnValue(
-        of({ data: { output: { url: 'https://t/x', size: 600 } } }),
+        of({
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 600 },
+          },
+        }),
       );
       mockHttpService.get.mockReturnValue(
         throwError(() => new Error('download failed')),
@@ -1556,7 +1579,11 @@ describe('ImageService', () => {
     it('keeps the original, still marked compressed, when Tinify saves nothing', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockHttpService.post.mockReturnValue(
-        of({ data: { output: { url: 'https://t/x', size: 1200 } } }),
+        of({
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 1200 },
+          },
+        }),
       );
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
@@ -1580,7 +1607,9 @@ describe('ImageService', () => {
       mockHttpService.post.mockReturnValue(
         of({
           headers: { 'compression-count': '42' },
-          data: { output: { url: 'https://t/x', size: 1200 } },
+          data: {
+            output: { url: 'https://api.tinify.com/output/x', size: 1200 },
+          },
         }),
       );
       mockPrismaService.image.update.mockResolvedValue({
