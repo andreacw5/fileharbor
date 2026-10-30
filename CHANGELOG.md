@@ -29,6 +29,12 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   thumb is encoded first and the original is written last.
 - **One album order.** Uploads with `albumId` go through the same code as `POST /albums/:id/items`: the
   first item of an empty album is `0` (uploads used to start at `1`).
+- **Share links and album tokens: limits and codes.** `POST /images/:imageId/share` refuses a public image
+  (`400 IMAGE_NOT_PRIVATE`, as the console does: a link on a public image would silently grant access the
+  day it turns private) and an `expiresAt` more than 365 days out. `expiresInDays` on album tokens is
+  capped at 365 (`1e15` was a 500) and defaults to 7 (it used to mean "never"). An expired share link
+  and an expired album token both answer `403` with a domain code (`SHARE_LINK_EXPIRED` /
+  `TOKEN_EXPIRED`); the share link one used to be a `400` swallowed into a bare `403`.
 
 ### Changed
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to

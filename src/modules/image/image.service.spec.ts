@@ -904,10 +904,40 @@ describe('ImageService', () => {
     });
   });
 
+  describe('getImageByShareToken', () => {
+    it('answers an expired link with 403 SHARE_LINK_EXPIRED', async () => {
+      mockPrismaService.imageShareLink.findUnique.mockResolvedValue({
+        readToken: 't',
+        expiresAt: new Date(Date.now() - 1000),
+        image: mockImage,
+      });
+
+      await expect(service.getImageByShareToken('t')).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'SHARE_LINK_EXPIRED' },
+      });
+    });
+  });
+
   describe('createShareLink', () => {
     beforeEach(() => {
       mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
+      mockPrismaService.image.findFirst.mockResolvedValue({
+        ...mockImage,
+        isPrivate: true,
+      });
+    });
+
+    it('refuses a public image with IMAGE_NOT_PRIVATE, like the console', async () => {
       mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
+
+      await expect(
+        service.createShareLink(mockImageId, mockClientId, mockExternalUserId),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { code: 'IMAGE_NOT_PRIVATE' },
+      });
+      expect(mockPrismaService.imageShareLink.create).not.toHaveBeenCalled();
     });
 
     it('should create share link for image owner', async () => {

@@ -10,6 +10,10 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 import { randomUUID } from 'crypto';
 import { paginate, PageParams } from '@heyatom/nest-common';
 import { CreateAlbumDto, UpdateAlbumDto } from './dto';
+import { ALBUM_TOKEN_DEFAULT_DAYS } from './dto/create-album-token.dto';
+
+// Same status and shape as an expired image share link
+const TOKEN_EXPIRED = { code: 'TOKEN_EXPIRED', message: 'Token expired' };
 import { RouteHelperService } from '@/utils/route.utils';
 import { buildSrcset } from '@/modules/image/image-variants';
 
@@ -565,16 +569,16 @@ export class AlbumService {
       );
 
     const token = randomUUID();
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
-      : null;
+    const expiresAt = new Date(
+      Date.now() + (expiresInDays ?? ALBUM_TOKEN_DEFAULT_DAYS) * 86_400_000,
+    );
 
     await this.prisma.albumToken.create({
       data: { albumId, token, expiresAt },
     });
 
     this.logger.log(
-      `[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt?.toISOString() || 'never'}`,
+      `[generateAlbumToken] Album: ${albumId}, Expires: ${expiresAt.toISOString()}`,
     );
     return {
       token,
@@ -591,7 +595,7 @@ export class AlbumService {
     if (!albumToken || albumToken.albumId !== albumId)
       throw new ForbiddenException('Invalid token');
     if (albumToken.expiresAt && albumToken.expiresAt < new Date())
-      throw new ForbiddenException('Token expired');
+      throw new ForbiddenException(TOKEN_EXPIRED);
     return true;
   }
 
@@ -601,7 +605,7 @@ export class AlbumService {
     });
     if (!tokenRecord) throw new ForbiddenException('Invalid token');
     if (tokenRecord.expiresAt && tokenRecord.expiresAt < new Date())
-      throw new ForbiddenException('Token expired');
+      throw new ForbiddenException(TOKEN_EXPIRED);
 
     const album = await this.prisma.album.findUnique({
       where: { id: tokenRecord.albumId },

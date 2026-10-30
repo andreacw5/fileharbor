@@ -252,14 +252,17 @@ export class ImageController {
     try {
       let image;
       let viaShareLink = false;
+      let expiredLink: ForbiddenException | undefined;
       if (query.token) {
         try {
           // Try share link first
           image = await this.imageService.getImageByShareToken(query.token);
           imageId = image.id;
           viaShareLink = true;
-        } catch {
-          // Fallback to normal access with token validation
+        } catch (error) {
+          // Expired (403 SHARE_LINK_EXPIRED) or unknown: fall back to normal
+          // access with token validation.
+          if (error instanceof ForbiddenException) expiredLink = error;
           image = await this.imageService.getImageById(
             imageId,
             undefined,
@@ -275,14 +278,13 @@ export class ImageController {
       }
       // blurPublic opens the blurred preview to anyone. Safe without a check:
       // the blur branch of getImageFile never falls back to the original.
+      // A refusal behind an expired link says so (403 SHARE_LINK_EXPIRED).
       if (!viaShareLink && !(blur && image.blurPublic))
-        await this.imageService.validateImageAccess(
-          image,
-          imageId,
-          clientId,
-          creatorId,
-          query.token,
-        );
+        await this.imageService
+          .validateImageAccess(image, imageId, clientId, creatorId, query.token)
+          .catch((error: unknown) => {
+            throw expiredLink ?? error;
+          });
 
       // Handle metadata request early return
       if (query.info) {

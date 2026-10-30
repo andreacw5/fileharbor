@@ -920,6 +920,15 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Image not found');
     }
 
+    // Same rule as the console: a link on a public image adds nothing today,
+    // and would silently grant access the day the image turns private.
+    if (!image.isPrivate) {
+      throw new BadRequestException({
+        code: 'IMAGE_NOT_PRIVATE',
+        message: 'Share links can only be created on private images',
+      });
+    }
+
     const shareLink = await this.createShareLinkFor(imageId, expiresAt);
 
     this.logger.log(
@@ -1033,9 +1042,12 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Share link not found');
     }
 
-    // Check if link has expired
+    // Same status and shape as an expired album token
     if (shareLink.expiresAt && shareLink.expiresAt < new Date()) {
-      throw new BadRequestException('Share link has expired');
+      throw new ForbiddenException({
+        code: 'SHARE_LINK_EXPIRED',
+        message: 'Share link has expired',
+      });
     }
 
     return shareLink.image;

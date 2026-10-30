@@ -272,6 +272,26 @@ describe('ImageController.getImage ?blur=1', () => {
       );
     });
   });
+
+  it('answers a private image behind an expired link with SHARE_LINK_EXPIRED', async () => {
+    const expired = new ForbiddenException({ code: 'SHARE_LINK_EXPIRED' });
+    imageService.getImageByShareToken.mockRejectedValueOnce(expired);
+
+    await expect(get({ token: 'old', info: true })).rejects.toBe(expired);
+  });
+
+  it('still serves a public image behind an expired link', async () => {
+    imageService.getImageByShareToken.mockRejectedValueOnce(
+      new ForbiddenException({ code: 'SHARE_LINK_EXPIRED' }),
+    );
+    imageService.getImageById.mockResolvedValueOnce({
+      ...image,
+      isPrivate: false,
+    });
+
+    await get({ token: 'old', info: true });
+    expect(imageService.getImageMetadata).toHaveBeenCalled();
+  });
 });
 
 describe('ImageController client-surface audit', () => {

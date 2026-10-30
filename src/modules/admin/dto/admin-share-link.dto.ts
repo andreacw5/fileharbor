@@ -10,7 +10,7 @@ import {
 } from 'class-validator';
 import { PageParams } from '@heyatom/nest-common';
 
-/** Console-created links always expire, at most this far out. */
+/** Share links expire at most this far out (console ones always expire, `X-API-Key` ones may not). */
 export const ADMIN_SHARE_LINK_MAX_DAYS = 365;
 
 export const SHARE_LINK_STATUSES = ['active', 'expired', 'all'] as const;

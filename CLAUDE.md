@@ -393,6 +393,9 @@ ever returns the plaintext `apiKey` — every other read/update masks or omits i
 - Enforce `MAX_FILE_SIZE` from env
 - EXIF metadata removed during optimization
 - Sanitize file paths (handled by `StorageService`)
+- Share links (client and console) only on private images (`400 IMAGE_NOT_PRIVATE`), `expiresAt` at most
+  `ADMIN_SHARE_LINK_MAX_DAYS` (365) out; album tokens `expiresInDays` 1–365, default 7. Expired → `403` with
+  `code` `SHARE_LINK_EXPIRED` / `TOKEN_EXPIRED`.
 - Rate limiting via `@nestjs/throttler` — configured by `THROTTLE_TTL` and `THROTTLE_LIMIT` env vars
 - A request with a **valid** `X-API-Key` skips the throttler (`ClientThrottlerGuard`, `client/guards/`): callers are
   trusted services running batches from one IP. Missing or invalid keys stay IP-throttled (key guessing).

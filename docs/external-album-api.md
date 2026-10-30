@@ -194,10 +194,11 @@ Ordine: `order` asc. `200` → `{ data: AlbumItem[], meta }`.
 ### `POST /albums/:albumId/token`
 
 `X-User-Id` obbligatorio, deve essere il creator. Body opzionale: `{ "expiresInDays": 7 }`
-(intero ≥ 1). **Se omesso il token non scade** (la descrizione Swagger "default: 7" è sbagliata).
+(da 1 a 365, altrimenti `400`). Se omesso vale **7**: ogni token scade.
 Si possono avere più token attivi per album.
 
-`201` → `{ token, albumId, expiresAt: string | null, url: "/albums/shared/<token>" }`.
+`201` → `{ token, albumId, expiresAt: string, url: "/albums/shared/<token>" }`. I token creati prima
+di questa regola possono ancora avere `expiresAt: null` (non scadono).
 
 ### `DELETE /albums/:albumId/token`
 
@@ -207,8 +208,9 @@ I token scaduti sono cancellati ogni notte alle 04:00 (`AlbumCleanupJob`).
 
 ### `GET /albums/shared/:token` — pubblica
 
-Nessun header richiesto. `200` → `Album` con contatori e `coverUrl`. Token inesistente o scaduto →
-`403 Invalid token` / `403 Token expired`.
+Nessun header richiesto. `200` → `Album` con contatori e `coverUrl`. Token inesistente → `403 Invalid
+token`; scaduto → `403` con `code: "TOKEN_EXPIRED"` (lo stesso status di uno share link immagine
+scaduto, `SHARE_LINK_EXPIRED`).
 
 Restituisce solo i metadati: gli item si leggono con `GET /albums/:albumId/items`, che richiede la
 API key.
@@ -315,6 +317,6 @@ Verificati sul codice; non ancora corretti.
 3. **`GET /albums` e `GET /albums/:albumId/items` ignorano la privacy**: qualunque detentore della API
    key elenca album privati e ne legge gli item.
 4. **`coverImageId` in creazione è ignorato**, e solo il GET per `externalAlbumId` lo usa per `coverUrl`.
-5. **`expiresInDays` omesso → token senza scadenza**, contro il "default: 7" dichiarato nel DTO.
+5. ~~`expiresInDays` omesso → token senza scadenza~~: corretto, default 7 e massimo 365.
 6. Il DTO di risposta Swagger dichiara un campo `images` che nessuna route restituisce, e non dichiara
    `clientId`, che invece c'è.

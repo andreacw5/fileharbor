@@ -704,7 +704,7 @@ describe('AlbumService', () => {
       expect(result.url).toBe(`/albums/shared/${result.token}`);
     });
 
-    it('should generate token without expiration when expiresInDays not provided', async () => {
+    it('defaults to a 7-day token when expiresInDays is not provided', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbumWithItems);
       mockPrismaService.albumToken.create.mockImplementation((params) =>
         Promise.resolve({
@@ -720,10 +720,13 @@ describe('AlbumService', () => {
         mockCreatorExternalId,
       );
 
-      expect(mockPrismaService.albumToken.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ expiresAt: null }),
-        }),
+      const { expiresAt } =
+        mockPrismaService.albumToken.create.mock.calls[0][0].data;
+      expect(expiresAt.getTime() - Date.now()).toBeGreaterThan(
+        7 * 86_400_000 - 5_000,
+      );
+      expect(expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(
+        7 * 86_400_000,
       );
     });
 
@@ -783,7 +786,7 @@ describe('AlbumService', () => {
       ).rejects.toThrow(ForbiddenException);
       await expect(
         service.validateAlbumToken(mockAlbumId, mockToken),
-      ).rejects.toThrow('Token expired');
+      ).rejects.toMatchObject({ response: { code: 'TOKEN_EXPIRED' } });
     });
   });
 
