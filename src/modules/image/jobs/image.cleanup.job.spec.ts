@@ -42,4 +42,40 @@ describe('ImageCleanupJob.optimizeImages', () => {
       Buffer.from('opt').length,
     );
   });
+
+  it('leaves the original untouched when the thumb fails', async () => {
+    const imageService = {
+      getUnoptimizedImages: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'i1', clientId: 'c', storagePath: 'x/images/i1' },
+        ]),
+      markAsOptimized: jest.fn(),
+      recordOptimizeFailure: jest.fn().mockResolvedValue(false),
+    };
+    const storage = {
+      getImageFilePath: jest.fn((_d, id, variant) => `${id}/${variant}`),
+      readFile: jest.fn().mockResolvedValue(Buffer.from('img')),
+      optimizeImage: jest.fn().mockResolvedValue(Buffer.from('opt')),
+      saveFile: jest.fn().mockResolvedValue(undefined),
+      clearImageVariants: jest.fn(),
+      createThumbnail: jest.fn().mockRejectedValue(new Error('sharp')),
+    };
+    const prisma = {
+      client: { findUnique: jest.fn().mockResolvedValue(null) },
+      runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
+    };
+    const job = new ImageCleanupJob(
+      imageService as any,
+      storage as any,
+      prisma as any,
+      { get: jest.fn() } as any,
+    );
+
+    await job.optimizeImages();
+
+    expect(storage.saveFile).not.toHaveBeenCalled();
+    expect(imageService.markAsOptimized).not.toHaveBeenCalled();
+    expect(imageService.recordOptimizeFailure).toHaveBeenCalledWith('i1');
+  });
 });

@@ -24,6 +24,9 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
 - **Upload into an unknown album is a clean 404.** `POST /images` / `POST /videos` with an `albumId` that
   doesn't exist in the client used to write the file and the row first, then 404: the asset existed and a
   retry duplicated it. The album is now checked before anything is written.
+- **Optimize jobs write nothing until both files are encoded.** A thumb failure used to leave the original
+  already re-encoded but not marked, so the next run re-encoded a q85 file again (up to 3 times). Now the
+  thumb is encoded first and the original is written last.
 - **One album order.** Uploads with `albumId` go through the same code as `POST /albums/:id/items`: the
   first item of an empty album is `0` (uploads used to start at `1`).
 

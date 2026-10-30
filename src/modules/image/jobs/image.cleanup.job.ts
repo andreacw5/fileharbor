@@ -122,11 +122,9 @@ export class ImageCleanupJob {
       this.originalQuality,
     );
 
-    // Save back
-    await this.storage.saveFile(originalPath, optimizedBuffer);
-    await this.storage.clearImageVariants(domain, imageId);
-
-    // Re-create thumbnail with optimization
+    // Both encoded before anything is written, the original written last: a
+    // failure leaves the original untouched, so the next run doesn't re-encode
+    // an already q85 file (generation loss).
     const thumbPath = this.storage.getImageFilePath(domain, imageId, 'thumb');
     const thumbBuffer = await this.storage.createThumbnail(
       optimizedBuffer,
@@ -134,6 +132,8 @@ export class ImageCleanupJob {
       this.thumbnailQuality,
     );
     await this.storage.saveFile(thumbPath, thumbBuffer);
+    await this.storage.saveFile(originalPath, optimizedBuffer);
+    await this.storage.clearImageVariants(domain, imageId);
 
     return optimizedBuffer.length;
   }
