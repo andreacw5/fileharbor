@@ -471,7 +471,7 @@ controller, `me/` (solo il guard; il 422 "no client mapped" no), admin controlle
 errore generici, #8 ETag avatar, #10 avatar pre-delete, `video.service.ts:208` lookup doppio, log
 per-asset a `debug`, `connectionTimeoutMillis`, `keepAliveTimeout`.
 
-**Prossimo (perf, un PR)**: #2 views video bufferizzate, #4 dedupe in-flight, #6 cache domain, #7
+**Prossimo (perf, un PR)** — fatto, tranne la conversione avatar cachata (il `proxy_cache` nginx a 5 m la assorbe): #2 views video bufferizzate, #4 dedupe in-flight, #6 cache domain, #7
 threadpool/sharp, varianti ≤ thumb dalla thumb, conversione avatar cachata, memo `storage_bytes`.
 
 **Poi (correttezza)**: #9 album prima dell'upload + `order` unificato, ordine write dei job optimize,

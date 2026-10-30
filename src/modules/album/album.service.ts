@@ -490,7 +490,9 @@ export class AlbumService {
     const where: any = { albumId };
     if (params.resourceType) where.resourceType = params.resourceType;
 
-    const [rows, total] = await this.prisma.$transaction([
+    // Two independent reads: Promise.all runs them on two connections, a
+    // $transaction array would serialize them on one.
+    const [rows, total] = await Promise.all([
       this.prisma.albumItem.findMany({
         where,
         orderBy: { order: 'asc' },
@@ -585,8 +587,8 @@ export class AlbumService {
       where: { token },
     });
     if (!tokenRecord) throw new ForbiddenException('Invalid token');
-
-    await this.validateAlbumToken(tokenRecord.albumId, token);
+    if (tokenRecord.expiresAt && tokenRecord.expiresAt < new Date())
+      throw new ForbiddenException('Token expired');
 
     const album = await this.prisma.album.findUnique({
       where: { id: tokenRecord.albumId },

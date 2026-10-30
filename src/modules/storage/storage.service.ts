@@ -122,9 +122,17 @@ export class StorageService {
   constructor(private configService: ConfigService) {
     this.storagePath =
       this.configService.get<string>('STORAGE_PATH') || './storage';
+    const renderConcurrency =
+      this.configService.get<number>('RENDER_CONCURRENCY') || 2;
     this.renderLimiter = new Semaphore(
-      this.configService.get<number>('RENDER_CONCURRENCY') || 2,
+      renderConcurrency,
       this.configService.get<number>('RENDER_QUEUE_LIMIT') ?? 20,
+    );
+    // libvips threads per pipeline default to the CPU count: RENDER_CONCURRENCY
+    // pipelines at once would oversubscribe every core and starve fs reads
+    // (same libuv pool, see UV_THREADPOOL_SIZE in the Dockerfile).
+    sharp.concurrency(
+      Math.max(1, Math.floor(os.cpus().length / renderConcurrency)),
     );
   }
 

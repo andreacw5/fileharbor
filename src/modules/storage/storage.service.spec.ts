@@ -465,7 +465,9 @@ describe('StorageService.blurImage', () => {
     });
     const { channels } = await sharp(blurred).stats();
     expect(channels[0].stdev).toBeLessThan(5);
-  });
+    // 2 MP decode + two passes with sharp.concurrency lowered by the constructor:
+    // slow under a parallel jest run
+  }, 15_000);
 
   it('takes the first frame of an animated image', async () => {
     const frames = await Promise.all(

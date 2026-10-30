@@ -35,6 +35,12 @@ export class ClientService {
     string,
     { client: AuthClient; expiresAt: number }
   >();
+  // clientId → storage dir (`domain || id`). Every public image GET needs it;
+  // a cached string beats a relation load (two statements) per request.
+  private readonly domainCache = new Map<
+    string,
+    { domain: string; expiresAt: number }
+  >();
 
   constructor(private prisma: PrismaService) {}
 
@@ -60,6 +66,25 @@ export class ClientService {
       expiresAt: Date.now() + CLIENT_CACHE_TTL_MS,
     });
     return client;
+  }
+
+  /**
+   * The client's storage dir name (`client.domain || clientId`), cached
+   * CLIENT_CACHE_TTL_MS. A client no longer in the DB resolves to its id.
+   */
+  async storageDomain(clientId: string): Promise<string> {
+    const cached = this.domainCache.get(clientId);
+    if (cached && cached.expiresAt > Date.now()) return cached.domain;
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { domain: true },
+    });
+    const domain = client?.domain || clientId;
+    this.domainCache.set(clientId, {
+      domain,
+      expiresAt: Date.now() + CLIENT_CACHE_TTL_MS,
+    });
+    return domain;
   }
 
   /**
@@ -302,6 +327,7 @@ export class ClientService {
       this.mapUniqueConstraintViolation(error);
     }
     this.clientCache.clear();
+    this.domainCache.clear();
 
     const storage = await this.storageByClient([clientId]);
 

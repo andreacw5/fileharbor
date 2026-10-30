@@ -40,6 +40,9 @@ FROM node:24.15.0-slim AS prod
 
 # Set the NODE_ENV to production
 ENV NODE_ENV=production
+# libuv pool shared by sharp and every fs call (default 4): renders must not
+# queue disk reads behind them.
+ENV UV_THREADPOOL_SIZE=8
 
 # Create app directory
 WORKDIR /usr/src/app

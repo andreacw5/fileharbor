@@ -1006,26 +1006,24 @@ describe('AlbumService', () => {
   describe('listAlbumItems', () => {
     it('builds the image thumbnail as a query on the unified image route', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.$transaction.mockResolvedValue([
-        [
-          {
-            id: 'album-item-123',
-            resourceType: AlbumResourceType.IMAGE,
-            order: 0,
-            addedAt: new Date('2024-01-01'),
-            image: {
-              id: mockImageId,
-              originalName: 'test.jpg',
-              mimeType: 'image/jpeg',
-              width: 1920,
-              height: 1080,
-              size: 1024000,
-              imageTags: [],
-            },
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        {
+          id: 'album-item-123',
+          resourceType: AlbumResourceType.IMAGE,
+          order: 0,
+          addedAt: new Date('2024-01-01'),
+          image: {
+            id: mockImageId,
+            originalName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            width: 1920,
+            height: 1080,
+            size: 1024000,
+            imageTags: [],
           },
-        ],
-        1,
+        },
       ]);
+      mockPrismaService.albumItem.count.mockResolvedValue(1);
 
       const result = await service.listAlbumItems(
         mockAlbumId,
@@ -1067,10 +1065,11 @@ describe('AlbumService', () => {
         },
       });
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.$transaction.mockResolvedValue([
-        [imageRow('public-img', false), imageRow('private-img', true)],
-        2,
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        imageRow('public-img', false),
+        imageRow('private-img', true),
       ]);
+      mockPrismaService.albumItem.count.mockResolvedValue(2);
 
       const result = await service.listAlbumItems(
         mockAlbumId,
@@ -1092,27 +1091,25 @@ describe('AlbumService', () => {
 
     it('keeps the video thumbnail on the path segment that does exist', async () => {
       mockPrismaService.album.findFirst.mockResolvedValue(mockAlbum);
-      mockPrismaService.$transaction.mockResolvedValue([
-        [
-          {
-            id: 'album-item-456',
-            resourceType: AlbumResourceType.VIDEO,
-            order: 1,
-            addedAt: new Date('2024-01-01'),
-            video: {
-              id: mockVideoId,
-              originalName: 'test.mp4',
-              mimeType: 'video/mp4',
-              duration: 120,
-              width: 1920,
-              height: 1080,
-              size: 5000000,
-              videoTags: [],
-            },
+      mockPrismaService.albumItem.findMany.mockResolvedValue([
+        {
+          id: 'album-item-456',
+          resourceType: AlbumResourceType.VIDEO,
+          order: 1,
+          addedAt: new Date('2024-01-01'),
+          video: {
+            id: mockVideoId,
+            originalName: 'test.mp4',
+            mimeType: 'video/mp4',
+            duration: 120,
+            width: 1920,
+            height: 1080,
+            size: 5000000,
+            videoTags: [],
           },
-        ],
-        1,
+        },
       ]);
+      mockPrismaService.albumItem.count.mockResolvedValue(1);
 
       const result = await service.listAlbumItems(
         mockAlbumId,

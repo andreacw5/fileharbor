@@ -1,6 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { MetricsService } from '@heyatom/nest-common/metrics';
-import { FileharborMetrics } from './fileharbor-metrics.service';
+import {
+  FileharborMetrics,
+  STORAGE_GAUGE_MEMO_MS,
+} from './fileharbor-metrics.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
 describe('FileharborMetrics optimize backlog gauges', () => {
@@ -115,6 +118,22 @@ describe('FileharborMetrics optimize backlog gauges', () => {
   });
 
   describe('fileharbor_storage_bytes', () => {
+    /** A collection is reused for STORAGE_GAUGE_MEMO_MS: jump past it. */
+    const pastMemo = () => {
+      const now = Date.now() + STORAGE_GAUGE_MEMO_MS + 1;
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+    };
+    afterEach(() => jest.restoreAllMocks());
+
+    it('reuses the last collection within the memo window', async () => {
+      mockPrisma.image.groupBy.mockResolvedValueOnce(rows(['c1', 1]));
+      await scrape('fileharbor_storage_bytes', 'client');
+      expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({
+        c1: 1,
+      });
+      expect(mockPrisma.image.groupBy).toHaveBeenCalledTimes(1);
+    });
+
     const rows = (...r: [string, number | bigint][]) =>
       r.map(([clientId, size]) => ({
         clientId,
@@ -147,6 +166,7 @@ describe('FileharborMetrics optimize backlog gauges', () => {
         rows(['c1', 1], ['c2', 2]),
       );
       await scrape('fileharbor_storage_bytes', 'client');
+      pastMemo();
 
       mockPrisma.image.groupBy.mockResolvedValueOnce(rows(['c1', 3]));
       expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({
@@ -158,6 +178,7 @@ describe('FileharborMetrics optimize backlog gauges', () => {
       const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       mockPrisma.image.groupBy.mockResolvedValueOnce(rows(['c1', 7]));
       await scrape('fileharbor_storage_bytes', 'client');
+      pastMemo();
 
       mockPrisma.video.groupBy.mockRejectedValueOnce(new Error('db down'));
       expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({

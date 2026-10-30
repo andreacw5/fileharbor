@@ -15,6 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
+import { ClientService } from '@/modules/client/client.service';
 import { RouteHelperService } from '@/utils/route.utils';
 
 describe('ImageService', () => {
@@ -204,6 +205,10 @@ describe('ImageService', () => {
         {
           provide: CreatorService,
           useValue: mockCreatorServiceMock,
+        },
+        {
+          provide: ClientService,
+          useValue: { storageDomain: jest.fn().mockResolvedValue(mockDomain) },
         },
         {
           provide: RouteHelperService,
@@ -533,14 +538,14 @@ describe('ImageService', () => {
 
       const result = await service.getImageById(mockImageId, mockClientId);
 
-      expect(result).toEqual(mockImage);
+      // Storage dir from ClientService's cache, not a relation load
+      expect(result).toEqual({ ...mockImage, client: { domain: mockDomain } });
       expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
         where: {
           id: mockImageId,
           clientId: mockClientId,
         },
         include: {
-          client: { select: { domain: true } },
           imageTags: {
             include: {
               tag: {

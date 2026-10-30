@@ -23,6 +23,15 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   image views, instead of one `UPDATE` per Range chunk.
 
 ### Changed
+- **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to
+  render it once each behind the semaphore; now they share one render.
+- **Small variants come from the thumb.** A variant that fits inside `THUMBNAIL_SIZE` (and is not q100) is
+  cut from `thumb.webp` instead of decoding the original: the common `srcset` widths cost ~10x less.
+- **One query less per public image.** The storage dir comes from a 30 s cache in `ClientService`, not a
+  relation load on every `GET /images/:id`.
+- `sharp.concurrency` set to `cpus / RENDER_CONCURRENCY`; `UV_THREADPOOL_SIZE=8` in the Docker image.
+- `fileharbor_storage_bytes` reuses its collection for 60 s across scrapes.
+- Album item lists run their two reads in parallel; the shared-album route drops a duplicate token lookup.
 - **On-disk images are streamed, not buffered.** `GET /images/:id` used to `readFile` the whole file into
   memory; now `createReadStream` (or `X-Accel-Redirect` when enabled). A row whose file is gone is a 500
   and not a view.

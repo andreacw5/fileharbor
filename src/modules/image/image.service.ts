@@ -34,6 +34,7 @@ import {
   extractTagNames,
 } from '@/modules/tag/tag.utils';
 import { CreatorService } from '@/modules/creator/creator.service';
+import { ClientService } from '@/modules/client/client.service';
 import {
   BLUR_QUALITY,
   buildSrcset,
@@ -102,6 +103,7 @@ export class ImageService implements OnModuleDestroy {
     private httpService: HttpService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
+    private clientService: ClientService,
   ) {
     // Original should be high quality to preserve image fidelity
     this.originalQuality = parseInt(
@@ -325,11 +327,11 @@ export class ImageService implements OnModuleDestroy {
       where.clientId = clientId;
     }
 
-    // Tags cost two more queries; serving the file doesn't need them
+    // Tags cost two more queries; serving the file doesn't need them. The
+    // client's storage dir comes from ClientService's cache, not a relation load.
     const image = await this.prisma.image.findFirst({
       where,
       include: {
-        client: { select: { domain: true } },
         imageTags: withTags && {
           include: {
             tag: {
@@ -346,7 +348,20 @@ export class ImageService implements OnModuleDestroy {
       throw new NotFoundException('Image not found');
     }
 
-    return image;
+    const domain = await this.clientService.storageDomain(image.clientId);
+    return { ...image, client: { domain } };
+  }
+
+  // Concurrent first hits on one uncached variant (a srcset deploy, a cache
+  // purge) used to render it N times behind the semaphore: one render, shared.
+  private readonly inflight = new Map<string, Promise<Buffer>>();
+
+  private dedupe(key: string, render: () => Promise<Buffer>): Promise<Buffer> {
+    const running = this.inflight.get(key);
+    if (running) return running;
+    const run = render().finally(() => this.inflight.delete(key));
+    this.inflight.set(key, run);
+    return run;
   }
 
   /**
@@ -426,20 +441,41 @@ export class ImageService implements OnModuleDestroy {
       return fromDisk(variantPath, mimeType);
     }
 
-    const buffer = await this.storage.resizeImage(
-      await this.storage.readFile(originalPath),
-      width,
-      height,
-      format,
-      quality,
-    );
-    if ((await this.storage.countEntries(variantsDir)) < MAX_CACHED_VARIANTS) {
-      this.storage
-        .saveFile(variantPath, buffer)
-        .catch((e) =>
-          this.logger.warn(`[getImageFile] Variant not cached: ${e.message}`),
-        );
-    }
+    const buffer = await this.dedupe(variantPath, async () => {
+      // A variant that fits inside the thumb (≤ THUMBNAIL_SIZE, not q100) is cut
+      // from thumb.webp: ~10x less to decode than the original for the common
+      // srcset widths. q100 and anything larger still come from the original.
+      const fitsThumb =
+        (width ?? 0) <= this.thumbnailSize &&
+        (height ?? 0) <= this.thumbnailSize &&
+        quality < 100;
+      const thumbPath = this.storage.getImageFilePath(
+        domain,
+        image.id,
+        'thumb',
+      );
+      const sourcePath =
+        fitsThumb && (await this.storage.fileExists(thumbPath))
+          ? thumbPath
+          : originalPath;
+      const rendered = await this.storage.resizeImage(
+        await this.storage.readFile(sourcePath),
+        width,
+        height,
+        format,
+        quality,
+      );
+      if (
+        (await this.storage.countEntries(variantsDir)) < MAX_CACHED_VARIANTS
+      ) {
+        this.storage
+          .saveFile(variantPath, rendered)
+          .catch((e) =>
+            this.logger.warn(`[getImageFile] Variant not cached: ${e.message}`),
+          );
+      }
+      return rendered;
+    });
     return { mimeType, buffer };
   }
 
@@ -511,8 +547,11 @@ export class ImageService implements OnModuleDestroy {
     const source = await this.storage.readFile(sourcePath).catch(() => {
       throw new UnprocessableEntityException('Image file is not readable');
     });
-    // Two concurrent misses both write: saveFile renames, the content is the same.
-    const buffer = await this.storage.blurImage(source);
+    // Concurrent misses share one render (dedupe); saveFile renames, so a
+    // late second write is harmless.
+    const buffer = await this.dedupe(blurredPath, () =>
+      this.storage.blurImage(source),
+    );
     this.storage
       .saveFile(blurredPath, buffer)
       .catch((e) =>
