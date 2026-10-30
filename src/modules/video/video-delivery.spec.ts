@@ -74,15 +74,26 @@ describe('sendVideo', () => {
     expect((await fetch(`${base}/missing.mp4`)).status).toBe(404);
   });
 
+  const viaNginx = { 'X-Original-URI': '/videos/v/stream' };
+
   it('hands off to nginx, refusing a traversing storage path', async () => {
-    const ok = await fetch(`${base}/original.mp4?x=1`);
+    const ok = await fetch(`${base}/original.mp4?x=1`, { headers: viaNginx });
     expect(ok.headers.get('x-accel-redirect')).toBe(
       '/internal-videos/c/videos/v/original.mp4',
     );
     expect((await ok.arrayBuffer()).byteLength).toBe(0);
 
-    const bad = await fetch(`${base}/original.mp4?x=1&sp=../etc`);
+    const bad = await fetch(`${base}/original.mp4?x=1&sp=../etc`, {
+      headers: viaNginx,
+    });
     expect(bad.status).toBe(403);
+  });
+
+  it('sends the bytes itself when the flag is on but nginx is not in front', async () => {
+    const direct = await fetch(`${base}/original.mp4?x=1`);
+    expect(direct.status).toBe(200);
+    expect(direct.headers.get('x-accel-redirect')).toBeNull();
+    expect((await direct.arrayBuffer()).byteLength).toBe(1000);
   });
 
   it('sends no Cache-Control unless asked, and the given one when asked', async () => {
@@ -96,6 +107,7 @@ describe('sendVideo', () => {
 
     const accel = await fetch(
       `${base}/original.mp4?x=1&cc=public,%20max-age=86400`,
+      { headers: viaNginx },
     );
     expect(accel.headers.get('cache-control')).toBe('public, max-age=86400');
 

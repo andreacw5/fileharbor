@@ -435,7 +435,9 @@ Sharp handles all transformations. Inputs: JPEG, PNG, WebP, GIF. Storage always 
 
 - **Delivery**: a file already on disk is never read into memory. With `IMAGE_X_ACCEL_REDIRECT=true` the
   controller answers `X-Accel-Redirect: /internal-images/<storage-relative path>` and nginx serves it;
-  otherwise Node streams it (`createReadStream`, `Content-Length` from `stat`). Only a fresh render (or a blur
+  otherwise Node streams it (`createReadStream`, `Content-Length` from `stat`). Videos use the same
+  hand-off only when the request carries `X-Original-URI` (our nginx sets it, Meridian's BFF on the Docker
+  network does not): the flag alone would answer an internal caller with an empty body. Only a fresh render (or a blur
   resized per request) comes back as a buffer. Prod keeps X-Accel **off** for images on purpose: nginx never
   `proxy_cache`s an X-Accel response, and the image cache (HIT = no upstream, no DB) is worth more. Videos use
   it (`VIDEO_X_ACCEL_REDIRECT=true`).

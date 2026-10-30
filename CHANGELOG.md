@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Video stream with `VIDEO_X_ACCEL_REDIRECT=true` and no nginx in front.** The hand-off was decided by
+  the flag alone, so a caller on the Docker network (Meridian's BFF) got `video/mp4` with an empty
+  body and the player reported an unsupported format. `X-Accel-Redirect` is now sent only when the request
+  carries `X-Original-URI` (set by our nginx on every proxied location, forwarded by no internal caller);
+  otherwise the bytes are sent from Node as with the flag off.
+
+---
+
 ## [4.1.3] – 2026-10-30
 
 Rebuild the image, no migration. Placeholder images moved from `storage/defaults.fileharbor/` into the
