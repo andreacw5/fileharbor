@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   body and the player reported an unsupported format. `X-Accel-Redirect` is now sent only when the request
   carries `X-Original-URI` (set by our nginx on every proxied location, forwarded by no internal caller);
   otherwise the bytes are sent from Node as with the flag off.
+- **`backfill-video-thumbnails` script.** Images built before 4.0.1 had no ffmpeg binary, so the videos uploaded
+  with them have `original.mp4` and no `thumb.webp` (no poster in the console, `…/thumb` is a 404).
+  `node dist/scripts/backfill-video-thumbnails.js --apply` extracts the missing ones; dry run by default.
 
 ---
 

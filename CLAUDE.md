@@ -105,7 +105,9 @@ Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp eff
 `node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
 (same shape, resumable on `dHash IS NULL`, `--rehash` redoes every row) fills `dHash` for images uploaded before plan 03 or emptied by the 256-bit migration. `src/scripts/regenerate-thumbnails.ts`
 (same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
-which otherwise applies to new uploads only. Every `@Cron` job runs inside
+which otherwise applies to new uploads only. `src/scripts/backfill-video-thumbnails.ts` (same shape, `[--apply] [--client <id>] [--force]`)
+extracts `thumb.webp` for videos that have none: uploads made with an image built before 4.0.1 (no ffmpeg binary) kept
+only `original.mp4`. Every `@Cron` job runs inside
 `PrismaService.runExclusive()` (a `pg_try_advisory_lock` on its own connection), so with several
 replicas a job runs on one of them; the others log a skip.
 
