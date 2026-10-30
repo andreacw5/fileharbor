@@ -65,7 +65,8 @@ storage/{client.domain || clientId}/avatars/{creatorId}/original.webp
 ```
 `StorageService.validatePath()` blocks directory traversal. `sanitizePathComponent()` strips `..`, `/`, `\`, and null bytes.
 
-Default fallback images live at `defaults/` (repo root, copied into the Docker image: never in the storage volume, read once and memoized). `GET /images/:id` returns `fileharbor_not_found.webp` or `fileharbor_permission_denided.webp` (note: typo in filename is intentional/existing) instead of 4xx for non-`info` requests.
+Default fallback images live at `defaults/` (repo root, copied into the Docker image: never in the storage volume, read once and memoized). `GET /images/:id` returns `fileharbor_not_found.webp` or `fileharbor_permission_denided.webp` (note: typo in filename is intentional/existing) instead of 4xx for non-`info` requests. Without a client context (no valid `X-API-Key`) a 403 gets the `not_found` placeholder and the same
+`private, no-store` as an anonymous 404: no existence oracle for private ids (the log keeps the real reason).
 
 ## DTO / Response Pattern
 

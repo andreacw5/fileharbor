@@ -48,6 +48,10 @@ image (`defaults/`): the storage volume no longer needs them (the old dir can be
   that creator on albums. ⚠️ Callers that worked around it by sending the internal Creator id as
   `X-User-Id` must send their own user id again. No migration: the FK means every existing row already
   holds a real `Creator.id`.
+- **No existence oracle on public image delivery.** Without a valid `X-API-Key`, a private image now gets
+  the same response as a missing one (`not_found` placeholder, `X-FileHarbor-Fallback: not_found`,
+  `private, no-store`). With a valid key a denial is still `permission_denied`. Anonymous 404 placeholders
+  are no longer cacheable (`public, max-age=3600` before), the price of looking the same.
 
 ### Changed
 - **One render per variant.** Concurrent first hits on the same uncached variant or blurred preview used to

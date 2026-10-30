@@ -418,13 +418,17 @@ export class ImageController {
         (error instanceof NotFoundException ||
           error instanceof ForbiddenException)
       ) {
+        // Without a client context a denial looks exactly like a miss (file,
+        // header and cache policy), so an anonymous caller can't tell "private"
+        // from "doesn't exist". The log keeps the real reason.
+        const anonymous = !clientId;
         const defaultType =
-          error instanceof NotFoundException
+          error instanceof NotFoundException || anonymous
             ? 'not_found'
             : 'permission_denied';
 
         this.logger.warn(
-          `[GetImage] ${defaultType.toUpperCase()} | ${imageId} | Returning default image | ${error.message}`,
+          `[GetImage] ${error instanceof NotFoundException ? 'NOT_FOUND' : 'PERMISSION_DENIED'} | ${imageId} | Returning ${defaultType} | ${error.message}`,
         );
 
         try {
@@ -433,9 +437,10 @@ export class ImageController {
 
           res.set({
             'Content-Type': mimeType,
-            // A denial depends on who asks: don't let a cache replay it to the owner.
+            // A denial depends on who asks: don't let a cache replay it to the
+            // owner. Anonymous misses share that policy, or it would tell them apart.
             'Cache-Control':
-              defaultType === 'permission_denied'
+              defaultType === 'permission_denied' || anonymous
                 ? 'private, no-store'
                 : 'public, max-age=3600',
             'X-FileHarbor-Fallback': defaultType,

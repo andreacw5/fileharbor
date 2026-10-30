@@ -209,7 +209,37 @@ describe('ImageController.getImage ?blur=1', () => {
     await get({ blur: true });
 
     expect(imageService.getImageFile).not.toHaveBeenCalled();
+    expect(headers['X-FileHarbor-Fallback']).toBe('not_found');
+  });
+
+  // No existence oracle: anonymous "private" and "missing" are the same response
+  it('answers an anonymous denial exactly like a miss', async () => {
+    await get({});
+    const denied = { ...headers };
+    headers = {};
+    imageService.getImageById.mockRejectedValueOnce(new NotFoundException());
+    await get({});
+
+    expect(denied).toEqual(headers);
+    expect(denied['X-FileHarbor-Fallback']).toBe('not_found');
+    expect(storageService.getDefaultImage).toHaveBeenNthCalledWith(
+      1,
+      'not_found',
+    );
+    expect(storageService.getDefaultImage).toHaveBeenNthCalledWith(
+      2,
+      'not_found',
+    );
+  });
+
+  it('still tells a caller with a valid key it was denied', async () => {
+    await controller.getImage('img-1', {} as GetImageDto, res, {
+      headers: {},
+      clientId: 'client-2',
+    } as unknown as Request);
+
     expect(headers['X-FileHarbor-Fallback']).toBe('permission_denied');
+    expect(headers['Cache-Control']).toBe('private, no-store');
   });
 
   describe('blurPublic', () => {
@@ -239,7 +269,7 @@ describe('ImageController.getImage ?blur=1', () => {
       await get(query);
 
       expect(imageService.getImageFile).not.toHaveBeenCalled();
-      expect(headers['X-FileHarbor-Fallback']).toBe('permission_denied');
+      expect(headers['X-FileHarbor-Fallback']).toBe('not_found');
     });
 
     it("keeps the owner's original private: never public-cached", async () => {
@@ -256,7 +286,7 @@ describe('ImageController.getImage ?blur=1', () => {
 
       expect(imageService.validateImageAccess).toHaveBeenCalled();
       expect(imageService.getImageFile).not.toHaveBeenCalled();
-      expect(headers['X-FileHarbor-Fallback']).toBe('permission_denied');
+      expect(headers['X-FileHarbor-Fallback']).toBe('not_found');
     });
 
     it('still serves only the blur behind an unknown token', async () => {
