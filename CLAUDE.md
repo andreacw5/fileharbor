@@ -22,6 +22,7 @@ Detail lives in `docs/` — this file is the map, not the manual:
 |---|---|
 | `client` | `X-API-Key` auth, tenant resolution, creator identity, `ClientThrottlerGuard` |
 | `image` / `video` / `avatar` / `album` / `tag` / `creator` | Domain CRUD, share links, album tokens |
+| `file` | Downloadable `.zip`/`.pdf` (`StoredFile`), served as-is; private ones via 10-min HMAC links (`FILE_LINK_SECRET`) |
 | `storage` | All disk I/O and Sharp processing — never build paths by hand |
 | `admin` + `statistics` + `bookmarks` | Console API (`admin/*`, `admin/stats`, per-actor bookmarks), Bastion user JWT |
 | `bastion` | Token verifier, `BastionUserGuard`, `BastionSelfServiceGuard`, console permissions |
@@ -56,10 +57,12 @@ always the token `sub`, never a header/body value.
 ```
 storage/{client.domain || clientId}/images/{imageId}/{original,thumb,blurred}.webp  (+ variants/)
 storage/{client.domain || clientId}/avatars/{creatorId}/original.webp
+storage/{client.domain || clientId}/files/{fileId}/original.{zip|pdf}
 ```
 
-Use `StorageService` helpers only (`validatePath`, `sanitizePathComponent`). Storage is always WebP, EXIF
-stripped, animated GIF/WebP stay animated. Default placeholders in `defaults/` (repo root, in the image, not
+Use `StorageService` helpers only (`validatePath`, `sanitizePathComponent`). Images are always WebP, EXIF
+stripped, animated GIF/WebP stay animated. Files (zip/pdf) are never opened server-side: type = extension +
+magic bytes (`file/file-types.ts`), always served as `attachment`. Default placeholders in `defaults/` (repo root, in the image, not
 the volume). Every byte figure anywhere = originals' `size` (no thumbs/variants), via `storageUsageByClient`
 (`statistics/storage-usage.ts`) — never a second copy of that query.
 
@@ -100,6 +103,8 @@ the volume). Every byte figure anywhere = originals' `size` (no thumbs/variants)
   Setting `API_PREFIX=v2` in prod → 404 on everything.
 - `CORS_ORIGIN` and `TRUST_PROXY_HOPS=1` required in production; boot fails without `CORS_ORIGIN`.
 - `IMAGE_X_ACCEL_REDIRECT` stays **off** in prod (nginx cache > X-Accel); `VIDEO_X_ACCEL_REDIRECT=true`.
+- `FILE_LINK_SECRET` (≥ 32 chars) is required: boot fails without it. nginx `/files/` location: **no**
+  `proxy_cache`, `client_max_body_size` ≥ `MAX_DOWNLOAD_FILE_SIZE`, `proxy_request_buffering off`.
 - Public image GETs are `immutable`: after a regenerate the console reloads with `?t=<updatedAt>`.
 - `Client.ownerPrincipalId` XOR `Client.bastionTenantSlug` (DB CHECK). Personal clients are invisible to
   every console user but their owner.

@@ -22,6 +22,7 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     { clientId: 'client-domain', storagePath: '' },
   ];
   const videos = [{ clientId: 'client-domain', id: 'vid-kept' }];
+  const storedFiles = [{ clientId: 'client-domain', id: 'file-kept' }];
 
   const prisma = {
     client: {
@@ -41,6 +42,11 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     video: {
       findMany: jest.fn(async ({ where }) =>
         videos.filter((v) => v.clientId === where.clientId),
+      ),
+    },
+    storedFile: {
+      findMany: jest.fn(async ({ where }) =>
+        storedFiles.filter((f) => f.clientId === where.clientId),
       ),
     },
     runExclusive: (_job: string, fn: () => Promise<unknown>) => fn(),
@@ -137,6 +143,29 @@ describe('StorageCleanupJob.cleanOrphanedFiles', () => {
     expect(await exists(fresh)).toBe(true);
     // A video id known only under another client is still an orphan here.
     expect(await exists(otherClient)).toBe(false);
+  });
+
+  it('keeps referenced downloadable files and deletes old orphans', async () => {
+    const make = async (fileId: string, ageMs: number) => {
+      const dir = storage.getFileDir('example.com', fileId);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        storage.getFilePath('example.com', fileId, 'zip'),
+        'x',
+      );
+      const at = new Date(Date.now() - ageMs);
+      await fs.utimes(dir, at, at);
+      return dir;
+    };
+    const kept = await make('file-kept', 2 * 60 * 60 * 1000);
+    const orphan = await make('file-orphan', 2 * 60 * 60 * 1000);
+    const fresh = await make('file-fresh', 0);
+
+    await new StorageCleanupJob(storage, prisma as any).cleanOrphanedFiles();
+
+    expect(await exists(kept)).toBe(true);
+    expect(await exists(orphan)).toBe(false);
+    expect(await exists(fresh)).toBe(true);
   });
 
   it('keeps sweeping a domain after one dir fails to delete', async () => {

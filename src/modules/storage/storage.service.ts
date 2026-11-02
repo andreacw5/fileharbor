@@ -485,6 +485,21 @@ export class StorageService {
     return `${this.getVideoPath(domain, videoId)}/${variant}.${ext}`;
   }
 
+  /** Get all downloadable file IDs for a client domain */
+  async getClientFileIds(domain: string): Promise<string[]> {
+    return this.listDirectories(path.join(this.getClientPath(domain), 'files'));
+  }
+
+  getFileDir(domain: string, fileId: string): string {
+    const sanitizedFileId = this.sanitizePathComponent(fileId);
+    return path.join(this.getClientPath(domain), 'files', sanitizedFileId);
+  }
+
+  /** `ext` comes from the detected type (file-types.ts), never from the upload's name. */
+  getFilePath(domain: string, fileId: string, ext: string): string {
+    return `${this.getFileDir(domain, fileId)}/original.${this.sanitizePathComponent(ext)}`;
+  }
+
   async copyFromTemp(srcPath: string, destPath: string): Promise<void> {
     try {
       this.validatePath(destPath);

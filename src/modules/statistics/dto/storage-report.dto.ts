@@ -55,6 +55,7 @@ export class StorageSeriesPointDto {
   @ApiProperty({ nullable: true, type: Number }) images: number | null;
   @ApiProperty({ nullable: true, type: Number }) videos: number | null;
   @ApiProperty({ nullable: true, type: Number }) avatars: number | null;
+  @ApiProperty({ nullable: true, type: Number }) files: number | null;
 }
 
 export class ClientStorageDto {
@@ -63,6 +64,7 @@ export class ClientStorageDto {
   @ApiProperty({ type: KindUsageDto }) images: KindUsageDto;
   @ApiProperty({ type: KindUsageDto }) videos: KindUsageDto;
   @ApiProperty({ type: KindUsageDto }) avatars: KindUsageDto;
+  @ApiProperty({ type: KindUsageDto }) files: KindUsageDto;
 }
 
 export class StorageReportDto {
@@ -94,6 +96,7 @@ export class CreatorStorageDto {
   @ApiProperty({ description: 'Bytes' }) images: number;
   @ApiProperty({ description: 'Bytes' }) videos: number;
   @ApiProperty({ description: 'Bytes' }) avatars: number;
+  @ApiProperty({ description: 'Bytes' }) files: number;
   @ApiProperty() totalBytes: number;
   @ApiProperty() itemCount: number;
 }

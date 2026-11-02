@@ -26,7 +26,11 @@ describe('parseCorsOrigin', () => {
 describe('CORS_ORIGIN validation', () => {
   const validate = (env: Record<string, string>) =>
     configValidationSchema.validate(
-      { DATABASE_URL: 'postgresql://x', ...env },
+      {
+        DATABASE_URL: 'postgresql://x',
+        FILE_LINK_SECRET: 'x'.repeat(32),
+        ...env,
+      },
       { allowUnknown: true },
     );
 

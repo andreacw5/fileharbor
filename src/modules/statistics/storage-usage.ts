@@ -6,35 +6,40 @@ export interface KindUsage {
   bytes: number;
 }
 
-export type ClientUsage = Record<'images' | 'videos' | 'avatars', KindUsage>;
+export type ClientUsage = Record<
+  'images' | 'videos' | 'avatars' | 'files',
+  KindUsage
+>;
 
 export const KIND_FIELDS: Record<MediaKind, keyof ClientUsage> = {
   IMAGE: 'images',
   VIDEO: 'videos',
   AVATAR: 'avatars',
+  FILE: 'files',
 };
 
 export const emptyUsage = (): ClientUsage => ({
   images: { count: 0, bytes: 0 },
   videos: { count: 0, bytes: 0 },
   avatars: { count: 0, bytes: 0 },
+  files: { count: 0, bytes: 0 },
 });
 
 export const totalBytes = (u: ClientUsage) =>
-  u.images.bytes + u.videos.bytes + u.avatars.bytes;
+  u.images.bytes + u.videos.bytes + u.avatars.bytes + u.files.bytes;
 
 /**
  * Count and bytes per client and kind, from the live rows: what totalStorage,
  * the storage report and StorageSnapshotJob all read. Only clients with rows
  * are in the map. `clientIds` undefined = every client (the job only).
- * Video sizes are BigInt; a Number is exact up to 8 PiB.
+ * Video and file sizes are BigInt; a Number is exact up to 8 PiB.
  */
 export async function storageUsageByClient(
   prisma: PrismaService,
   clientIds?: string[],
 ): Promise<Map<string, ClientUsage>> {
   const where = clientIds ? { clientId: { in: clientIds } } : undefined;
-  const [images, videos, avatars] = await Promise.all([
+  const [images, videos, avatars, files] = await Promise.all([
     prisma.image.groupBy({
       by: ['clientId'],
       where,
@@ -48,6 +53,12 @@ export async function storageUsageByClient(
       _sum: { size: true },
     }),
     prisma.avatar.groupBy({
+      by: ['clientId'],
+      where,
+      _count: { _all: true },
+      _sum: { size: true },
+    }),
+    prisma.storedFile.groupBy({
       by: ['clientId'],
       where,
       _count: { _all: true },
@@ -70,5 +81,6 @@ export async function storageUsageByClient(
   add('images', images);
   add('videos', videos);
   add('avatars', avatars);
+  add('files', files);
   return usage;
 }

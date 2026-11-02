@@ -21,6 +21,7 @@ describe('StorageSnapshotJob.writeSnapshot', () => {
             { clientId: 'c1', _count: { _all: 1 }, _sum: { size: 7 } },
           ]),
       },
+      storedFile: { groupBy: jest.fn().mockResolvedValue([]) },
       storageSnapshot: { upsert: jest.fn((args) => args) },
       $transaction: jest.fn().mockResolvedValue([]),
     };
@@ -30,7 +31,7 @@ describe('StorageSnapshotJob.writeSnapshot', () => {
   it('writes every client x kind for today, zeros included, as upserts on (day, client, kind)', async () => {
     const { prisma, job } = build();
 
-    expect(await job.writeSnapshot()).toBe(6);
+    expect(await job.writeSnapshot()).toBe(8);
 
     const rows = prisma.$transaction.mock.calls[0][0];
     const day = utcDay();
@@ -59,7 +60,7 @@ describe('StorageSnapshotJob.writeSnapshot', () => {
     );
     expect(
       rows.filter((r) => r.create.clientId === 'empty' && r.create.count === 0),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
   });
 
   it('a second run the same day targets the same keys (idempotent)', async () => {

@@ -55,6 +55,9 @@ describe('ClientService', () => {
     avatar: {
       groupBy: jest.fn(),
     },
+    storedFile: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
   };
 
   beforeEach(async () => {

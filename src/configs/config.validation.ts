@@ -92,6 +92,13 @@ export const configValidationSchema = Joi.object({
   VIDEO_X_ACCEL_REDIRECT: Joi.boolean().default(false),
   IMAGE_X_ACCEL_REDIRECT: Joi.boolean().default(false),
 
+  // Downloadable files (plan 12). fileMulterOptions reads the size from
+  // process.env at import, with the same fallback: this entry only validates.
+  MAX_DOWNLOAD_FILE_SIZE: Joi.number().positive().default(209715200),
+  // HMAC key of the 10-minute signed links to private files. Rotating it only
+  // kills the links in flight.
+  FILE_LINK_SECRET: Joi.string().min(32).required(),
+
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),
   BASTION_APP_SLUG: Joi.string().default('fileharbor'),

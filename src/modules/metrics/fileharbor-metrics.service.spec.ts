@@ -13,7 +13,12 @@ describe('FileharborMetrics optimize backlog gauges', () => {
     aggregate: jest.fn(),
     groupBy: jest.fn(),
   });
-  const mockPrisma = { image: model(), avatar: model(), video: model() };
+  const mockPrisma = {
+    image: model(),
+    avatar: model(),
+    video: model(),
+    storedFile: model(),
+  };
 
   /** One scrape of a gauge: value by `kind` label (or another one). */
   async function scrape(
@@ -145,15 +150,17 @@ describe('FileharborMetrics optimize backlog gauges', () => {
       mockPrisma.image.groupBy.mockResolvedValue([]);
       mockPrisma.video.groupBy.mockResolvedValue([]);
       mockPrisma.avatar.groupBy.mockResolvedValue([]);
+      mockPrisma.storedFile.groupBy.mockResolvedValue([]);
     });
 
-    it('sums images, videos (BigInt) and avatars per client, over every client', async () => {
+    it('sums images, videos (BigInt), avatars and files per client, over every client', async () => {
       mockPrisma.image.groupBy.mockResolvedValue(rows(['c1', 100], ['c2', 5]));
       mockPrisma.video.groupBy.mockResolvedValue(rows(['c1', BigInt(1000)]));
       mockPrisma.avatar.groupBy.mockResolvedValue(rows(['c1', 10]));
+      mockPrisma.storedFile.groupBy.mockResolvedValue(rows(['c1', BigInt(1)]));
 
       expect(await scrape('fileharbor_storage_bytes', 'client')).toEqual({
-        c1: 1110,
+        c1: 1111,
         c2: 5,
       });
       expect(mockPrisma.image.groupBy).toHaveBeenCalledWith(
