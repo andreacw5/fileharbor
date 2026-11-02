@@ -2,7 +2,7 @@
 type: plan
 service: fileharbor
 issue: andreacw5/fileharbor#15
-estimate: 2.5d
+estimate: 2.75d
 updated: 2026-11-02
 ---
 
@@ -20,8 +20,8 @@ nessuna elaborazione.
 
 ## Fuori scope
 
-Tag, album, PATCH dei metadati, versioning, share-link/token per i privati, X-Accel-Redirect,
-antivirus, estrazione o ispezione del contenuto degli zip, metodi nell'SDK `@heyatom/client`.
+Tag, album, PATCH dei metadati, versioning, share-link persistenti in DB (basta il link firmato di
+§5bis), X-Accel-Redirect, antivirus, estrazione o ispezione del contenuto degli zip.
 Ognuno si aggiunge quando arriva la richiesta.
 
 ## `isPrivate` resta
@@ -269,6 +269,19 @@ Metadata audit: `fileId`, `clientId`, `mimeType`, `size`. Mai il nome file.
   - `client_max_body_size` ≥ `MAX_DOWNLOAD_FILE_SIZE`;
   - `proxy_request_buffering off` per l'upload.
 
+### 11. SDK `@heyatom/client`
+
+Element lo usa già (`element-api/server/services/external/harbor.service.js`, `FileHarborClient`
+da `@heyatom/client/fileharbor`, `^1.2.0`), quindi i metodi servono.
+
+- Rigenerare i tipi: `pnpm openapi:dump && pnpm gen:types` in `heyatom-client/` (aggiorna
+  `src/fileharbor/types.gen.ts` dallo Swagger di FileHarbor).
+- `src/fileharbor/client.ts`, sullo stampo di `uploadImage` / `deleteImage`:
+  `uploadFile(file, fields?)`, `listFiles(query?)`, `deleteFile(fileId)`, `createFileLink(fileId)`.
+- Nessun metodo di download: il file si scarica dall'URL (`downloadUrl` o `url` del link), il
+  browser lo segue col redirect.
+- Release minor (`1.3.0`), poi bump in `element-api`.
+
 ## Contratto API
 
 ```http
@@ -304,5 +317,5 @@ privato fuori client, token assente/scaduto/falso.
 
 ## Stima
 
-FileHarbor 2d (modello, modulo, link firmato, admin, statistiche, test), Meridian 0.5d (pagina +
+FileHarbor 2d (modello, modulo, link firmato, admin, statistiche, test), SDK 0.25d, Meridian 0.5d (pagina +
 report).
