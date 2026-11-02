@@ -2499,6 +2499,281 @@
         ]
       }
     },
+    "/files": {
+      "post": {
+        "operationId": "FileController_uploadFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "isPrivate": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FileResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UNSUPPORTED_FILE_TYPE"
+          },
+          "413": {
+            "description": "Over MAX_DOWNLOAD_FILE_SIZE"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Upload a downloadable file (.zip or .pdf)",
+        "tags": [
+          "Files"
+        ]
+      },
+      "get": {
+        "operationId": "FileController_listFiles",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "creatorId",
+            "required": false,
+            "in": "query",
+            "description": "Creator's externalId (X-User-Id)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FileResponseDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "List files (paginated, newest first)",
+        "tags": [
+          "Files"
+        ]
+      }
+    },
+    "/files/{id}/download": {
+      "get": {
+        "description": "Public for public files. A private file needs the X-API-Key of its client or a ?token from POST /files/:id/link; otherwise 404.",
+        "operationId": "FileController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "File UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {},
+              "application/pdf": {}
+            },
+            "description": ""
+          },
+          "404": {
+            "description": "Not found, or private without access"
+          }
+        },
+        "security": [],
+        "summary": "Download a file (attachment, Range support)",
+        "tags": [
+          "Files"
+        ]
+      }
+    },
+    "/files/{id}/link": {
+      "post": {
+        "description": "For private files: the caller checks its own user, then redirects them to `url`. The bytes go from FileHarbor to the user.",
+        "operationId": "FileController_createLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "File UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FileLinkResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Signed download link, valid 10 minutes",
+        "tags": [
+          "Files"
+        ]
+      }
+    },
+    "/files/{id}": {
+      "delete": {
+        "operationId": "FileController_deleteFile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "File UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DeleteResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Delete a file",
+        "tags": [
+          "Files"
+        ]
+      }
+    },
     "/admin/clients": {
       "get": {
         "operationId": "ClientsAdminController_listClients",
@@ -5661,6 +5936,213 @@
         ]
       }
     },
+    "/admin/files": {
+      "post": {
+        "operationId": "FilesAdminController_uploadFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "clientId"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "isPrivate": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FileResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a .zip or .pdf on behalf of a client",
+        "tags": [
+          "Admin - Files"
+        ]
+      },
+      "get": {
+        "operationId": "FilesAdminController_listFiles",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Scope to a specific client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FileResponseDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List files (scoped to accessible clients)",
+        "tags": [
+          "Admin - Files"
+        ]
+      }
+    },
+    "/admin/files/{id}/download": {
+      "get": {
+        "description": "For private files: public ones are downloaded from their downloadUrl.",
+        "operationId": "FilesAdminController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Download a file (admin, JWT auth)",
+        "tags": [
+          "Admin - Files"
+        ]
+      }
+    },
+    "/admin/files/{id}": {
+      "delete": {
+        "operationId": "FilesAdminController_deleteFile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AdminDeleteResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a file (admin)",
+        "tags": [
+          "Admin - Files"
+        ]
+      }
+    },
     "/admin/stats": {
       "get": {
         "operationId": "StatisticsController_getGlobalStats",
@@ -7280,6 +7762,88 @@
         "required": [
           "success",
           "message"
+        ]
+      },
+      "FileCreatorDto": {
+        "type": "object",
+        "properties": {
+          "externalId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "externalId"
+        ]
+      },
+      "FileResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "application/zip",
+              "application/pdf"
+            ]
+          },
+          "size": {
+            "type": "number",
+            "description": "Bytes"
+          },
+          "isPrivate": {
+            "type": "boolean"
+          },
+          "downloads": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "creator": {
+            "$ref": "#/components/schemas/FileCreatorDto"
+          },
+          "downloadUrl": {
+            "type": "string",
+            "description": "Absolute download URL. A private file also needs the X-API-Key of its client, or a signed link (POST /files/:id/link)."
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "originalName",
+          "mimeType",
+          "size",
+          "isPrivate",
+          "downloads",
+          "createdAt",
+          "creator",
+          "downloadUrl"
+        ]
+      },
+      "FileLinkResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Download URL with a ?token valid 10 minutes"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt"
         ]
       },
       "AdminClientResponseDto": {
@@ -8932,12 +9496,17 @@
           "avatars": {
             "type": "number",
             "description": "Bytes"
+          },
+          "files": {
+            "type": "number",
+            "description": "Bytes"
           }
         },
         "required": [
           "images",
           "videos",
-          "avatars"
+          "avatars",
+          "files"
         ]
       },
       "StatsTrendDto": {
@@ -9096,13 +9665,18 @@
           "avatars": {
             "type": "number",
             "nullable": true
+          },
+          "files": {
+            "type": "number",
+            "nullable": true
           }
         },
         "required": [
           "date",
           "images",
           "videos",
-          "avatars"
+          "avatars",
+          "files"
         ]
       },
       "KindUsageDto": {
@@ -9138,6 +9712,9 @@
           },
           "avatars": {
             "$ref": "#/components/schemas/KindUsageDto"
+          },
+          "files": {
+            "$ref": "#/components/schemas/KindUsageDto"
           }
         },
         "required": [
@@ -9145,7 +9722,8 @@
           "name",
           "images",
           "videos",
-          "avatars"
+          "avatars",
+          "files"
         ]
       },
       "StorageReportDto": {
@@ -9213,6 +9791,10 @@
             "type": "number",
             "description": "Bytes"
           },
+          "files": {
+            "type": "number",
+            "description": "Bytes"
+          },
           "totalBytes": {
             "type": "number"
           },
@@ -9228,6 +9810,7 @@
           "images",
           "videos",
           "avatars",
+          "files",
           "totalBytes",
           "itemCount"
         ]
