@@ -6,6 +6,7 @@ Lo stato dei piani vive sulla board [HeyAtom](https://github.com/orgs/heyatomdev
 |---|---|---|
 | 02 | [Share-link dalla console](02-share-links-admin.md) | [#11](https://github.com/andreacw5/fileharbor/issues/11) |
 | 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | [#12](https://github.com/andreacw5/fileharbor/issues/12) |
+| 12 | [File scaricabili (zip, pdf)](12-downloadable-files.md) | [#15](https://github.com/andreacw5/fileharbor/issues/15) |
 
 ## Chiusi
 
