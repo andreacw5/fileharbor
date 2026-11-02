@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.2.0] – 2026-11-02
+
+Migration `20261102120000_stored_files`. **New required env `FILE_LINK_SECRET`**: the service does not boot
+without it.
+
+### Added
+- **Downloadable `.zip`/`.pdf` files** (plan 12): upload, list, delete and download under `/files`, admin routes
+  under `/admin/files`. Type checked on extension and magic bytes, always served as an attachment, Range supported.
+  Private files download with the client's `X-API-Key` or a 10-minute HMAC link (`POST /files/:id/link`, signed
+  with `FILE_LINK_SECRET`). Files count as a fourth kind in stats, storage report, snapshots, storage metric and
+  the orphan sweep.
+
+### Changed
+- `@heyatom/bastion-client` 1.0.0 (Bastion contract v1, W2).
+
+### Fixed
+- **Cold variants on gallery pages.** 50+ variants requested at once overflowed the 20-deep render queue and
+  got `503`. Waiters no longer hold the source bytes, so `RENDER_QUEUE_LIMIT` defaults to 200.
+
+---
+
 ## [4.1.4] – 2026-10-30
 
 ### Fixed
