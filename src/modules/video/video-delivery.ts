@@ -51,6 +51,8 @@ export const removeVideoTempFile = {
 
 /**
  * Sends an MP4, with Range support, for the client and admin stream routes.
+ * Downloadable files (plan 12) reuse it with their own content type and
+ * xAccelRedirect off.
  *
  * X-Accel-Redirect is opt-in, not inferred from NODE_ENV: it delegates delivery to
  * nginx and sends an empty body, which only works behind an nginx that declares
@@ -70,6 +72,10 @@ export function sendVideo(
     xAccelRedirect: boolean;
     /** Sent as-is; omitted (no Cache-Control at all) for admin private streams. */
     cacheControl?: string;
+    /** Default `video/mp4`; downloadable files pass their canonical type. */
+    contentType?: string;
+    /** Called once the whole response went out (not on errors or aborts). */
+    onSent?: () => void;
   },
 ): void {
   const xAccel = opts.xAccelRedirect && !!res.req?.headers['x-original-uri'];
@@ -81,7 +87,7 @@ export function sendVideo(
   }
 
   res.set({
-    'Content-Type': 'video/mp4',
+    'Content-Type': opts.contentType ?? 'video/mp4',
     'Content-Disposition': contentDisposition(
       video.originalName,
       opts.download ? 'attachment' : 'inline',
@@ -106,8 +112,9 @@ export function sendVideo(
     path.resolve(video.filePath),
     { dotfiles: 'allow', cacheControl: false },
     (err?: Error & { status?: number; headers?: Record<string, string> }) => {
+      if (!err) return opts.onSent?.();
       // Aborted downloads land here with headers already sent: nothing to do.
-      if (!err || res.headersSent) return;
+      if (res.headersSent) return;
       res.removeHeader('Content-Type');
       res.removeHeader('Content-Disposition');
       res.removeHeader('Cache-Control');

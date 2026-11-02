@@ -1,6 +1,6 @@
 /**
  * One-off: realigns `size` of already-optimized images and avatars with the file on
- * disk. Until plan 01 step 1 (docs/plans/01-tinify-auto-compress.md) the optimize jobs
+ * disk. Until plan 01 step 1 (docs/plans/done/01-tinify-auto-compress.md) the optimize jobs
  * re-encoded the original but kept the upload-time size. Run it after deploying that
  * fix, or rows optimized in between come back wrong.
  *

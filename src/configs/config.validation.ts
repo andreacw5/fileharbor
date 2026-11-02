@@ -65,7 +65,7 @@ export const configValidationSchema = Joi.object({
   // On-demand renders (GET /images/:id resizes, avatar format conversion) run
   // at most this many at once; up to RENDER_QUEUE_LIMIT more wait, the rest 503.
   RENDER_CONCURRENCY: Joi.number().integer().min(1).default(2),
-  RENDER_QUEUE_LIMIT: Joi.number().integer().min(0).default(20),
+  RENDER_QUEUE_LIMIT: Joi.number().integer().min(0).default(200),
   // TinifyAutoJob: images compressed per client per hourly run, so the monthly quota lasts
   TINIFY_AUTO_BATCH: Joi.number().integer().min(1).default(20),
 
@@ -91,6 +91,13 @@ export const configValidationSchema = Joi.object({
   // location; otherwise video responses come back empty.
   VIDEO_X_ACCEL_REDIRECT: Joi.boolean().default(false),
   IMAGE_X_ACCEL_REDIRECT: Joi.boolean().default(false),
+
+  // Downloadable files (plan 12). fileMulterOptions reads the size from
+  // process.env at import, with the same fallback: this entry only validates.
+  MAX_DOWNLOAD_FILE_SIZE: Joi.number().positive().default(209715200),
+  // HMAC key of the 10-minute signed links to private files. Rotating it only
+  // kills the links in flight.
+  FILE_LINK_SECRET: Joi.string().min(32).required(),
 
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),

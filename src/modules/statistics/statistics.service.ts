@@ -57,6 +57,7 @@ export class StatisticsService {
       imageStorageAgg,
       videoStorageAgg,
       avatarStorageAgg,
+      fileStorageAgg,
       newImages,
       newAvatars,
       newAlbums,
@@ -65,6 +66,7 @@ export class StatisticsService {
       newImageStorageAgg,
       newVideoStorageAgg,
       newAvatarStorageAgg,
+      newFileStorageAgg,
     ] = await Promise.all([
       this.prisma.client.count(
         Object.keys(clientWhere).length
@@ -79,6 +81,10 @@ export class StatisticsService {
       this.prisma.image.aggregate({ where: clientWhere, _sum: { size: true } }),
       this.prisma.video.aggregate({ where: clientWhere, _sum: { size: true } }),
       this.prisma.avatar.aggregate({
+        where: clientWhere,
+        _sum: { size: true },
+      }),
+      this.prisma.storedFile.aggregate({
         where: clientWhere,
         _sum: { size: true },
       }),
@@ -99,9 +105,13 @@ export class StatisticsService {
         where: clientWhere7d,
         _sum: { size: true },
       }),
+      this.prisma.storedFile.aggregate({
+        where: clientWhere7d,
+        _sum: { size: true },
+      }),
     ]);
 
-    // Video sizes are BigInt; a Number is exact up to 8 PiB.
+    // Video and file sizes are BigInt; a Number is exact up to 8 PiB.
     const sumBytes = (...aggs: { _sum: { size: number | bigint | null } }[]) =>
       aggs.reduce((total, agg) => total + Number(agg._sum.size ?? 0), 0);
 
@@ -122,6 +132,7 @@ export class StatisticsService {
           newImageStorageAgg,
           newVideoStorageAgg,
           newAvatarStorageAgg,
+          newFileStorageAgg,
         ),
       },
       { excludeExtraneousValues: true },
@@ -141,11 +152,13 @@ export class StatisticsService {
           imageStorageAgg,
           videoStorageAgg,
           avatarStorageAgg,
+          fileStorageAgg,
         ),
         storageByKind: {
           images: sumBytes(imageStorageAgg),
           videos: sumBytes(videoStorageAgg),
           avatars: sumBytes(avatarStorageAgg),
+          files: sumBytes(fileStorageAgg),
         },
         last7Days,
         dailyChart,
@@ -262,7 +275,7 @@ export class StatisticsService {
     const series = Array.from({ length: days }, (_, i) => {
       const date = isoDay(new Date(from.getTime() + i * DAY_MS));
       // A day with any snapshot row counts its missing kinds as 0, one with none is null
-      const taken = ['images', 'videos', 'avatars'].some((k) =>
+      const taken = ['images', 'videos', 'avatars', 'files'].some((k) =>
         bytes.has(`${date}:${k}`),
       );
       const at = (k: string) =>
@@ -272,6 +285,7 @@ export class StatisticsService {
         images: at('images'),
         videos: at('videos'),
         avatars: at('avatars'),
+        files: at('files'),
       };
     });
 
@@ -292,7 +306,7 @@ export class StatisticsService {
     };
   }
 
-  /** Live bytes per creator over images, videos and avatars, biggest first. */
+  /** Live bytes per creator over images, videos, avatars and files, biggest first. */
   async getCreatorStorage(
     admin: AdminJwtPayload,
     query: CreatorStorageQuery,
@@ -305,7 +319,8 @@ export class StatisticsService {
     const media = Prisma.sql`
       SELECT "creatorId", 'images' AS kind, size::bigint AS size FROM images WHERE ${scope}
       UNION ALL SELECT "creatorId", 'videos', size FROM videos WHERE ${scope}
-      UNION ALL SELECT "creatorId", 'avatars', size::bigint FROM avatars WHERE ${scope}`;
+      UNION ALL SELECT "creatorId", 'avatars', size::bigint FROM avatars WHERE ${scope}
+      UNION ALL SELECT "creatorId", 'files', size FROM files WHERE ${scope}`;
     const byKind = (kind: string) =>
       Prisma.sql`coalesce(sum(size) FILTER (WHERE kind = ${kind}), 0)::float8`;
 
@@ -316,11 +331,12 @@ export class StatisticsService {
           images: number;
           videos: number;
           avatars: number;
+          files: number;
           totalBytes: number;
           itemCount: number;
         }[]
       >`SELECT "creatorId", ${byKind('images')} AS images, ${byKind('videos')} AS videos,
-          ${byKind('avatars')} AS avatars, sum(size)::float8 AS "totalBytes", count(*)::int AS "itemCount"
+          ${byKind('avatars')} AS avatars, ${byKind('files')} AS files, sum(size)::float8 AS "totalBytes", count(*)::int AS "itemCount"
         FROM (${media}) t
         GROUP BY "creatorId"
         ORDER BY "totalBytes" DESC, "creatorId"

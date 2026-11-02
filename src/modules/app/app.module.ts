@@ -21,6 +21,7 @@ import { BastionModule } from '@/modules/bastion/bastion.module';
 import { AuditInterceptor } from '@heyatom/bastion-client/nest';
 import { MeModule } from '@/modules/me/me.module';
 import { VideoModule } from '@/modules/video/video.module';
+import { FileModule } from '@/modules/file/file.module';
 import { StatisticsModule } from '@/modules/statistics/statistics.module';
 import { CreatorModule } from '@/modules/creator/creator.module';
 import { TagModule } from '@/modules/tag/tag.module';
@@ -110,6 +111,7 @@ import { sanitizeLoggedUrl } from '@/common/share-tokens';
 
     // Video module
     VideoModule,
+    FileModule,
 
     // Admin module
     AdminModule,

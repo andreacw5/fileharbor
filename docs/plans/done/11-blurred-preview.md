@@ -12,8 +12,8 @@ verified: f9d95ee
 ## Problema
 
 Almanac archivia su FileHarbor le opere DeviantArt degli autori, tutte con `isPrivate: true`
-([upload.service.ts](../../../almanac/src/modules/sync/upload.service.ts)), e le serve dal proprio
-proxy (`stream()` in [admin-catalog.service.ts](../../../almanac/src/modules/admin/admin-catalog.service.ts))
+([upload.service.ts](../../../../almanac/src/modules/sync/upload.service.ts)), e le serve dal proprio
+proxy (`stream()` in [admin-catalog.service.ts](../../../../almanac/src/modules/admin/admin-catalog.service.ts))
 con `X-API-Key` + `X-User-Id` dell'autore. Chi può vedere cosa (`PUBLIC` / `TIER` / `PREMIUM`) lo
 decide Almanac, non FileHarbor.
 
@@ -80,7 +80,7 @@ Vogliamo che un utente free veda le opere riservate **sfocate** e che un subscri
   file.
 - **Fuori da questo piano:**
   - Il lato Almanac (il proxy passa `?blur=1` ai free) è la decisione P-6 del
-    [piano 14 di Almanac](../../../almanac/docs/plans/14-public-api.md). Vincolo per quel piano: **URL distinte per variante** (es. `/assets/:id/image?blur=1` e `/assets/:id/image`, o due
+    [piano 14 di Almanac](../../../../almanac/docs/plans/14-public-api.md). Vincolo per quel piano: **URL distinte per variante** (es. `/assets/:id/image?blur=1` e `/assets/:id/image`, o due
     route). Il proxy risponde `Cache-Control: private, max-age=86400`: se free e subscriber leggessero
     la stessa URL e solo il server scegliesse cosa servire, chi si abbona vedrebbe il blur dalla cache
     del browser fino a 24 h (e chi disdice continuerebbe a vedere l'originale). Con URL diverse è la UI a
@@ -176,7 +176,7 @@ helper nuovo.
 29/10/2026, per Almanac piano 14 P-8. **Approvato dall'utente il 29/10/2026.**
 
 Il sito `wood19aw.cc` carica le immagini **direttamente da FileHarbor** (Almanac dà solo l'URL,
-[piano 14](../../../almanac/docs/plans/14-public-api.md) § Immagini e cache). Le copie delle opere
+[piano 14](../../../../almanac/docs/plans/14-public-api.md) § Immagini e cache). Le copie delle opere
 bloccate sono private: il browser di un visitatore free è anonimo, e "stesso accesso dell'originale"
 gli darebbe il lucchetto anche per `?blur=1`. Uno share token non va bene: apre l'intera immagine
 (`?blur=1&token=` meno `blur=1` = originale). Serve che la sfocata di una copia privata sia servibile

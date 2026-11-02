@@ -469,8 +469,10 @@ export class ImageService implements OnModuleDestroy {
         fitsThumb && (await this.storage.fileExists(thumbPath))
           ? thumbPath
           : originalPath;
+      // Loader, not buffer: a gallery page of cold variants queues behind
+      // the limiter with no bytes in memory until its turn.
       const rendered = await this.storage.resizeImage(
-        await this.storage.readFile(sourcePath),
+        () => this.storage.readFile(sourcePath),
         width,
         height,
         format,

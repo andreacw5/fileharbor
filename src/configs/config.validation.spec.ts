@@ -8,7 +8,11 @@ const PROD = {
 
 describe('validateConfig ENABLE_SWAGGER', () => {
   const swagger = (env: Record<string, string>) =>
-    validateConfig({ DATABASE_URL: 'postgresql://x', ...env }).ENABLE_SWAGGER;
+    validateConfig({
+      DATABASE_URL: 'postgresql://x',
+      FILE_LINK_SECRET: 'x'.repeat(32),
+      ...env,
+    }).ENABLE_SWAGGER;
 
   it('is off when NODE_ENV is unset, although the schema defaults it', () => {
     expect(swagger({})).toBe('false');
@@ -35,7 +39,10 @@ describe('validateConfig ENABLE_SWAGGER', () => {
 });
 
 describe('validateConfig TRUST_PROXY_HOPS', () => {
-  const base = { DATABASE_URL: 'postgresql://x' };
+  const base = {
+    DATABASE_URL: 'postgresql://x',
+    FILE_LINK_SECRET: 'x'.repeat(32),
+  };
 
   it('defaults to 0 outside production', () => {
     expect(validateConfig(base).TRUST_PROXY_HOPS).toBe(0);
@@ -46,5 +53,15 @@ describe('validateConfig TRUST_PROXY_HOPS', () => {
     delete prod.TRUST_PROXY_HOPS;
     expect(() => validateConfig(prod)).toThrow(/TRUST_PROXY_HOPS/);
     expect(validateConfig({ ...base, ...PROD }).TRUST_PROXY_HOPS).toBe(1);
+  });
+});
+
+describe('validateConfig FILE_LINK_SECRET', () => {
+  it('is required, at least 32 chars', () => {
+    const base = { DATABASE_URL: 'postgresql://x' };
+    expect(() => validateConfig(base)).toThrow(/FILE_LINK_SECRET/);
+    expect(() =>
+      validateConfig({ ...base, FILE_LINK_SECRET: 'short' }),
+    ).toThrow(/FILE_LINK_SECRET/);
   });
 });

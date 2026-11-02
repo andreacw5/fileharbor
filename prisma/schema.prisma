@@ -48,6 +48,7 @@ model Client {
   albums           Album[]
   tags             Tag[]
   videos           Video[]
+  storedFiles      StoredFile[]
   storageSnapshots StorageSnapshot[]
   ownerPrincipal   AdminPrincipal?   @relation(fields: [ownerPrincipalId], references: [id], onDelete: Restrict)
 
@@ -73,6 +74,7 @@ model Creator {
   client         Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
   images         Image[]
   videos         Video[]
+  storedFiles    StoredFile[]
   avatars        Avatar[]
   albums         Album[]
   adminBookmarks AdminCreatorBookmark[]
@@ -192,6 +194,29 @@ model Video {
   @@index([creatorId])
   @@index([clientId, creatorId])
   @@map("videos")
+}
+
+// Downloadable file (plan 12): zip or pdf, served as-is, never opened server-side.
+// `StoredFile`, not `File`: a `File` model would shadow the global File type.
+model StoredFile {
+  id           String   @id @default(uuid())
+  clientId     String
+  creatorId    String
+  originalName String
+  storagePath  String // {domain}/files/{id}
+  mimeType     String // canonical: application/zip | application/pdf
+  size         BigInt
+  isPrivate    Boolean  @default(false)
+  downloads    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@index([creatorId])
+  @@map("files")
 }
 
 // Many-to-many relationship between Video and Tag
@@ -407,6 +432,7 @@ enum MediaKind {
   IMAGE
   VIDEO
   AVATAR
+  FILE
 }
 
 // Daily per-client storage (plan 04), written by StorageSnapshotJob at 00:30 UTC: the

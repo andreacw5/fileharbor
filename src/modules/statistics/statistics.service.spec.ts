@@ -3,8 +3,13 @@ import { StatisticsService } from './statistics.service';
 describe('StatisticsService.getGlobalStats', () => {
   const admin = { allowedClientIds: ['client-1'] } as any;
 
-  // Image and avatar sizes are Int, video sizes BigInt: totals must add all three.
-  const sizes = { image: 1000, video: BigInt(3_000_000_000), avatar: 50 };
+  // Image and avatar sizes are Int, video and file sizes BigInt: totals add all four.
+  const sizes = {
+    image: 1000,
+    video: BigInt(3_000_000_000),
+    avatar: 50,
+    file: BigInt(7),
+  };
   const model = (size: number | bigint | null) => ({
     count: jest.fn().mockResolvedValue(0),
     aggregate: jest.fn().mockResolvedValue({ _sum: { size } }),
@@ -16,23 +21,25 @@ describe('StatisticsService.getGlobalStats', () => {
       image: model(sizes.image),
       video: model(video),
       avatar: model(sizes.avatar),
+      storedFile: model(sizes.file),
       album: model(null),
       creator: model(null),
       storageSnapshot: { groupBy: jest.fn().mockResolvedValue([]) },
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as any);
 
-  it('sums image, video and avatar bytes into totalStorage and newStorage', async () => {
+  it('sums image, video, avatar and file bytes into totalStorage and newStorage', async () => {
     const stats = await build(sizes.video).getGlobalStats(admin);
 
-    expect(stats.totalStorage).toBe(3_000_001_050);
-    expect(stats.last7Days.newStorage).toBe(3_000_001_050);
+    expect(stats.totalStorage).toBe(3_000_001_057);
+    expect(stats.last7Days.newStorage).toBe(3_000_001_057);
     // Plain numbers: a bigint here would make the JSON response throw
     expect(typeof stats.totalStorage).toBe('number');
     expect(stats.storageByKind).toEqual({
       images: 1000,
       videos: 3_000_000_000,
       avatars: 50,
+      files: 7,
     });
   });
 
@@ -46,7 +53,7 @@ describe('StatisticsService.getGlobalStats', () => {
   it('treats an empty table (null sum) as zero bytes', async () => {
     const stats = await build(null).getGlobalStats(admin);
 
-    expect(stats.totalStorage).toBe(1050);
+    expect(stats.totalStorage).toBe(1057);
   });
 });
 
@@ -83,6 +90,13 @@ describe('StatisticsService storage report', () => {
       },
       video: { groupBy: jest.fn().mockResolvedValue([]) },
       avatar: { groupBy: jest.fn().mockResolvedValue([]) },
+      storedFile: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValue([
+            { clientId: 'c1', _count: { _all: 1 }, _sum: { size: BigInt(5) } },
+          ]),
+      },
       creator: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRaw: jest.fn().mockResolvedValue([{ total: 0 }]),
     };
@@ -98,13 +112,26 @@ describe('StatisticsService storage report', () => {
 
     expect(report.firstSnapshot).toBe('2026-10-21');
     expect(report.series).toEqual([
-      { date: '2026-10-20', images: null, videos: null, avatars: null },
-      { date: '2026-10-21', images: 100, videos: 5, avatars: 0 },
-      { date: '2026-10-22', images: null, videos: null, avatars: null },
+      {
+        date: '2026-10-20',
+        images: null,
+        videos: null,
+        avatars: null,
+        files: null,
+      },
+      { date: '2026-10-21', images: 100, videos: 5, avatars: 0, files: 0 },
+      {
+        date: '2026-10-22',
+        images: null,
+        videos: null,
+        avatars: null,
+        files: null,
+      },
     ]);
     // byClient is live and biggest first; a client with no videos reads 0
     expect(report.byClient.map((c) => c.clientId)).toEqual(['c2', 'c1']);
     expect(report.byClient[0].videos).toEqual({ count: 0, bytes: 0 });
+    expect(report.byClient[1].files).toEqual({ count: 1, bytes: 5 });
   });
 
   it('rejects a reversed, oversized or impossible range with 400', async () => {

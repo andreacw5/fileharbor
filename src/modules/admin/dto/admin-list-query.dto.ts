@@ -19,7 +19,7 @@ export const MEDIA_SORT_FIELDS = [
 ] as const;
 export type MediaSortField = (typeof MEDIA_SORT_FIELDS)[number];
 
-class AdminScopedListQuery extends PageParams {
+export class AdminScopedListQuery extends PageParams {
   @ApiPropertyOptional({ description: 'Scope to a specific client' })
   @IsOptional()
   @IsString()

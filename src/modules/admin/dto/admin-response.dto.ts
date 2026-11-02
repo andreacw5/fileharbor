@@ -81,6 +81,7 @@ export class StorageByKindDto {
   @ApiProperty({ description: 'Bytes' }) @Expose() images: number;
   @ApiProperty({ description: 'Bytes' }) @Expose() videos: number;
   @ApiProperty({ description: 'Bytes' }) @Expose() avatars: number;
+  @ApiProperty({ description: 'Bytes' }) @Expose() files: number;
 }
 
 export class StatsTrendDto {

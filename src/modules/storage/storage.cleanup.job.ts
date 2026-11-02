@@ -23,7 +23,7 @@ export class StorageCleanupJob {
 
   /**
    * Clean up orphaned files from disk every night at 2 AM.
-   * Removes image, avatar and video files that do not have a corresponding database record.
+   * Removes image, avatar, video and downloadable files that do not have a corresponding database record.
    */
   @Cron('0 2 * * *')
   async cleanOrphanedFiles() {
@@ -34,6 +34,7 @@ export class StorageCleanupJob {
         let orphanedImagesCount = 0;
         let orphanedAvatarsCount = 0;
         let orphanedVideosCount = 0;
+        let orphanedFilesCount = 0;
 
         // Get all client domains from storage
         const domains = await this.storage.getAllClientDomains();
@@ -153,6 +154,25 @@ export class StorageCleanupJob {
                 }
               }
             }
+
+            // Clean orphaned downloadable files
+            const fileIds = await this.storage.getClientFileIds(domain);
+            const files = await this.prisma.storedFile.findMany({
+              where: { clientId: client.id },
+              select: { id: true },
+            });
+            const knownFileIds = new Set(files.map((f) => f.id));
+            for (const fileId of fileIds) {
+              if (
+                !knownFileIds.has(fileId) &&
+                (await this.removeOrphan(
+                  this.storage.getFileDir(domain, fileId),
+                  `${domain}/files/${fileId}`,
+                ))
+              ) {
+                orphanedFilesCount++;
+              }
+            }
           } catch (error) {
             this.logger.error(
               `Failed to clean orphaned files for domain ${domain}:`,
@@ -162,7 +182,7 @@ export class StorageCleanupJob {
         }
 
         this.logger.log(
-          `Orphaned files cleanup completed - Images: ${orphanedImagesCount}, Avatars: ${orphanedAvatarsCount}, Videos: ${orphanedVideosCount}`,
+          `Orphaned files cleanup completed - Images: ${orphanedImagesCount}, Avatars: ${orphanedAvatarsCount}, Videos: ${orphanedVideosCount}, Files: ${orphanedFilesCount}`,
         );
       } catch (error) {
         this.logger.error('Orphaned files cleanup job failed:', error.message);

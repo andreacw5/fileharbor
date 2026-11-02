@@ -10,6 +10,7 @@ import { CreatorModule } from '@/modules/creator/creator.module';
 import { BookmarksModule } from '@/modules/bookmarks/bookmarks.module';
 import { BastionModule } from '@/modules/bastion/bastion.module';
 import { VideoModule } from '@/modules/video/video.module';
+import { FileModule } from '@/modules/file/file.module';
 
 // Controllers
 import { ClientsAdminController } from './controllers/clients-admin.controller';
@@ -20,6 +21,7 @@ import { CreatorsAdminController } from './controllers/creators-admin.controller
 import { ImageShareLinksAdminController } from './controllers/image-share-links-admin.controller';
 import { BookmarksAdminController } from './controllers/bookmarks-admin.controller';
 import { VideosAdminController } from './controllers/videos-admin.controller';
+import { FilesAdminController } from './controllers/files-admin.controller';
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { VideosAdminController } from './controllers/videos-admin.controller';
     ConfigModule,
     BastionModule,
     VideoModule,
+    FileModule,
   ],
   controllers: [
     ClientsAdminController,
@@ -44,6 +47,7 @@ import { VideosAdminController } from './controllers/videos-admin.controller';
     ImageShareLinksAdminController,
     BookmarksAdminController,
     VideosAdminController,
+    FilesAdminController,
   ],
   providers: [],
   exports: [],
