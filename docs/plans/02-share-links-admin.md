@@ -1,10 +1,9 @@
 ---
 type: plan
 service: fileharbor
-status: in-progress
+issue: andreacw5/fileharbor#11
 estimate: 1.5d
 updated: 2026-10-22
-verified: 4774bd3
 ---
 
 # 02 · Share-link dalla console (FX1)

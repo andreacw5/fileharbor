@@ -1,10 +1,9 @@
 ---
 type: plan
 service: fileharbor
-status: deferred
+issue: andreacw5/fileharbor#12
 estimate: 1d
 updated: 2026-10-24
-verified: 6475eb0
 ---
 
 # 08 · Placeholder immagine: ThumbHash + colore dominante

@@ -1,9 +1,11 @@
 # Piani
 
-| # | Piano | Stato |
+Lo stato dei piani vive sulla board [HeyAtom](https://github.com/orgs/heyatomdev/projects/1).
+
+| # | Piano | Issue |
 |---|---|---|
-| 02 | [Share-link dalla console](02-share-links-admin.md) | in-progress |
-| 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | deferred |
+| 02 | [Share-link dalla console](02-share-links-admin.md) | [#11](https://github.com/andreacw5/fileharbor/issues/11) |
+| 08 | [Placeholder ThumbHash + colore dominante](08-image-placeholders.md) | [#12](https://github.com/andreacw5/fileharbor/issues/12) |
 
 ## Chiusi
 
