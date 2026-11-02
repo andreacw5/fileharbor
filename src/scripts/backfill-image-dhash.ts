@@ -1,6 +1,6 @@
 /**
  * Fills `images.dHash` for rows uploaded before plan 03
- * (docs/plans/03-duplicate-detection.md), or emptied by the 64 -> 256 bit
+ * (docs/plans/done/03-duplicate-detection.md), or emptied by the 64 -> 256 bit
  * migration. New uploads hash themselves.
  *
  * Lives in src/ so `nest build` ships it in dist/ (see backfill-media-size.ts).
