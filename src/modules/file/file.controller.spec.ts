@@ -131,6 +131,13 @@ describe('FileController', () => {
     expect(prisma.storedFile.update).not.toHaveBeenCalled();
   });
 
+  it('does not count a HEAD request', async () => {
+    const res = await fetch(`${base}/files/pub/download`, { method: 'HEAD' });
+    expect(res.status).toBe(200);
+    await settle();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
   it('serves a Range chunk as 206 without counting it', async () => {
     const res = await get('pub', { Range: 'bytes=100-199' });
     expect(res.status).toBe(206);

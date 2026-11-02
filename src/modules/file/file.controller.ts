@@ -124,6 +124,8 @@ export class FileController {
   @Get(':id/download')
   @ApiOperation({
     summary: 'Download a file (attachment, Range support)',
+    // Public route: overrides the class-level api-key requirement in the spec
+    security: [],
     description:
       'Public for public files. A private file needs the X-API-Key of its client or a ?token from POST /files/:id/link; otherwise 404.',
   })
@@ -154,8 +156,9 @@ export class FileController {
       throw new NotFoundException('File not found');
     }
     const { filePath, contentType } = this.fileService.resolveDelivery(file);
-    // One download per transfer, not per Range chunk
-    const counts = !range || /^bytes=0-/.test(range);
+    // One download per transfer, not per Range chunk. HEAD reaches this
+    // handler too (link checkers, unfurls) and sends no body: never counted.
+    const counts = req.method === 'GET' && (!range || /^bytes=0-/.test(range));
     sendVideo(
       res,
       {
