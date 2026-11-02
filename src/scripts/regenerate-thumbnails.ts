@@ -1,6 +1,6 @@
 /**
  * One-off: rebuilds every image's thumb.webp from its stored original and drops the
- * cached variants (docs/plans/06-regenerate-renditions.md). Run it after changing
+ * cached variants (docs/plans/done/06-regenerate-renditions.md). Run it after changing
  * THUMBNAIL_SIZE / THUMBNAIL_QUALITY: existing thumbs keep the old size otherwise.
  * Deploy the new env first, the script reads it from the container.
  *
