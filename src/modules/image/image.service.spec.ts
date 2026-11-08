@@ -172,6 +172,7 @@ describe('ImageService', () => {
       };
       return config[key];
     }),
+    getOrThrow: jest.fn(() => 'a'.repeat(64)),
   };
 
   const mockCreatorServiceMock = {

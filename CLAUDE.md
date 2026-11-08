@@ -103,6 +103,8 @@ the volume). Every byte figure anywhere = originals' `size` (no thumbs/variants)
   Setting `API_PREFIX=v2` in prod → 404 on everything.
 - `CORS_ORIGIN` and `TRUST_PROXY_HOPS=1` required in production; boot fails without `CORS_ORIGIN`.
 - `IMAGE_X_ACCEL_REDIRECT` stays **off** in prod (nginx cache > X-Accel); `VIDEO_X_ACCEL_REDIRECT=true`.
+- `TINIFY_KEY_SECRET` (64 hex, `openssl rand -hex 32`) is required: boot fails without it. It encrypts
+  `Client.tinifyApiKey` at rest (`common/tinify-key.ts`); changing it = re-enter every Tinify key.
 - `FILE_LINK_SECRET` (≥ 32 chars) is required: boot fails without it. nginx `/files/` location: **no**
   `proxy_cache`, `client_max_body_size` ≥ `MAX_DOWNLOAD_FILE_SIZE`, `proxy_request_buffering off`.
 - Public image GETs are `immutable`: after a regenerate the console reloads with `?t=<updatedAt>`.

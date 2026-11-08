@@ -41,3 +41,7 @@ lerna-debug.log*
 storage/*
 
 graphify-out/
+
+# Local uploads (keep the placeholder)
+/storage/*
+!/storage/.gitkeep

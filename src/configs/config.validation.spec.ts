@@ -11,6 +11,7 @@ describe('validateConfig ENABLE_SWAGGER', () => {
     validateConfig({
       DATABASE_URL: 'postgresql://x',
       FILE_LINK_SECRET: 'x'.repeat(32),
+      TINIFY_KEY_SECRET: 'a'.repeat(64),
       ...env,
     }).ENABLE_SWAGGER;
 
@@ -42,6 +43,7 @@ describe('validateConfig TRUST_PROXY_HOPS', () => {
   const base = {
     DATABASE_URL: 'postgresql://x',
     FILE_LINK_SECRET: 'x'.repeat(32),
+    TINIFY_KEY_SECRET: 'a'.repeat(64),
   };
 
   it('defaults to 0 outside production', () => {

@@ -4,6 +4,8 @@ packages:
 # @nestjs/platform-express pins multer exact; 2.5.0 fixes CVE-2026-113872. Drop once Nest bumps it.
 overrides:
   multer: ^2.5.0
+  # @nestjs/swagger pins js-yaml 5.3.0 exact; 5.4.1 fixes GHSA-r3ph-w7gj-g6xm. Drop once swagger bumps it.
+  js-yaml: ^5.4.1
 
 # pnpm 10.14 reads these keys (not `allowBuilds`, nor onlyBuiltDependencies in .npmrc).
 # Without ffmpeg-static's postinstall the binary is never downloaded: video thumbnails fail with ENOENT.

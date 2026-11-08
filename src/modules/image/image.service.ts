@@ -21,6 +21,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
 import { RouteHelperService } from '@/utils/route.utils';
+import { openTinifyKey } from '@/common/tinify-key';
 import {
   ImageResponseDto,
   ShareLinkResponseDto,
@@ -1576,7 +1577,10 @@ export class ImageService implements OnModuleDestroy {
     }
 
     // Get API key from client
-    const tinifyKey = client.tinifyApiKey;
+    const tinifyKey = openTinifyKey(
+      client.tinifyApiKey,
+      this.config.getOrThrow<string>('TINIFY_KEY_SECRET'),
+    );
     if (!tinifyKey || !tinifyKey.trim()) {
       this.logger.error(
         `[compressImageWithTinify] Tinify API key not configured for client - ID: ${client.id}`,

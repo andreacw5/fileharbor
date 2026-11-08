@@ -11,6 +11,8 @@ import {
 } from '@/modules/statistics/storage-usage';
 import { ClientStatsResponseDto } from './dto/client-stats-response.dto';
 import { randomBytes } from 'crypto';
+import { ConfigService } from '@nestjs/config';
+import { openTinifyKey, sealTinifyKey } from '@/common/tinify-key';
 
 // Every X-API-Key request validates its key: cache hits for a short while so a
 // burst of requests costs one query. Only valid clients are cached (a bogus key
@@ -42,7 +44,22 @@ export class ClientService {
     { domain: string; expiresAt: number }
   >();
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private config: ConfigService,
+  ) {}
+
+  private get tinifySecret(): string {
+    return this.config.getOrThrow<string>('TINIFY_KEY_SECRET');
+  }
+
+  /** Stored Tinify key → plaintext, for the admin DTO to mask (never sent in clear). */
+  private revealTinifyKey<T extends { tinifyApiKey: string | null }>(c: T): T {
+    return {
+      ...c,
+      tinifyApiKey: openTinifyKey(c.tinifyApiKey, this.tinifySecret),
+    };
+  }
 
   /**
    * Validate client by API key
@@ -263,7 +280,7 @@ export class ClientService {
     const storageMap = await this.storageByClient(allowed);
 
     return clients.map((c) => ({
-      ...c,
+      ...this.revealTinifyKey(c),
       totalImages: c._count.images,
       totalAvatars: c._count.avatars,
       totalAlbums: c._count.albums,
@@ -298,7 +315,7 @@ export class ClientService {
     const storage = await this.storageByClient([clientId]);
 
     return {
-      ...client,
+      ...this.revealTinifyKey(client),
       totalImages: client._count.images,
       totalAvatars: client._count.avatars,
       totalAlbums: client._count.albums,
@@ -312,6 +329,11 @@ export class ClientService {
    * Update arbitrary client fields and return the enriched result (admin use).
    */
   async updateClientWithStats(clientId: string, data: Record<string, any>) {
+    if (data.tinifyApiKey)
+      data = {
+        ...data,
+        tinifyApiKey: sealTinifyKey(data.tinifyApiKey, this.tinifySecret),
+      };
     let updated;
     try {
       updated = await this.prisma.client.update({
@@ -332,7 +354,7 @@ export class ClientService {
     const storage = await this.storageByClient([clientId]);
 
     return {
-      ...updated,
+      ...this.revealTinifyKey(updated),
       totalImages: updated._count.images,
       totalAvatars: updated._count.avatars,
       totalAlbums: updated._count.albums,
