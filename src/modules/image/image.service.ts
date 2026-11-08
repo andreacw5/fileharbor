@@ -132,7 +132,8 @@ export class ImageService implements OnModuleDestroy {
     isPrivate?: boolean,
     username?: string,
     blurPublic?: boolean,
-  ) {
+    checkDuplication?: boolean,
+  ): Promise<ImageResponseDto> {
     const imageId = randomUUID();
     this.logger.debug(
       `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`,
@@ -214,6 +215,41 @@ export class ImageService implements OnModuleDestroy {
           this.thumbnailQuality,
         );
 
+      // Same input the backfill hashes (original.webp). Duplicate detection is
+      // best-effort: a failure leaves dHash null rather than failing the upload.
+      const dHash = await this.storage
+        .computeDHash(webpBuffer)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `[uploadImage] dHash failed - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
+          );
+          return null;
+        });
+
+      // Before any write: a duplicate means nothing is stored.
+      if (checkDuplication && dHash && dHash !== FLAT_DHASH) {
+        const existing = await this.findUploadDuplicate(
+          clientId,
+          creatorId,
+          dHash,
+        );
+        if (existing) {
+          this.logger.log(
+            `[uploadImage] Duplicate - Existing: ${existing.id}, Client: ${clientId}, Creator: ${creatorId}`,
+          );
+          if (albumId)
+            await this.albumService.addItemsToAlbum(
+              albumId,
+              clientId,
+              [{ id: existing.id, resourceType: AlbumResourceType.IMAGE }],
+              { force: true },
+            );
+          return Object.assign(this.formatImageResponse(existing), {
+            duplicate: true,
+          });
+        }
+      }
+
       // Save original
       this.logger.debug(
         `[uploadImage] Saving original - ID: ${imageId}, Size: ${webpBuffer.length} bytes`,
@@ -253,17 +289,6 @@ export class ImageService implements OnModuleDestroy {
               `[uploadImage] Blurred not saved - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
             ),
           );
-
-      // Same input the backfill hashes (original.webp). Duplicate detection is
-      // best-effort: a failure leaves dHash null rather than failing the upload.
-      const dHash = await this.storage
-        .computeDHash(webpBuffer)
-        .catch((error: unknown) => {
-          this.logger.warn(
-            `[uploadImage] dHash failed - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
-          );
-          return null;
-        });
 
       // Save to database (storagePath is the base path without extension)
       this.logger.debug(
@@ -1161,6 +1186,29 @@ export class ImageService implements OnModuleDestroy {
    */
   async getImageMetadata(image: any): Promise<ImageResponseDto> {
     return this.formatImageResponse(image);
+  }
+
+  /**
+   * Oldest image in the client with this dHash that the uploader may see: any of
+   * their own, or another creator's public one (never someone else's private image).
+   * ponytail: no lock, two concurrent uploads of the same image both get stored.
+   */
+  private findUploadDuplicate(
+    clientId: string,
+    creatorId: string,
+    dHash: string,
+  ) {
+    return this.prisma.image.findFirst({
+      where: {
+        clientId,
+        dHash,
+        OR: [{ creatorId }, { isPrivate: false }],
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        imageTags: { include: { tag: { select: { name: true } } } },
+      },
+    });
   }
 
   /**

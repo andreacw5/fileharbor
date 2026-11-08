@@ -102,6 +102,12 @@ export class ImageController {
           description:
             'Serve the ?blur=1 preview to anyone, even when the image is private',
         },
+        checkDuplication: {
+          type: 'boolean',
+          default: false,
+          description:
+            "Skip the upload when the client already holds the same image (same dHash, perceptual): returns the existing one with duplicate: true and status 200. Matches your own images and other creators' public ones. tags, description, isPrivate and blurPublic are ignored on a match; albumId still adds the existing image to the album",
+        },
         username: {
           type: 'string',
           description:
@@ -111,6 +117,7 @@ export class ImageController {
     },
   })
   @ApiCreatedData(ImageResponseDto, 'Uploaded successfully')
+  @ApiOkData(ImageResponseDto, 'checkDuplication matched: existing image')
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
   @UseInterceptors(
@@ -121,6 +128,7 @@ export class ImageController {
     @CreatorExternalId() creatorId: string | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadImageDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<ImageResponseDto> {
     if (!file) {
       this.logger.warn(`[Upload] No file provided by client ${clientId}`);
@@ -148,7 +156,9 @@ export class ImageController {
         dto.isPrivate,
         dto.username,
         dto.blurPublic,
+        dto.checkDuplication,
       );
+      if (result.duplicate) res.status(200);
 
       this.logger.log(
         `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, Creator: ${effectiveCreatorExternalId || 'system'}, Size: ${file.size} bytes`,

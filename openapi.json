@@ -74,6 +74,11 @@
                     "default": false,
                     "description": "Serve the ?blur=1 preview to anyone, even when the image is private"
                   },
+                  "checkDuplication": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip the upload when the client already holds the same image (same dHash, perceptual): returns the existing one with duplicate: true and status 200. Matches your own images and other creators' public ones. tags, description, isPrivate and blurPublic are ignored on a match; albumId still adds the existing image to the album"
+                  },
                   "username": {
                     "type": "string",
                     "description": "Username of the uploader (saved/updated on the creator record)"
@@ -84,6 +89,24 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "checkDuplication matched: existing image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ImageResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "201": {
             "description": "Uploaded successfully",
             "content": {
@@ -6733,6 +6756,11 @@
             "type": "string",
             "description": "Ready-made srcset (absolute URLs, WebP q85): 320/640/960/1280/1920w below the original width, then the original. Omitted for private images",
             "example": "http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423?width=320 320w, http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423 400w"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "description": "Upload with checkDuplication only: true when nothing was stored and this is the existing image with the same dHash",
+            "example": true
           }
         },
         "required": [

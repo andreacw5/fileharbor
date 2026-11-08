@@ -285,6 +285,58 @@ describe('ImageService', () => {
       expect(mockStorageService.blurImage).not.toHaveBeenCalled(); // public: lazy
     });
 
+    const uploadChecked = () =>
+      service.uploadImage(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+
+    it('checkDuplication returns the existing image and stores nothing', async () => {
+      mockPrismaService.image.findFirst.mockResolvedValueOnce(mockImage);
+
+      const result = await uploadChecked();
+
+      expect(result.duplicate).toBe(true);
+      expect(result.id).toBe(mockImage.id);
+      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            clientId: mockClientId,
+            dHash: '00ff'.repeat(16),
+            OR: [{ creatorId: mockCreator.id }, { isPrivate: false }],
+          },
+        }),
+      );
+      expect(mockStorageService.saveFile).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.create).not.toHaveBeenCalled();
+    });
+
+    it('checkDuplication with no match uploads normally', async () => {
+      mockPrismaService.image.findFirst.mockResolvedValueOnce(null);
+
+      const result = await uploadChecked();
+
+      expect(result.duplicate).toBeUndefined();
+      expect(mockPrismaService.image.create).toHaveBeenCalled();
+    });
+
+    it('checkDuplication never matches a flat dHash', async () => {
+      mockStorageService.computeDHash.mockResolvedValueOnce('0'.repeat(64));
+
+      await uploadChecked();
+
+      expect(mockPrismaService.image.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.image.create).toHaveBeenCalled();
+    });
+
     const uploadPrivate = () =>
       service.uploadImage(
         mockClientId,
