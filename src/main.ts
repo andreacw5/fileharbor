@@ -48,7 +48,7 @@ async function bootstrap() {
 
     // Same value RouteHelperService builds URLs from: served routes and returned
     // URLs always agree. Probes stay at /health/* whatever the prefix.
-    const apiPrefix = config.get<string>('apiPrefix') ?? '';
+    const apiPrefix = config.get<string>('API_PREFIX') ?? '';
     if (apiPrefix) {
       app.setGlobalPrefix(apiPrefix, {
         exclude: ['health/live', 'health/ready'],

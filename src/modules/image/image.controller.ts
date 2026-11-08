@@ -102,6 +102,12 @@ export class ImageController {
           description:
             'Serve the ?blur=1 preview to anyone, even when the image is private',
         },
+        checkDuplication: {
+          type: 'boolean',
+          default: false,
+          description:
+            "Skip the upload when the client already holds the same image (same dHash, perceptual): returns the existing one with duplicate: true and status 200. Matches your own images and other creators' public ones. tags, description, isPrivate and blurPublic are ignored on a match; albumId still adds the existing image to the album",
+        },
         username: {
           type: 'string',
           description:
@@ -111,6 +117,7 @@ export class ImageController {
     },
   })
   @ApiCreatedData(ImageResponseDto, 'Uploaded successfully')
+  @ApiOkData(ImageResponseDto, 'checkDuplication matched: existing image')
   @ApiResponse({ status: 400, description: 'No file or invalid format' })
   @ApiResponse({ status: 413, description: 'File too large' })
   @UseInterceptors(
@@ -121,46 +128,31 @@ export class ImageController {
     @CreatorExternalId() creatorId: string | undefined,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadImageDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<ImageResponseDto> {
     if (!file) {
       this.logger.warn(`[Upload] No file provided by client ${clientId}`);
       throw new BadRequestException('No file uploaded');
     }
 
-    this.logger.debug(
-      `[Upload] Starting - Client: ${clientId}, Creator: ${creatorId || 'anonymous'}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
+    // Use creatorId from DTO if provided, otherwise use from decorator (X-User-Id header)
+    const effectiveCreatorExternalId = dto.creatorId || creatorId;
+
+    const result = await this.imageService.uploadImage(
+      clientId,
+      effectiveCreatorExternalId,
+      file,
+      dto.albumId,
+      dto.tags,
+      dto.description,
+      dto.isPrivate,
+      dto.username,
+      dto.blurPublic,
+      dto.checkDuplication,
     );
+    if (result.duplicate) res.status(200);
 
-    try {
-      // Use creatorId from DTO if provided, otherwise use from decorator (X-User-Id header)
-      const effectiveCreatorExternalId = dto.creatorId || creatorId;
-      this.logger.debug(
-        `[Upload] Effective Creator ID: ${effectiveCreatorExternalId || 'system'}`,
-      );
-
-      const result = await this.imageService.uploadImage(
-        clientId,
-        effectiveCreatorExternalId,
-        file,
-        dto.albumId,
-        dto.tags,
-        dto.description,
-        dto.isPrivate,
-        dto.username,
-        dto.blurPublic,
-      );
-
-      this.logger.log(
-        `[Upload] Success - Image ID: ${result.id}, Client: ${clientId}, Creator: ${effectiveCreatorExternalId || 'system'}, Size: ${file.size} bytes`,
-      );
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[Upload] Failed - Client: ${clientId}, File: ${file.originalname}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+    return result;
   }
 
   @Get()
@@ -181,10 +173,6 @@ export class ImageController {
     const result = await this.imageService.listImages(
       { clientId, creatorId: query.creatorId, albumId: query.albumId },
       query,
-    );
-
-    this.logger.log(
-      `[ListImages] Success - Client: ${clientId}, Total: ${result.meta.total}, Returned: ${result.data.length}`,
     );
 
     return result;
@@ -387,7 +375,7 @@ export class ImageController {
         });
       }
 
-      if (this.config.get<boolean>('image.xAccelRedirect')) {
+      if (this.config.get<boolean>('IMAGE_X_ACCEL_REDIRECT')) {
         await countHit();
         res.set(headers);
         res.set(
@@ -488,48 +476,33 @@ export class ImageController {
     @Param('imageId') imageId: string,
     @Body() dto: UpdateImageMetadataDto,
   ): Promise<ImageResponseDto> {
-    this.logger.debug(
-      `[UpdateImage] Starting - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
-    );
-
     const validCreatorExternalId =
       this.imageService.validateCreatorExternalId(creatorId);
 
-    try {
-      const result = await this.imageService.updateImageMetadata(
+    const result = await this.imageService.updateImageMetadata(
+      imageId,
+      clientId,
+      validCreatorExternalId,
+      dto.tags,
+      dto.description,
+      dto.isPrivate,
+      dto.blurPublic,
+    );
+    // Visibility changes only; the booleans are the fact tracked, not secrets.
+    const visibility = {
+      ...(typeof dto.isPrivate === 'boolean' && { isPrivate: dto.isPrivate }),
+      ...(typeof dto.blurPublic === 'boolean' && {
+        blurPublic: dto.blurPublic,
+      }),
+    };
+    if (Object.keys(visibility).length > 0)
+      auditClientWrite(this.audit, 'fh_image.updated', clientId, creatorId, {
         imageId,
-        clientId,
-        validCreatorExternalId,
-        dto.tags,
-        dto.description,
-        dto.isPrivate,
-        dto.blurPublic,
-      );
-      // Visibility changes only; the booleans are the fact tracked, not secrets.
-      const visibility = {
-        ...(typeof dto.isPrivate === 'boolean' && { isPrivate: dto.isPrivate }),
-        ...(typeof dto.blurPublic === 'boolean' && {
-          blurPublic: dto.blurPublic,
-        }),
-      };
-      if (Object.keys(visibility).length > 0)
-        auditClientWrite(this.audit, 'fh_image.updated', clientId, creatorId, {
-          imageId,
-          fields: Object.keys(visibility),
-          ...visibility,
-        });
+        fields: Object.keys(visibility),
+        ...visibility,
+      });
 
-      this.logger.log(
-        `[UpdateImage] Success - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
-      );
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[UpdateImage] Failed - ImageId: ${imageId}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+    return result;
   }
 
   @Post(':imageId/share')
@@ -549,33 +522,18 @@ export class ImageController {
     @Param('imageId') imageId: string,
     @Body() dto: CreateShareLinkDto,
   ): Promise<ShareLinkResponseDto> {
-    this.logger.debug(
-      `[CreateShareLink] Starting - ImageId: ${imageId}, Client: ${clientId}, Creator: ${creatorId}`,
-    );
-
     const validCreatorExternalId =
       this.imageService.validateCreatorExternalId(creatorId);
     const expiresAt = dto.expiresAt;
 
-    try {
-      const result = await this.imageService.createShareLink(
-        imageId,
-        clientId,
-        validCreatorExternalId,
-        expiresAt,
-      );
+    const result = await this.imageService.createShareLink(
+      imageId,
+      clientId,
+      validCreatorExternalId,
+      expiresAt,
+    );
 
-      this.logger.log(
-        `[CreateShareLink] Success - ImageId: ${imageId}, Expires: ${expiresAt ? expiresAt.toISOString() : 'never'}`,
-      );
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[CreateShareLink] Failed - ImageId: ${imageId}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+    return result;
   }
 
   @Delete('share/:shareId')
@@ -593,35 +551,23 @@ export class ImageController {
     @CreatorExternalId() creatorId: string,
     @Param('shareId') shareId: string,
   ): Promise<DeleteResponseDto> {
-    this.logger.debug(
-      `[DeleteShareLink] Starting - ShareId: ${shareId}, Client: ${clientId}, Creator: ${creatorId}`,
-    );
-
     const validCreatorExternalId =
       this.imageService.validateCreatorExternalId(creatorId);
 
-    try {
-      const result = await this.imageService.deleteShareLink(
-        shareId,
-        clientId,
-        validCreatorExternalId,
-      );
+    const result = await this.imageService.deleteShareLink(
+      shareId,
+      clientId,
+      validCreatorExternalId,
+    );
 
-      this.logger.log(`[DeleteShareLink] Success - ShareId: ${shareId}`);
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[DeleteShareLink] Failed - ShareId: ${shareId}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+    return result;
   }
 
   @Delete(':imageId')
   @ApiOperation({
     summary: 'Delete image',
-    description: 'Permanently delete image and files.',
+    description:
+      "Permanently delete image and files. With X-User-Id, only that creator's own image (404 otherwise); without it, any image of the client.",
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
   @ApiOkData(DeleteResponseDto, 'Deleted successfully')
@@ -631,24 +577,15 @@ export class ImageController {
     @CreatorExternalId() creatorId: string | undefined,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
-    this.logger.debug(
-      `[DeleteImage] Starting - ImageId: ${imageId}, Client: ${clientId}`,
+    const result = await this.imageService.deleteImage(
+      imageId,
+      clientId,
+      creatorId,
     );
+    auditClientWrite(this.audit, 'fh_image.deleted', clientId, creatorId, {
+      imageId,
+    });
 
-    try {
-      const result = await this.imageService.deleteImage(imageId, clientId);
-      auditClientWrite(this.audit, 'fh_image.deleted', clientId, creatorId, {
-        imageId,
-      });
-
-      this.logger.log(`[DeleteImage] Success - ImageId: ${imageId}`);
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[DeleteImage] Failed - ImageId: ${imageId}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+    return result;
   }
 }

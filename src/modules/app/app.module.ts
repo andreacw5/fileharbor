@@ -26,7 +26,6 @@ import { StatisticsModule } from '@/modules/statistics/statistics.module';
 import { CreatorModule } from '@/modules/creator/creator.module';
 import { TagModule } from '@/modules/tag/tag.module';
 import { HealthModule } from '@/modules/health/health.module';
-import config from '../../configs/config.schema';
 import { validateConfig } from '@/configs/config.validation';
 import { MetricsModule } from '@heyatom/nest-common/metrics';
 import { RouteHelperModule } from '@/utils/route.utils';
@@ -36,7 +35,6 @@ import { sanitizeLoggedUrl } from '@/common/share-tokens';
   imports: [
     // Configuration
     ConfigModule.forRoot({
-      load: [config],
       isGlobal: true,
       cache: true,
       validate: validateConfig,
@@ -78,7 +76,7 @@ import { sanitizeLoggedUrl } from '@/common/share-tokens';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         app: 'fileharbor',
-        port: config.getOrThrow<number>('metricsPort'),
+        port: config.getOrThrow<number>('METRICS_PORT'),
       }),
     }),
 
@@ -87,8 +85,8 @@ import { sanitizeLoggedUrl } from '@/common/share-tokens';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => [
         {
-          ttl: configService.get('throttle.ttl') * 1000,
-          limit: configService.get('throttle.limit'),
+          ttl: configService.get<number>('THROTTLE_TTL') * 1000,
+          limit: configService.get<number>('THROTTLE_LIMIT'),
         },
       ],
       inject: [ConfigService],

@@ -16,7 +16,6 @@ describe('ImageService admin reads', () => {
     {} as any,
     {} as any,
     {} as any,
-    {} as any,
   );
   const creator = { id: 'creator-uuid', externalId: 'ext-1', username: 'wood' };
 

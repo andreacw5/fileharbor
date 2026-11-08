@@ -17,95 +17,21 @@ export class ClientInitService implements OnModuleInit {
   }
 
   /**
-   * Initialize the default client and its seed creators if the database is empty
+   * Seed the default client (and, via ClientService, its creators) on an empty DB.
    */
   private async initializeDefaultClient() {
     try {
-      const isDevelopment = process.env.NODE_ENV === 'development';
+      if ((await this.prisma.client.count()) > 0) return;
 
-      // Check if any clients exist
-      const clientCount = await this.prisma.client.count();
-
-      if (clientCount === 0) {
-        this.logger.log(
-          'Database is empty. Creating default client and its seed creators...',
-        );
-
-        // Create default client using ClientService
-        const defaultClient = await this.clientService.createClient({
-          name: 'Default Client',
-          domain: 'default.fileharbor.local',
-          active: true,
-        });
-
-        this.logger.log(
-          `Created default client: ${defaultClient.name} (ID: ${defaultClient.id})`,
-        );
-        // Never the key itself: logs outlive the secret. Read it from the
-        // clients table.
-        this.logger.log(`API Key: ${maskApiKey(defaultClient.apiKey)}`);
-
-        // Get the default creators that were auto-created by ClientService
-        const defaultCreators = await this.prisma.creator.findMany({
-          where: { clientId: defaultClient.id },
-        });
-
-        if (defaultCreators.length > 0) {
-          this.logger.log(
-            `Created ${defaultCreators.length} default creators:`,
-          );
-          for (const creator of defaultCreators) {
-            this.logger.log(
-              `  - ${creator.username} (externalId: ${creator.externalId}, ID: ${creator.id})`,
-            );
-          }
-        }
-
-        this.logger.log('Default client initialization completed.');
-      } else {
-        this.logger.log(
-          `Found ${clientCount} existing client(s). Skipping initialization.`,
-        );
-
-        // In development mode, log existing clients info
-        if (isDevelopment) {
-          this.logger.log('Development mode: Logging existing clients...');
-          const clients = await this.prisma.client.findMany({
-            include: {
-              creators: true,
-              _count: {
-                select: {
-                  images: true,
-                  avatars: true,
-                  albums: true,
-                },
-              },
-            },
-          });
-
-          for (const client of clients) {
-            this.logger.log(`\n--- Client: ${client.name} ---`);
-            this.logger.log(`  ID: ${client.id}`);
-            this.logger.log(`  API Key: ${maskApiKey(client.apiKey)}`);
-            this.logger.log(`  Domain: ${client.domain || 'N/A'}`);
-            this.logger.log(`  Active: ${client.active}`);
-            this.logger.log(`  Images: ${client._count.images}`);
-            this.logger.log(`  Avatars: ${client._count.avatars}`);
-            this.logger.log(`  Albums: ${client._count.albums}`);
-            this.logger.log(`  Creators (${client.creators.length}):`);
-
-            for (const creator of client.creators) {
-              this.logger.log(
-                `    - ${creator.username || creator.externalId} (ID: ${creator.id}, External: ${creator.externalId})`,
-              );
-              if (creator.email) {
-                this.logger.log(`      Email: ${creator.email}`);
-              }
-            }
-          }
-          this.logger.log('');
-        }
-      }
+      const defaultClient = await this.clientService.createClient({
+        name: 'Default Client',
+        domain: 'default.fileharbor.local',
+        active: true,
+      });
+      // Never the key itself: logs outlive the secret. Read it from the clients table.
+      this.logger.log(
+        `Empty database: created default client ${defaultClient.id} (API key ${maskApiKey(defaultClient.apiKey)})`,
+      );
     } catch (error) {
       this.logger.error('Error initializing default client:', error);
       // Don't throw - allow app to start even if initialization fails

@@ -74,6 +74,11 @@
                     "default": false,
                     "description": "Serve the ?blur=1 preview to anyone, even when the image is private"
                   },
+                  "checkDuplication": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip the upload when the client already holds the same image (same dHash, perceptual): returns the existing one with duplicate: true and status 200. Matches your own images and other creators' public ones. tags, description, isPrivate and blurPublic are ignored on a match; albumId still adds the existing image to the album"
+                  },
                   "username": {
                     "type": "string",
                     "description": "Username of the uploader (saved/updated on the creator record)"
@@ -84,6 +89,24 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "checkDuplication matched: existing image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ImageResponseDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "201": {
             "description": "Uploaded successfully",
             "content": {
@@ -426,7 +449,7 @@
         ]
       },
       "delete": {
-        "description": "Permanently delete image and files.",
+        "description": "Permanently delete image and files. With X-User-Id, only that creator's own image (404 otherwise); without it, any image of the client.",
         "operationId": "ImageController_deleteImage",
         "parameters": [
           {
@@ -1589,7 +1612,7 @@
     },
     "/avatars": {
       "post": {
-        "description": "Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes.",
+        "description": "Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes. With X-User-Id it must equal externalUserId (403 NOT_AVATAR_OWNER).",
         "operationId": "AvatarController_uploadAvatar",
         "parameters": [],
         "requestBody": {
@@ -1824,7 +1847,7 @@
         ]
       },
       "delete": {
-        "description": "Delete the avatar for a specific creator. Requires only API key authentication.",
+        "description": "Delete the avatar for a specific creator. With X-User-Id it must be that same user (403 NOT_AVATAR_OWNER); without it the client backend may delete any avatar of its client.",
         "operationId": "AvatarController_deleteAvatar",
         "parameters": [
           {
@@ -2410,6 +2433,7 @@
         ]
       },
       "delete": {
+        "description": "With X-User-Id, only that creator's own video (404 otherwise); without it, any video of the client.",
         "operationId": "VideoController_deleteVideo",
         "parameters": [
           {
@@ -2731,6 +2755,7 @@
     },
     "/files/{id}": {
       "delete": {
+        "description": "With X-User-Id, only that creator's own file (404 otherwise); without it, any file of the client.",
         "operationId": "FileController_deleteFile",
         "parameters": [
           {
@@ -6549,7 +6574,7 @@
   "info": {
     "title": "FileHarbor 2.0",
     "description": "Multi-tenant image management system API",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "contact": {
       "name": "Andrea Tombolato",
       "url": "https://heyatom.dev",
@@ -6733,6 +6758,11 @@
             "type": "string",
             "description": "Ready-made srcset (absolute URLs, WebP q85): 320/640/960/1280/1920w below the original width, then the original. Omitted for private images",
             "example": "http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423?width=320 320w, http://localhost:3000/images/b2ce77c1-3836-4e28-807f-51f929e12423 400w"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "description": "Upload with checkDuplication only: true when nothing was stored and this is the existing image with the same dHash",
+            "example": true
           }
         },
         "required": [

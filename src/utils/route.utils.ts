@@ -51,7 +51,7 @@ export class RouteHelperService {
   readonly baseUrl: string;
 
   constructor(private readonly config: ConfigService) {
-    this.apiPrefix = config.get<string>('apiPrefix') ?? '';
+    this.apiPrefix = config.get<string>('API_PREFIX') ?? '';
     // `https://cdn.example.com/` would otherwise yield `//images/...`
     this.baseUrl = (
       config.get<string>('BASE_URL') ?? 'http://localhost:3000'

@@ -29,6 +29,7 @@ describe('CORS_ORIGIN validation', () => {
       {
         DATABASE_URL: 'postgresql://x',
         FILE_LINK_SECRET: 'x'.repeat(32),
+        TINIFY_KEY_SECRET: 'a'.repeat(64),
         ...env,
       },
       { allowUnknown: true },

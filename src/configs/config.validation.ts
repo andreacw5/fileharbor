@@ -10,7 +10,11 @@ export const configValidationSchema = Joi.object({
 
   // Server
   PORT: Joi.number().positive().default(3000),
-  API_PREFIX: Joi.string().allow('').default(''),
+  // Route prefix for setGlobalPrefix and every URL handed out (RouteHelperService).
+  API_PREFIX: Joi.string()
+    .allow('')
+    .replace(/^\/+|\/+$/g, '')
+    .default(''),
   // Swagger UI on /docs. Unset → on only when NODE_ENV is explicitly
   // development/test; resolved in validateConfig() from the raw NODE_ENV.
   ENABLE_SWAGGER: Joi.string().valid('true', 'false').empty(''),
@@ -98,6 +102,14 @@ export const configValidationSchema = Joi.object({
   // HMAC key of the 10-minute signed links to private files. Rotating it only
   // kills the links in flight.
   FILE_LINK_SECRET: Joi.string().min(32).required(),
+  // AES-256-GCM key for Client.tinifyApiKey at rest (src/common/tinify-key.ts).
+  // Changing it makes the stored keys unreadable: re-enter them in the console.
+  TINIFY_KEY_SECRET: Joi.string()
+    .pattern(/^[0-9a-fA-F]{64}$/)
+    .required()
+    .messages({
+      'string.pattern.base': 'TINIFY_KEY_SECRET must be 64 hex chars',
+    }),
 
   // Bastion IdP
   BASTION_URL: Joi.string().uri().default('http://localhost:3001'),

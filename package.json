@@ -1,6 +1,6 @@
 {
   "name": "fileharbor",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "FileHarbor is a file storage service that allows you to upload, download, and delete files",
   "author": "Andrea Tombolato <hey@heyatom.dev> (https://heyatom.dev)",
   "private": true,
@@ -29,7 +29,6 @@
   "dependencies": {
     "@heyatom/bastion-client": "^1.0.0",
     "@heyatom/nest-common": "^0.4.0",
-    "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.2.8",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.2.8",
@@ -41,7 +40,6 @@
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@prometheus-io/client": "^0.16.1",
-    "axios": "^1.20.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "express": "^5.3.0",
@@ -49,7 +47,7 @@
     "ffprobe-static": "^3.1.0",
     "fluent-ffmpeg": "^2.1.3",
     "helmet": "^8.3.0",
-    "joi": "^18.3.0",
+    "joi": "^18.3.2",
     "multer": "^2.5.0",
     "nestjs-pino": "^4.6.1",
     "pg": "8.23.1",

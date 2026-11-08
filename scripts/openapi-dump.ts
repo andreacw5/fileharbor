@@ -11,6 +11,7 @@ import { createOpenApiDocument } from '@heyatom/nest-common';
 
 process.env.DATABASE_URL ??= 'postgresql://openapi:dump@localhost:5432/openapi';
 process.env.FILE_LINK_SECRET ??= 'openapi-dump-'.padEnd(32, 'x');
+process.env.TINIFY_KEY_SECRET ??= '0'.repeat(64);
 
 async function dump(out: string) {
   const { AppModule } =

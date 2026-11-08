@@ -51,7 +51,7 @@ prod (`services/fileharbor/config/fileharbor.env` nel repo `server-backup`, giti
 | 1.9 | Doc obsolete in Meridian: `FILEHARBOR_API_PREFIX=v2`, "setGlobalPrefix never called" | `../../meridian/CLAUDE.md:656,756`, `fileharbor-proxy.ts:21` | XS |
 | 1.10 | Race `deleteAvatar` / `uploadAvatar` contemporanei sullo stesso creator → riga con file mancanti (pre-esistente) | `avatar.service.ts` | S |
 | 1.11 ✅ | Sweep orfani: un errore su una dir interrompe il resto del dominio per quella notte (pre-esistente) | `storage.cleanup.job.ts` | XS |
-| 1.12 | Orientamento EXIF perso all'upload: `convertToWebP` non chiama `.rotate()` e Sharp scarta i metadati, quindi le foto JPEG da telefono restano ruotate male (l'optimize job ruota, ma l'EXIF è già sparito). Trovato pianificando 08, non riprodotto | `storage.service.ts:~503` | XS |
+| 1.12 | Orientamento EXIF perso all'upload: `encodeWebpWithThumbnail` non chiama `.rotate()` e Sharp scarta i metadati, quindi le foto JPEG da telefono restano ruotate male (l'optimize job ruota, ma l'EXIF è già sparito). Trovato pianificando 08, non riprodotto | `storage.service.ts` `encodeWebpWithThumbnail` | XS |
 
 ## 2. Feature — da fare più avanti
 

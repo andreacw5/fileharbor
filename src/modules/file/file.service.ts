@@ -113,9 +113,13 @@ export class FileService {
   }
 
   /** `clientId` undefined: any client (download route, admin). */
-  async getFile(id: string, clientId?: string) {
+  async getFile(id: string, clientId?: string, ownerExternalId?: string) {
     const file = await this.prisma.storedFile.findFirst({
-      where: { id, ...(clientId && { clientId }) },
+      where: {
+        id,
+        ...(clientId && { clientId }),
+        ...(ownerExternalId && { creator: { externalId: ownerExternalId } }),
+      },
       include: { client: { select: { domain: true } } },
     });
     if (!file) throw new NotFoundException('File not found');
@@ -169,8 +173,9 @@ export class FileService {
   }
 
   /** Returns the deleted row, for the caller's audit. */
-  async deleteFile(id: string, clientId: string) {
-    const file = await this.getFile(id, clientId);
+  /** `ownerExternalId`: only that creator's file, else 404 (see ImageService.deleteImage). */
+  async deleteFile(id: string, clientId: string, ownerExternalId?: string) {
+    const file = await this.getFile(id, clientId, ownerExternalId);
     // Row first: a failed file delete leaves a stray dir for the orphan
     // sweep, never a row pointing at missing files.
     await this.prisma.storedFile.delete({ where: { id } });

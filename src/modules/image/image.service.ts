@@ -8,7 +8,6 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
   FLAT_DHASH,
@@ -21,8 +20,8 @@ import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
-import { lastValueFrom } from 'rxjs';
 import { RouteHelperService } from '@/utils/route.utils';
+import { openTinifyKey } from '@/common/tinify-key';
 import {
   ImageResponseDto,
   ShareLinkResponseDto,
@@ -42,6 +41,7 @@ import {
   snapBlurSize,
   snapQuality,
   snapSize,
+  snapFormat,
 } from './image-variants';
 
 // On-demand resizes cached per image; past this many, new ones are served but
@@ -102,7 +102,6 @@ export class ImageService implements OnModuleDestroy {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private httpService: HttpService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private clientService: ClientService,
@@ -132,7 +131,8 @@ export class ImageService implements OnModuleDestroy {
     isPrivate?: boolean,
     username?: string,
     blurPublic?: boolean,
-  ) {
+    checkDuplication?: boolean,
+  ): Promise<ImageResponseDto> {
     const imageId = randomUUID();
     this.logger.debug(
       `[uploadImage] Start - ID: ${imageId}, Client: ${clientId}, Creator: ${externalId || 'system'}, File: ${file.originalname}, Size: ${file.size}, Type: ${file.mimetype}`,
@@ -214,6 +214,41 @@ export class ImageService implements OnModuleDestroy {
           this.thumbnailQuality,
         );
 
+      // Same input the backfill hashes (original.webp). Duplicate detection is
+      // best-effort: a failure leaves dHash null rather than failing the upload.
+      const dHash = await this.storage
+        .computeDHash(webpBuffer)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `[uploadImage] dHash failed - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
+          );
+          return null;
+        });
+
+      // Before any write: a duplicate means nothing is stored.
+      if (checkDuplication && dHash && dHash !== FLAT_DHASH) {
+        const existing = await this.findUploadDuplicate(
+          clientId,
+          creatorId,
+          dHash,
+        );
+        if (existing) {
+          this.logger.log(
+            `[uploadImage] Duplicate - Existing: ${existing.id}, Client: ${clientId}, Creator: ${creatorId}`,
+          );
+          if (albumId)
+            await this.albumService.addItemsToAlbum(
+              albumId,
+              clientId,
+              [{ id: existing.id, resourceType: AlbumResourceType.IMAGE }],
+              { force: true },
+            );
+          return Object.assign(this.formatImageResponse(existing), {
+            duplicate: true,
+          });
+        }
+      }
+
       // Save original
       this.logger.debug(
         `[uploadImage] Saving original - ID: ${imageId}, Size: ${webpBuffer.length} bytes`,
@@ -253,17 +288,6 @@ export class ImageService implements OnModuleDestroy {
               `[uploadImage] Blurred not saved - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
             ),
           );
-
-      // Same input the backfill hashes (original.webp). Duplicate detection is
-      // best-effort: a failure leaves dHash null rather than failing the upload.
-      const dHash = await this.storage
-        .computeDHash(webpBuffer)
-        .catch((error: unknown) => {
-          this.logger.warn(
-            `[uploadImage] dHash failed - ID: ${imageId}: ${error instanceof Error ? error.message : error}`,
-          );
-          return null;
-        });
 
       // Save to database (storagePath is the base path without extension)
       this.logger.debug(
@@ -389,7 +413,7 @@ export class ImageService implements OnModuleDestroy {
     {
       width: requestedWidth,
       height: requestedHeight,
-      format = 'webp',
+      format: requestedFormat,
       quality: requestedQuality,
       thumb = false,
       blur = false,
@@ -399,6 +423,7 @@ export class ImageService implements OnModuleDestroy {
     const width = snapSize(requestedWidth);
     const height = snapSize(requestedHeight);
     const quality = snapQuality(requestedQuality);
+    const format = snapFormat(requestedFormat);
     const domain = image.client?.domain || image.clientId;
     const fromDisk = async (filePath: string, mimeType: string) => ({
       mimeType,
@@ -656,9 +681,14 @@ export class ImageService implements OnModuleDestroy {
     return new Map(rows.map((r) => [r.id, r.clientId]));
   }
 
+  /**
+   * `ownerExternalId` (client surface, when X-User-Id is sent): only that
+   * creator's image, else 404. Admin routes and keyless backend jobs omit it.
+   */
   async deleteImage(
     imageId: string,
     clientId: string,
+    ownerExternalId?: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
       `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}`,
@@ -668,6 +698,7 @@ export class ImageService implements OnModuleDestroy {
       where: {
         id: imageId,
         clientId,
+        ...(ownerExternalId && { creator: { externalId: ownerExternalId } }),
       },
     });
 
@@ -951,28 +982,6 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
-   * Get share links for an image
-   */
-  async getShareLinks(
-    imageId: string,
-    clientId: string,
-    creatorId: string,
-  ): Promise<ShareLinkResponseDto[]> {
-    const image = await this.findOwnedImage(imageId, clientId, creatorId);
-
-    if (!image) {
-      throw new NotFoundException('Image not found');
-    }
-
-    const shareLinks = await this.prisma.imageShareLink.findMany({
-      where: { imageId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return shareLinks.map((link) => this.formatShareLinkResponse(link));
-  }
-
-  /**
    * Delete share link
    */
   async deleteShareLink(
@@ -1161,6 +1170,29 @@ export class ImageService implements OnModuleDestroy {
    */
   async getImageMetadata(image: any): Promise<ImageResponseDto> {
     return this.formatImageResponse(image);
+  }
+
+  /**
+   * Oldest image in the client with this dHash that the uploader may see: any of
+   * their own, or another creator's public one (never someone else's private image).
+   * ponytail: no lock, two concurrent uploads of the same image both get stored.
+   */
+  private findUploadDuplicate(
+    clientId: string,
+    creatorId: string,
+    dHash: string,
+  ) {
+    return this.prisma.image.findFirst({
+      where: {
+        clientId,
+        dHash,
+        OR: [{ creatorId }, { isPrivate: false }],
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        imageTags: { include: { tag: { select: { name: true } } } },
+      },
+    });
   }
 
   /**
@@ -1553,7 +1585,10 @@ export class ImageService implements OnModuleDestroy {
     }
 
     // Get API key from client
-    const tinifyKey = client.tinifyApiKey;
+    const tinifyKey = openTinifyKey(
+      client.tinifyApiKey,
+      this.config.getOrThrow<string>('TINIFY_KEY_SECRET'),
+    );
     if (!tinifyKey || !tinifyKey.trim()) {
       this.logger.error(
         `[compressImageWithTinify] Tinify API key not configured for client - ID: ${client.id}`,
@@ -1626,11 +1661,14 @@ export class ImageService implements OnModuleDestroy {
       this.logger.debug(
         `[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`,
       );
-      const uploadResponse = await lastValueFrom(
-        this.httpService.post(`${TINIFY_ORIGIN}/shrink`, originalBuffer, {
+      const uploadResponse = await this.tinifyFetch(
+        `${TINIFY_ORIGIN}/shrink`,
+        {
+          method: 'POST',
           headers,
-          responseType: 'json',
-        }),
+          body: originalBuffer as unknown as BodyInit,
+        },
+        'json',
       );
       // Any 2xx means Tinify counted it, even with a body we can't use: no refund from here
       billed = true;
@@ -1672,18 +1710,12 @@ export class ImageService implements OnModuleDestroy {
         this.logger.debug(
           `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
         );
-        const downloadResponse = await lastValueFrom(
-          this.httpService.get(compressedUrl, {
-            headers: {
-              Authorization: `Basic ${authString}`,
-            },
-            responseType: 'arraybuffer',
-            // The origin was checked on the URL above; a redirect would undo it
-            maxRedirects: 0,
-          }),
+        // The origin was checked on the URL above; tinifyFetch never follows a redirect
+        const { data: compressedBuffer } = await this.tinifyFetch(
+          compressedUrl,
+          { headers: { Authorization: `Basic ${authString}` } },
+          'buffer',
         );
-
-        const compressedBuffer = Buffer.from(downloadResponse.data);
 
         // Save compressed file, replacing the original
         await this.storage.saveFile(originalPath, compressedBuffer);
@@ -1792,6 +1824,35 @@ export class ImageService implements OnModuleDestroy {
       }
       throw error;
     }
+  }
+
+  /**
+   * `fetch` to Tinify, redirects never followed. A non-2xx throws with
+   * `response: { status, data, headers }`, which the catch above reads. A 2xx
+   * body that isn't JSON comes back as `null`: still billed, rejected as unusable.
+   */
+  private async tinifyFetch(
+    url: string,
+    init: RequestInit,
+    as: 'json' | 'buffer',
+  ): Promise<{ data: any; headers: Record<string, string> }> {
+    const res = await fetch(url, {
+      ...init,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(60_000),
+    });
+    const headers = Object.fromEntries(res.headers);
+    if (!res.ok) {
+      const data = await res.text().catch(() => '');
+      throw Object.assign(new Error(`Tinify HTTP ${res.status}`), {
+        response: { status: res.status, data, headers },
+      });
+    }
+    const data =
+      as === 'json'
+        ? await res.json().catch(() => null)
+        : Buffer.from(await res.arrayBuffer());
+    return { data, headers };
   }
 
   /**

@@ -92,7 +92,7 @@ pnpm run openapi:dump     # refresh openapi.json
 ```
 
 One-off maintenance scripts live in `src/scripts/` and ship in `dist/` (dry run unless `--apply`):
-`backfill-media-size`, `backfill-image-dhash`, `regenerate-thumbnails`.
+`regenerate-thumbnails`, `backfill-video-thumbnails`.
 
 ## Deployment
 

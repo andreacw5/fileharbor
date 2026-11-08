@@ -10,6 +10,7 @@ import {
   UploadedFile,
   Res,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -57,7 +58,7 @@ export class AvatarController {
   @ApiOperation({
     summary: 'Upload or update creator avatar',
     description:
-      'Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes.',
+      'Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes. With X-User-Id it must equal externalUserId (403 NOT_AVATAR_OWNER).',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadAvatarDto })
@@ -77,6 +78,7 @@ export class AvatarController {
     @ClientId() clientId: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('externalUserId') externalUserId: string,
+    @CreatorExternalId() actorId: string | undefined,
   ): Promise<AvatarResponseDto> {
     if (!file) {
       this.logger.warn(
@@ -91,27 +93,14 @@ export class AvatarController {
       );
       throw new BadRequestException('externalUserId is required in form data');
     }
+    assertOwnAvatar(actorId, externalUserId);
 
-    this.logger.debug(
-      `[uploadAvatar] Starting - Client: ${clientId}, Creator: ${externalUserId}, File: ${file.originalname} (${file.size} bytes), MIME: ${file.mimetype}`,
+    const result = await this.avatarService.uploadAvatar(
+      clientId,
+      file,
+      externalUserId,
     );
-
-    try {
-      const result = await this.avatarService.uploadAvatar(
-        clientId,
-        file,
-        externalUserId,
-      );
-      this.logger.log(
-        `[uploadAvatar] Success - Client: ${clientId}, Creator: ${externalUserId}, Size: ${file.size} bytes`,
-      );
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[uploadAvatar] Failed - Client: ${clientId}, Creator: ${externalUserId}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+    return result;
   }
 
   @Public()
@@ -171,79 +160,59 @@ export class AvatarController {
     res: Response,
     extraHeaders: Record<string, string>,
   ) {
-    this.logger.debug(
-      `[getAvatar] Starting - Creator: ${externalUserId}, Info: ${query.info}, Thumb: ${query.thumb}, Format: ${query.format ?? 'webp'}, Download: ${query.download}`,
-    );
-
-    try {
-      // If info mode, return metadata as JSON
-      if (query.info) {
-        const avatar = await this.avatarService.getAvatarByExternalId(
-          clientId,
-          externalUserId,
-        );
-        const metadata = this.avatarService.getAvatarMetadata(
-          avatar,
-          externalUserId,
-        );
-        this.logger.log(
-          `[getAvatar] Metadata returned - Creator: ${externalUserId}`,
-        );
-        res.set(extraHeaders);
-        // @NoTransform route (it serves files): envelope the JSON branch by hand
-        return res.json({ data: metadata });
-      }
-
-      // Otherwise return the file
-      const { buffer, mimeType, updatedAt } =
-        await this.avatarService.getAvatarFile(
-          clientId,
-          externalUserId,
-          query.thumb,
-          query.format,
-        );
-
-      // Variant suffix keeps thumb/format variants apart in caches and filenames
-      const format = query.format ?? 'webp';
-      const variant = `${query.thumb ? '-thumb' : ''}${format === 'webp' ? '' : `-${format}`}`;
-      const headers: Record<string, string> = {
-        'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=86400',
-        // updatedAt moves on every re-upload (upsert): without it a browser
-        // revalidating after max-age would get 304 and keep the old avatar forever.
-        ETag: `"avatar-${externalUserId}${variant}-${updatedAt.getTime()}"`,
-        ...extraHeaders,
-      };
-
-      if (query.download) {
-        const filename = `avatar-${externalUserId}${variant}.${format === 'jpeg' ? 'jpg' : format}`;
-        headers['Content-Disposition'] = contentDisposition(filename);
-        this.logger.debug(`[getAvatar] Download - Creator: ${externalUserId}`);
-      } else {
-        this.logger.debug(
-          `[getAvatar] View - Creator: ${externalUserId}, Thumb: ${query.thumb}`,
-        );
-      }
-
-      this.logger.debug(
-        `[getAvatar] Success - Creator: ${externalUserId}, Thumb: ${query.thumb}, Size: ${buffer.length} bytes`,
+    // If info mode, return metadata as JSON
+    if (query.info) {
+      const avatar = await this.avatarService.getAvatarByExternalId(
+        clientId,
+        externalUserId,
       );
-
-      res.set(headers);
-      res.send(buffer);
-    } catch (error) {
-      this.logger.error(
-        `[getAvatar] Failed - Creator: ${externalUserId}, Error: ${error.message}`,
+      const metadata = this.avatarService.getAvatarMetadata(
+        avatar,
+        externalUserId,
       );
-      throw error;
+      this.logger.log(
+        `[getAvatar] Metadata returned - Creator: ${externalUserId}`,
+      );
+      res.set(extraHeaders);
+      // @NoTransform route (it serves files): envelope the JSON branch by hand
+      return res.json({ data: metadata });
     }
+
+    // Otherwise return the file
+    const { buffer, mimeType, updatedAt } =
+      await this.avatarService.getAvatarFile(
+        clientId,
+        externalUserId,
+        query.thumb,
+        query.format,
+      );
+
+    // Variant suffix keeps thumb/format variants apart in caches and filenames
+    const format = query.format ?? 'webp';
+    const variant = `${query.thumb ? '-thumb' : ''}${format === 'webp' ? '' : `-${format}`}`;
+    const headers: Record<string, string> = {
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=86400',
+      // updatedAt moves on every re-upload (upsert): without it a browser
+      // revalidating after max-age would get 304 and keep the old avatar forever.
+      ETag: `"avatar-${externalUserId}${variant}-${updatedAt.getTime()}"`,
+      ...extraHeaders,
+    };
+
+    if (query.download) {
+      const filename = `avatar-${externalUserId}${variant}.${format === 'jpeg' ? 'jpg' : format}`;
+      headers['Content-Disposition'] = contentDisposition(filename);
+    }
+
+    res.set(headers);
+    res.send(buffer);
   }
 
   @Delete(':externalUserId')
   @ApiOperation({
     summary: 'Delete creator avatar',
     description:
-      'Delete the avatar for a specific creator. Requires only API key authentication.',
+      'Delete the avatar for a specific creator. With X-User-Id it must be that same user (403 NOT_AVATAR_OWNER); without it the client backend may delete any avatar of its client.',
   })
   @ApiOkData(DeleteAvatarResponseDto, 'Avatar deleted successfully')
   @ApiResponse({ status: 404, description: 'Avatar not found' })
@@ -254,7 +223,8 @@ export class AvatarController {
   async deleteAvatar(
     @ClientId() clientId: string,
     @Param('externalUserId') externalUserId: string,
-    // Who deletes, not whose avatar it is: that one is the path.
+    // Who deletes, not whose avatar it is: that one is the path. When sent,
+    // it must be the same user.
     @CreatorExternalId() actorId: string | undefined,
   ): Promise<DeleteAvatarResponseDto> {
     if (!externalUserId) {
@@ -263,28 +233,29 @@ export class AvatarController {
       );
       throw new BadRequestException('externalUserId is required in path');
     }
+    assertOwnAvatar(actorId, externalUserId);
 
-    this.logger.debug(
-      `[deleteAvatar] Starting - Client: ${clientId}, Creator: ${externalUserId}`,
+    const result = await this.avatarService.deleteAvatar(
+      clientId,
+      externalUserId,
     );
+    auditClientWrite(this.audit, 'fh_avatar.deleted', clientId, actorId, {
+      ownerExternalUserId: externalUserId,
+    });
+    return result;
+  }
+}
 
-    try {
-      const result = await this.avatarService.deleteAvatar(
-        clientId,
-        externalUserId,
-      );
-      auditClientWrite(this.audit, 'fh_avatar.deleted', clientId, actorId, {
-        ownerExternalUserId: externalUserId,
-      });
-      this.logger.log(
-        `[deleteAvatar] Success - Client: ${clientId}, Creator: ${externalUserId}`,
-      );
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `[deleteAvatar] Failed - Client: ${clientId}, Creator: ${externalUserId}, Error: ${error.message}`,
-      );
-      throw error;
-    }
+/**
+ * A user acts only on their own avatar: when X-User-Id is sent it must match
+ * the target. Without it the caller is the client backend itself (cleanup,
+ * account erasure) and may touch any avatar of its client.
+ */
+function assertOwnAvatar(actorId: string | undefined, externalUserId: string) {
+  if (actorId && actorId !== externalUserId) {
+    throw new ForbiddenException({
+      code: 'NOT_AVATAR_OWNER',
+      message: 'X-User-Id can only change its own avatar',
+    });
   }
 }

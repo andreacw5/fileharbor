@@ -53,5 +53,8 @@ jobs:
           version: 'v0.74.0'
           image-ref: 'registry.gitlab.com/heyatomdev/fileharbor:${{ steps.get_version.outputs.VERSION }}'
           format: 'table'
-          exit-code: '0'
+          # Fixable CRITICAL/HIGH fail the job. The image is already pushed by then,
+          # so the red run is the signal not to deploy that tag.
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
           ignore-unfixed: true

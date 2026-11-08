@@ -165,4 +165,12 @@ export class ImageResponseDto {
   })
   @Expose()
   srcset?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Upload with checkDuplication only: true when nothing was stored and this is the existing image with the same dHash',
+    example: true,
+  })
+  @Expose()
+  duplicate?: boolean;
 }

@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.3.0] – 2026-11-08
+
+No migration. **New required env `TINIFY_KEY_SECRET`** (64 hex, `openssl rand -hex 32`): the service does not
+boot without it.
+
+### Added
+- **`checkDuplication` on `POST /images`.** When the client already holds an image with the same dHash (the
+  uploader's own, or another creator's public one), nothing is stored and the existing image comes back with
+  `200` and `duplicate: true`. `albumId` still adds the existing image to the album.
+
+### Changed
+- **Client deletes and avatar writes scoped to `X-User-Id`.** With the header, `DELETE /images/:id`,
+  `/videos/:id` and `/files/:id` only delete that creator's own item (`404` otherwise), and `POST /avatars` /
+  `DELETE /avatars/:externalUserId` require it to equal the target user (`403 NOT_AVATAR_OWNER`). Without the
+  header nothing changes; admin routes are unaffected.
+- Tinify calls use global `fetch` (no redirects, 60s timeout); `@nestjs/axios` and `axios` removed.
+- Removed dead code, the dev-mode client dump and the applied one-off scripts `backfill-media-size` and
+  `backfill-image-dhash`.
+
+### Security
+- `Client.tinifyApiKey` is stored AES-256-GCM encrypted with `TINIFY_KEY_SECRET`; legacy plaintext rows stay
+  readable until re-saved from the console.
+- Variant format is snapped to the fixed list before reaching the file name (CodeQL 14, 36, 37).
+- Dependencies: joi 18.3.2, follow-redirects patched, js-yaml `^5.4.1`, minimatch `>=9.0.7` (dev).
+  `pnpm audit --prod` clean; Trivy fails the image job on fixable CRITICAL/HIGH.
+
+---
+
 ## [4.2.0] – 2026-11-02
 
 Migration `20261102120000_stored_files`. **New required env `FILE_LINK_SECRET`**: the service does not boot

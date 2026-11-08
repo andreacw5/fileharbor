@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -67,6 +68,10 @@ describe('ClientService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: ConfigService,
+          useValue: { getOrThrow: () => 'a'.repeat(64) },
         },
       ],
     }).compile();
