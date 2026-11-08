@@ -16,6 +16,19 @@ export const VARIANT_QUALITIES = [40, 60, 75, 85, 100] as const;
 
 export const DEFAULT_VARIANT_QUALITY = 85;
 
+/** Output formats a variant can be rendered in; anything else falls back to webp. */
+export const VARIANT_FORMATS = ['webp', 'jpeg', 'png'] as const;
+export type VariantFormat = (typeof VARIANT_FORMATS)[number];
+
+/**
+ * Picks the format from the fixed list, so the value that ends up in the
+ * variant's file name is always one of ours, whoever called (the DTO already
+ * rejects anything else on the public route).
+ */
+export function snapFormat(format: string | undefined): VariantFormat {
+  return VARIANT_FORMATS.find((f) => f === format) ?? 'webp';
+}
+
 /** Smallest step ≥ `size` (capped at the largest), so the caller never gets less than asked. */
 export function snapSize(size: number | undefined): number | undefined {
   if (!size) return undefined;

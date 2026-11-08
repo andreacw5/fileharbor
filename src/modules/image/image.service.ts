@@ -41,6 +41,7 @@ import {
   snapBlurSize,
   snapQuality,
   snapSize,
+  snapFormat,
 } from './image-variants';
 
 // On-demand resizes cached per image; past this many, new ones are served but
@@ -412,7 +413,7 @@ export class ImageService implements OnModuleDestroy {
     {
       width: requestedWidth,
       height: requestedHeight,
-      format = 'webp',
+      format: requestedFormat,
       quality: requestedQuality,
       thumb = false,
       blur = false,
@@ -422,6 +423,7 @@ export class ImageService implements OnModuleDestroy {
     const width = snapSize(requestedWidth);
     const height = snapSize(requestedHeight);
     const quality = snapQuality(requestedQuality);
+    const format = snapFormat(requestedFormat);
     const domain = image.client?.domain || image.clientId;
     const fromDisk = async (filePath: string, mimeType: string) => ({
       mimeType,

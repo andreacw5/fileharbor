@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { VARIANT_FORMATS, VariantFormat } from '../image-variants';
 
 export class GetImageDto {
   @ApiPropertyOptional({
@@ -104,8 +105,8 @@ export class GetImageDto {
     example: 'webp',
   })
   @IsOptional()
-  @IsIn(['webp', 'jpeg', 'png'])
-  format?: 'webp' | 'jpeg' | 'png';
+  @IsIn(VARIANT_FORMATS)
+  format?: VariantFormat;
 
   @ApiPropertyOptional({
     description:
