@@ -18,7 +18,7 @@ describe('RouteHelperService', () => {
   it('prefixes paths with API_PREFIX', () => {
     const route = build({
       BASE_URL: 'https://cdn.example.com',
-      apiPrefix: 'v1',
+      API_PREFIX: 'v1',
     });
 
     expect(route.fullUrl('images', 'abc')).toBe(

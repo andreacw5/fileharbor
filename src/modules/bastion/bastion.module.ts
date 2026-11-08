@@ -26,19 +26,19 @@ import { BastionUserGuard } from './guards/bastion-user.guard';
     BastionClientModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const serviceSlug = config.getOrThrow<string>('bastionAppSlug');
+        const serviceSlug = config.getOrThrow<string>('BASTION_APP_SLUG');
         // Empty → BASTION_APP_SLUG alone, so an unset variable keeps the
         // single-slug behaviour rather than silently widening what is accepted.
-        const accepted = (config.get<string>('adminAcceptedAppSlugs') ?? '')
+        const accepted = (config.get<string>('ADMIN_ACCEPTED_APP_SLUGS') ?? '')
           .split(',')
           .map((slug) => slug.trim())
           .filter(Boolean);
         return {
-          baseUrl: config.getOrThrow<string>('bastionUrl'),
+          baseUrl: config.getOrThrow<string>('BASTION_URL'),
           serviceSlug,
-          apiKey: config.get<string>('bastionClientApiKey') || undefined,
-          tenantSlug: config.get<string>('bastionTenantSlug') || undefined,
-          jwksTtlMs: config.get<number>('bastionJwksTtlMs'),
+          apiKey: config.get<string>('BASTION_CLIENT_API_KEY') || undefined,
+          tenantSlug: config.get<string>('BASTION_TENANT_SLUG') || undefined,
+          jwksTtlMs: config.get<number>('BASTION_JWKS_TTL_MS'),
           acceptedAppSlugs: accepted.length ? accepted : [serviceSlug],
         };
       },

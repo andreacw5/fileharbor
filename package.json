@@ -29,7 +29,6 @@
   "dependencies": {
     "@heyatom/bastion-client": "^1.0.0",
     "@heyatom/nest-common": "^0.4.0",
-    "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.2.8",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.2.8",
@@ -41,7 +40,6 @@
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@prometheus-io/client": "^0.16.1",
-    "axios": "^1.20.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "express": "^5.3.0",

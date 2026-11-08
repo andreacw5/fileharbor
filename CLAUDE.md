@@ -80,7 +80,7 @@ the volume). Every byte figure anywhere = originals' `size` (no thumbs/variants)
   Metadata carries ids and field names, never values.
 - **Prisma**: `PrismaService` only, `select` to avoid over-fetching, `pnpm exec prisma generate` after schema
   changes. All queries scoped by `clientId`.
-- **Config**: `ConfigService` only (`config.get('THUMBNAIL_SIZE')`, nested `config.get('throttle.ttl')`),
+- **Config**: `ConfigService` only (`config.get('THUMBNAIL_SIZE')`: the Joi-validated env keys, no second schema),
   Joi-validated in `src/configs/`. Never `process.env` in services.
 - **Logging**: NestJS `Logger`; never `console.log`, tokens, API keys, `Authorization`/`Cookie` headers.
   Share tokens never reach logs (`sanitizeLoggedUrl`).
@@ -136,8 +136,8 @@ pnpm run lint | format
 cp .env.example .env
 ```
 
-One-off scripts in `src/scripts/` (ship in `dist/`, dry-run by default, `--apply`): `backfill-media-size`,
-`backfill-image-dhash`, `regenerate-thumbnails`, `backfill-video-thumbnails`.
+One-off scripts in `src/scripts/` (ship in `dist/`, dry-run by default, `--apply`): `regenerate-thumbnails`,
+`backfill-video-thumbnails`.
 
 ## graphify
 

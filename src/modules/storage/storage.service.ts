@@ -584,24 +584,6 @@ export class StorageService {
   }
 
   /**
-   * Convert image to WebP
-   */
-  async convertToWebP(
-    inputBuffer: Buffer,
-    quality: number = 85,
-  ): Promise<Buffer> {
-    try {
-      return await openImage(inputBuffer).webp({ quality }).toBuffer();
-    } catch (error) {
-      this.logger.error(
-        `[convertToWebP] Failed to convert image to WebP`,
-        error instanceof Error ? error.stack : error,
-      );
-      throw new InternalServerErrorException(`Failed to convert image to WebP`);
-    }
-  }
-
-  /**
    * Upload encode: the WebP original and its thumbnail from one decoder, both
    * from the source bytes (the thumbnail no longer re-decodes the encoded original).
    */

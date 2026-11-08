@@ -341,7 +341,7 @@ export class VideosAdminController {
       },
       {
         download: download === 'true',
-        xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
+        xAccelRedirect: this.config.get<boolean>('VIDEO_X_ACCEL_REDIRECT'),
       },
     );
   }

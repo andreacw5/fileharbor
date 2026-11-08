@@ -197,7 +197,7 @@ export class VideoController {
       },
       {
         download: download === 'true',
-        xAccelRedirect: this.config.get<boolean>('video.xAccelRedirect'),
+        xAccelRedirect: this.config.get<boolean>('VIDEO_X_ACCEL_REDIRECT'),
         // Browser cache only: the route is X-API-Key gated, so a shared cache
         // (nginx/CDN) must not serve it keyless or after isPrivate flips.
         cacheControl: 'private, max-age=86400',

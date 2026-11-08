@@ -12,8 +12,6 @@ import {
   StorageService,
 } from '@/modules/storage/storage.service';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { of, throwError } from 'rxjs';
 import { CreatorService } from '@/modules/creator/creator.service';
 import { ClientService } from '@/modules/client/client.service';
 import { RouteHelperService } from '@/utils/route.utils';
@@ -165,8 +163,6 @@ describe('ImageService', () => {
     blurImage: jest.fn(),
   };
 
-  const mockHttpService = { post: jest.fn(), get: jest.fn() };
-
   const mockConfigService = {
     get: jest.fn((key: string) => {
       const config = {
@@ -203,10 +199,6 @@ describe('ImageService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
-        },
-        {
-          provide: HttpService,
-          useValue: mockHttpService,
         },
         {
           provide: CreatorService,
@@ -1065,34 +1057,6 @@ describe('ImageService', () => {
     });
   });
 
-  describe('getShareLinks', () => {
-    it('lists the links for the owner, resolved from the external id', async () => {
-      mockPrismaService.creator.findUnique.mockResolvedValue(mockCreator);
-      mockPrismaService.image.findFirst.mockResolvedValue(mockImage);
-      mockPrismaService.imageShareLink.findMany.mockResolvedValue([]);
-
-      await expect(
-        service.getShareLinks(mockImageId, mockClientId, mockExternalUserId),
-      ).resolves.toEqual([]);
-      expect(mockPrismaService.image.findFirst).toHaveBeenCalledWith({
-        where: {
-          id: mockImageId,
-          clientId: mockClientId,
-          creatorId: mockCreator.id,
-        },
-      });
-    });
-
-    it('an unknown X-User-Id gets 404', async () => {
-      mockPrismaService.creator.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.getShareLinks(mockImageId, mockClientId, 'someone-else'),
-      ).rejects.toThrow(NotFoundException);
-      expect(mockPrismaService.imageShareLink.findMany).not.toHaveBeenCalled();
-    });
-  });
-
   describe('deleteShareLink', () => {
     beforeEach(() => {
       mockPrismaService.imageShareLink.findUnique.mockResolvedValue({
@@ -1526,7 +1490,17 @@ describe('ImageService', () => {
       currentTinifyLimit: 500,
     };
 
+    // Tinify via global fetch: the first call is the upload, the second the download
+    const tinifyJson = (body: unknown, headers: Record<string, string> = {}) =>
+      new Response(JSON.stringify(body), { status: 201, headers });
+    let fetchMock: jest.SpyInstance;
+    const uploadCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/shrink'));
+    const downloadCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => !String(url).endsWith('/shrink'));
+
     beforeEach(() => {
+      fetchMock = jest.spyOn(global, 'fetch');
       mockPrismaService.image.findUnique.mockResolvedValue({
         ...mockImage,
         isOptimized: true,
@@ -1540,14 +1514,12 @@ describe('ImageService', () => {
 
     it('reserves the quota slot in one conditional update', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(
-        of({
-          data: {
-            output: { url: 'https://api.tinify.com/output/x', size: 600 },
-          },
+      fetchMock.mockResolvedValueOnce(
+        tinifyJson({
+          output: { url: 'https://api.tinify.com/output/x', size: 600 },
         }),
       );
-      mockHttpService.get.mockReturnValue(of({ data: Buffer.alloc(600) }));
+      fetchMock.mockResolvedValueOnce(new Response(new Uint8Array(600)));
       mockStorageService.createThumbnail.mockResolvedValue(Buffer.alloc(10));
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
@@ -1575,15 +1547,13 @@ describe('ImageService', () => {
       await expect(
         service.compressImageWithTinify(mockImageId),
       ).rejects.toThrow(BadRequestException);
-      expect(mockHttpService.post).not.toHaveBeenCalled();
+      expect(uploadCalls()).toHaveLength(0);
       expect(mockPrismaService.client.updateMany).toHaveBeenCalledTimes(1);
     });
 
     it('gives the slot back when Tinify never compressed the image', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(
-        throwError(() => new Error('ECONNRESET')),
-      );
+      fetchMock.mockRejectedValueOnce(new Error('ECONNRESET'));
 
       await expect(
         service.compressImageWithTinify(mockImageId),
@@ -1596,31 +1566,27 @@ describe('ImageService', () => {
 
     it('never downloads an output URL outside api.tinify.com', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(
-        of({
-          data: { output: { url: 'http://169.254.169.254/latest', size: 600 } },
+      fetchMock.mockResolvedValueOnce(
+        tinifyJson({
+          output: { url: 'http://169.254.169.254/latest', size: 600 },
         }),
       );
 
       await expect(
         service.compressImageWithTinify(mockImageId),
       ).rejects.toThrow(BadRequestException);
-      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(downloadCalls()).toHaveLength(0);
       expect(mockStorageService.saveFile).not.toHaveBeenCalled();
     });
 
     it('keeps the slot spent when failing after Tinify billed it', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(
-        of({
-          data: {
-            output: { url: 'https://api.tinify.com/output/x', size: 600 },
-          },
+      fetchMock.mockResolvedValueOnce(
+        tinifyJson({
+          output: { url: 'https://api.tinify.com/output/x', size: 600 },
         }),
       );
-      mockHttpService.get.mockReturnValue(
-        throwError(() => new Error('download failed')),
-      );
+      fetchMock.mockRejectedValueOnce(new Error('download failed'));
 
       await expect(
         service.compressImageWithTinify(mockImageId),
@@ -1630,11 +1596,9 @@ describe('ImageService', () => {
 
     it('keeps the original, still marked compressed, when Tinify saves nothing', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(
-        of({
-          data: {
-            output: { url: 'https://api.tinify.com/output/x', size: 1200 },
-          },
+      fetchMock.mockResolvedValueOnce(
+        tinifyJson({
+          output: { url: 'https://api.tinify.com/output/x', size: 1200 },
         }),
       );
       mockPrismaService.image.update.mockResolvedValue({
@@ -1645,7 +1609,7 @@ describe('ImageService', () => {
 
       await service.compressImageWithTinify(mockImageId);
 
-      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(downloadCalls()).toHaveLength(0);
       expect(mockStorageService.saveFile).not.toHaveBeenCalled();
       expect(mockPrismaService.image.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1656,13 +1620,11 @@ describe('ImageService', () => {
 
     it('raises the local usage to a higher Compression-Count', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(
-        of({
-          headers: { 'compression-count': '42' },
-          data: {
-            output: { url: 'https://api.tinify.com/output/x', size: 1200 },
-          },
-        }),
+      fetchMock.mockResolvedValueOnce(
+        tinifyJson(
+          { output: { url: 'https://api.tinify.com/output/x', size: 1200 } },
+          { 'compression-count': '42' },
+        ),
       );
       mockPrismaService.image.update.mockResolvedValue({
         ...mockImage,
@@ -1680,17 +1642,13 @@ describe('ImageService', () => {
     it('marks the quota exhausted on a Tinify 429', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
       mockPrismaService.client.update.mockResolvedValue({});
-      mockHttpService.post.mockReturnValue(
-        throwError(() =>
-          Object.assign(new Error('Too many requests'), {
-            response: { status: 429, data: {} },
-          }),
-        ),
+      fetchMock.mockResolvedValueOnce(
+        new Response('{"error":"TooManyRequests"}', { status: 429 }),
       );
 
       await expect(
         service.compressImageWithTinify(mockImageId),
-      ).rejects.toThrow('Too many requests');
+      ).rejects.toThrow('Tinify HTTP 429');
       expect(mockPrismaService.client.update).toHaveBeenCalledWith({
         where: { id: mockClientId },
         data: { currentTinifyUsage: 500 },
@@ -1705,7 +1663,7 @@ describe('ImageService', () => {
 
     it('keeps the slot spent on a 2xx without a usable output', async () => {
       mockPrismaService.client.updateMany.mockResolvedValue({ count: 1 });
-      mockHttpService.post.mockReturnValue(of({ data: {} }));
+      fetchMock.mockResolvedValueOnce(tinifyJson({}));
 
       await expect(
         service.compressImageWithTinify(mockImageId),
@@ -1725,7 +1683,7 @@ describe('ImageService', () => {
         service.compressImageWithTinify(mockImageId),
       ).rejects.toThrow(BadRequestException);
       expect(mockPrismaService.client.updateMany).not.toHaveBeenCalled();
-      expect(mockHttpService.post).not.toHaveBeenCalled();
+      expect(uploadCalls()).toHaveLength(0);
     });
   });
 

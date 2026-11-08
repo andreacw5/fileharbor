@@ -8,7 +8,6 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
   FLAT_DHASH,
@@ -21,7 +20,6 @@ import { paginate, PageParams, PaginatedResult } from '@heyatom/nest-common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { plainToInstance } from 'class-transformer';
-import { lastValueFrom } from 'rxjs';
 import { RouteHelperService } from '@/utils/route.utils';
 import {
   ImageResponseDto,
@@ -102,7 +100,6 @@ export class ImageService implements OnModuleDestroy {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: ConfigService,
-    private httpService: HttpService,
     private creatorService: CreatorService,
     private route: RouteHelperService,
     private clientService: ClientService,
@@ -976,28 +973,6 @@ export class ImageService implements OnModuleDestroy {
   }
 
   /**
-   * Get share links for an image
-   */
-  async getShareLinks(
-    imageId: string,
-    clientId: string,
-    creatorId: string,
-  ): Promise<ShareLinkResponseDto[]> {
-    const image = await this.findOwnedImage(imageId, clientId, creatorId);
-
-    if (!image) {
-      throw new NotFoundException('Image not found');
-    }
-
-    const shareLinks = await this.prisma.imageShareLink.findMany({
-      where: { imageId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return shareLinks.map((link) => this.formatShareLinkResponse(link));
-  }
-
-  /**
    * Delete share link
    */
   async deleteShareLink(
@@ -1674,11 +1649,14 @@ export class ImageService implements OnModuleDestroy {
       this.logger.debug(
         `[compressImageWithTinify] Uploading to Tinify API - ID: ${imageId}`,
       );
-      const uploadResponse = await lastValueFrom(
-        this.httpService.post(`${TINIFY_ORIGIN}/shrink`, originalBuffer, {
+      const uploadResponse = await this.tinifyFetch(
+        `${TINIFY_ORIGIN}/shrink`,
+        {
+          method: 'POST',
           headers,
-          responseType: 'json',
-        }),
+          body: originalBuffer as unknown as BodyInit,
+        },
+        'json',
       );
       // Any 2xx means Tinify counted it, even with a body we can't use: no refund from here
       billed = true;
@@ -1720,18 +1698,12 @@ export class ImageService implements OnModuleDestroy {
         this.logger.debug(
           `[compressImageWithTinify] Downloading compressed image - ID: ${imageId}`,
         );
-        const downloadResponse = await lastValueFrom(
-          this.httpService.get(compressedUrl, {
-            headers: {
-              Authorization: `Basic ${authString}`,
-            },
-            responseType: 'arraybuffer',
-            // The origin was checked on the URL above; a redirect would undo it
-            maxRedirects: 0,
-          }),
+        // The origin was checked on the URL above; tinifyFetch never follows a redirect
+        const { data: compressedBuffer } = await this.tinifyFetch(
+          compressedUrl,
+          { headers: { Authorization: `Basic ${authString}` } },
+          'buffer',
         );
-
-        const compressedBuffer = Buffer.from(downloadResponse.data);
 
         // Save compressed file, replacing the original
         await this.storage.saveFile(originalPath, compressedBuffer);
@@ -1840,6 +1812,35 @@ export class ImageService implements OnModuleDestroy {
       }
       throw error;
     }
+  }
+
+  /**
+   * `fetch` to Tinify, redirects never followed. A non-2xx throws with
+   * `response: { status, data, headers }`, which the catch above reads. A 2xx
+   * body that isn't JSON comes back as `null`: still billed, rejected as unusable.
+   */
+  private async tinifyFetch(
+    url: string,
+    init: RequestInit,
+    as: 'json' | 'buffer',
+  ): Promise<{ data: any; headers: Record<string, string> }> {
+    const res = await fetch(url, {
+      ...init,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(60_000),
+    });
+    const headers = Object.fromEntries(res.headers);
+    if (!res.ok) {
+      const data = await res.text().catch(() => '');
+      throw Object.assign(new Error(`Tinify HTTP ${res.status}`), {
+        response: { status: res.status, data, headers },
+      });
+    }
+    const data =
+      as === 'json'
+        ? await res.json().catch(() => null)
+        : Buffer.from(await res.arrayBuffer());
+    return { data, headers };
   }
 
   /**

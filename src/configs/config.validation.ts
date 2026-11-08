@@ -10,7 +10,11 @@ export const configValidationSchema = Joi.object({
 
   // Server
   PORT: Joi.number().positive().default(3000),
-  API_PREFIX: Joi.string().allow('').default(''),
+  // Route prefix for setGlobalPrefix and every URL handed out (RouteHelperService).
+  API_PREFIX: Joi.string()
+    .allow('')
+    .replace(/^\/+|\/+$/g, '')
+    .default(''),
   // Swagger UI on /docs. Unset → on only when NODE_ENV is explicitly
   // development/test; resolved in validateConfig() from the raw NODE_ENV.
   ENABLE_SWAGGER: Joi.string().valid('true', 'false').empty(''),

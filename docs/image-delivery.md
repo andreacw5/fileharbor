@@ -4,7 +4,7 @@ Dettaglio di `GET /images/:id` e delle renditions. Riassunto in [`CLAUDE.md`](..
 
 ## API Versioning
 
-`API_PREFIX` (default empty → `POST /images`) is the single source of truth: `config.schema.ts` `apiPrefix` drives
+`API_PREFIX` (default empty → `POST /images`) is the single source of truth (Joi trims its slashes): it drives
 `setGlobalPrefix` in `main.ts` (`/health/*` excluded) **and** every returned `url`/`fullPath` via `RouteHelperService`
 (`src/utils/route.utils.ts`). Never concatenate a prefix by hand.
 

@@ -29,10 +29,9 @@ ETag for images, and for avatars a fresh queued-at for `fileharbor_unoptimized_o
 
 Optimize jobs re-encode the original at `OPTIMIZE_QUALITY` (default 85, webp effort 4), not
 `ORIGINAL_QUALITY` (default 100, uploads only), and write the new byte count to `size`
-(`markAsOptimized(id, size)`). Rows optimized before that fix are realigned by the one-off
-`src/scripts/backfill-media-size.ts` (in `src/` so it ships in `dist/`: in the container
-`node dist/scripts/backfill-media-size.js [--apply]`, dry run by default). `src/scripts/backfill-image-dhash.ts`
-(same shape, resumable on `dHash IS NULL`, `--rehash` redoes every row) fills `dHash` for images uploaded before plan 03 or emptied by the 256-bit migration. `src/scripts/regenerate-thumbnails.ts`
+(`markAsOptimized(id, size)`). One-off scripts live in `src/` so they ship in `dist/` (in the container
+`node dist/scripts/<name>.js [--apply]`, dry run by default; the applied `backfill-media-size` and
+`backfill-image-dhash` are in git history). `src/scripts/regenerate-thumbnails.ts`
 (same shape, `[--apply] [--client <id>]`) rebuilds every image thumb after a `THUMBNAIL_SIZE` / `THUMBNAIL_QUALITY` change,
 which otherwise applies to new uploads only. `src/scripts/backfill-video-thumbnails.ts` (same shape, `[--apply] [--client <id>] [--force]`)
 extracts `thumb.webp` for videos that have none: uploads made with an image built before 4.0.1 (no ffmpeg binary) kept

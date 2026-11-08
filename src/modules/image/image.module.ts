@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
 import { ImageService } from './image.service';
 import { ImageController } from './image.controller';
 import { ClientModule } from '../client/client.module';
@@ -17,7 +16,6 @@ import { FileharborMetricsModule } from '@/modules/metrics/fileharbor-metrics.mo
     StorageModule,
     // Tinify: a hung call would hold TinifyAutoJob's advisory lock (and the job) forever.
     // A timeout has no response, so its quota slot is refunded.
-    HttpModule.register({ timeout: 60_000 }),
     CreatorModule,
     AlbumModule,
     FileharborMetricsModule,
