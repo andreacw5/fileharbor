@@ -238,7 +238,11 @@ export class VideoController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete video' })
+  @ApiOperation({
+    summary: 'Delete video',
+    description:
+      "With X-User-Id, only that creator's own video (404 otherwise); without it, any video of the client.",
+  })
   @ApiParam({ name: 'id', description: 'Video UUID' })
   @ApiOkData(DeleteVideoResponseDto)
   async deleteVideo(
@@ -246,7 +250,7 @@ export class VideoController {
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,
   ): Promise<DeleteVideoResponseDto> {
-    const result = await this.videoService.deleteVideo(id, clientId);
+    const result = await this.videoService.deleteVideo(id, clientId, creatorId);
     auditClientWrite(this.audit, 'fh_video.deleted', clientId, creatorId, {
       videoId: id,
     });

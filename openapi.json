@@ -449,7 +449,7 @@
         ]
       },
       "delete": {
-        "description": "Permanently delete image and files.",
+        "description": "Permanently delete image and files. With X-User-Id, only that creator's own image (404 otherwise); without it, any image of the client.",
         "operationId": "ImageController_deleteImage",
         "parameters": [
           {
@@ -1612,7 +1612,7 @@
     },
     "/avatars": {
       "post": {
-        "description": "Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes.",
+        "description": "Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes. With X-User-Id it must equal externalUserId (403 NOT_AVATAR_OWNER).",
         "operationId": "AvatarController_uploadAvatar",
         "parameters": [],
         "requestBody": {
@@ -1847,7 +1847,7 @@
         ]
       },
       "delete": {
-        "description": "Delete the avatar for a specific creator. Requires only API key authentication.",
+        "description": "Delete the avatar for a specific creator. With X-User-Id it must be that same user (403 NOT_AVATAR_OWNER); without it the client backend may delete any avatar of its client.",
         "operationId": "AvatarController_deleteAvatar",
         "parameters": [
           {
@@ -2433,6 +2433,7 @@
         ]
       },
       "delete": {
+        "description": "With X-User-Id, only that creator's own video (404 otherwise); without it, any video of the client.",
         "operationId": "VideoController_deleteVideo",
         "parameters": [
           {
@@ -2754,6 +2755,7 @@
     },
     "/files/{id}": {
       "delete": {
+        "description": "With X-User-Id, only that creator's own file (404 otherwise); without it, any file of the client.",
         "operationId": "FileController_deleteFile",
         "parameters": [
           {

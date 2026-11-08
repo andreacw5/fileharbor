@@ -676,6 +676,24 @@ describe('ImageService', () => {
         service.deleteImage('non-existent', mockClientId),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('scopes to the X-User-Id creator only when one is given', async () => {
+      mockPrismaService.image.delete.mockResolvedValue(mockImage);
+
+      await service.deleteImage(mockImageId, mockClientId, 'user-1');
+      expect(mockPrismaService.image.findFirst).toHaveBeenLastCalledWith({
+        where: {
+          id: mockImageId,
+          clientId: mockClientId,
+          creator: { externalId: 'user-1' },
+        },
+      });
+
+      await service.deleteImage(mockImageId, mockClientId);
+      expect(mockPrismaService.image.findFirst).toHaveBeenLastCalledWith({
+        where: { id: mockImageId, clientId: mockClientId },
+      });
+    });
   });
 
   describe('getImageFile', () => {

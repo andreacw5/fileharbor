@@ -203,7 +203,11 @@ export class FileController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a file' })
+  @ApiOperation({
+    summary: 'Delete a file',
+    description:
+      "With X-User-Id, only that creator's own file (404 otherwise); without it, any file of the client.",
+  })
   @ApiParam({ name: 'id', description: 'File UUID' })
   @ApiOkData(DeleteResponseDto)
   async deleteFile(
@@ -211,7 +215,7 @@ export class FileController {
     @ClientId() clientId: string,
     @CreatorExternalId() creatorId: string | undefined,
   ): Promise<DeleteResponseDto> {
-    await this.fileService.deleteFile(id, clientId);
+    await this.fileService.deleteFile(id, clientId, creatorId);
     auditClientWrite(this.audit, 'fh_file.deleted', clientId, creatorId, {
       fileId: id,
     });

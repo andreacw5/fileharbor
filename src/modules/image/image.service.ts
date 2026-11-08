@@ -679,9 +679,14 @@ export class ImageService implements OnModuleDestroy {
     return new Map(rows.map((r) => [r.id, r.clientId]));
   }
 
+  /**
+   * `ownerExternalId` (client surface, when X-User-Id is sent): only that
+   * creator's image, else 404. Admin routes and keyless backend jobs omit it.
+   */
   async deleteImage(
     imageId: string,
     clientId: string,
+    ownerExternalId?: string,
   ): Promise<DeleteResponseDto> {
     this.logger.debug(
       `[deleteImage] Start - ID: ${imageId}, Client: ${clientId}`,
@@ -691,6 +696,7 @@ export class ImageService implements OnModuleDestroy {
       where: {
         id: imageId,
         clientId,
+        ...(ownerExternalId && { creator: { externalId: ownerExternalId } }),
       },
     });
 

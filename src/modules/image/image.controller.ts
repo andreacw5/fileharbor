@@ -566,7 +566,8 @@ export class ImageController {
   @Delete(':imageId')
   @ApiOperation({
     summary: 'Delete image',
-    description: 'Permanently delete image and files.',
+    description:
+      "Permanently delete image and files. With X-User-Id, only that creator's own image (404 otherwise); without it, any image of the client.",
   })
   @ApiParam({ name: 'imageId', description: 'Image UUID' })
   @ApiOkData(DeleteResponseDto, 'Deleted successfully')
@@ -576,7 +577,11 @@ export class ImageController {
     @CreatorExternalId() creatorId: string | undefined,
     @Param('imageId') imageId: string,
   ): Promise<DeleteResponseDto> {
-    const result = await this.imageService.deleteImage(imageId, clientId);
+    const result = await this.imageService.deleteImage(
+      imageId,
+      clientId,
+      creatorId,
+    );
     auditClientWrite(this.audit, 'fh_image.deleted', clientId, creatorId, {
       imageId,
     });

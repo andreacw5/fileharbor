@@ -279,12 +279,18 @@ export class VideoService implements OnModuleDestroy {
     );
   }
 
+  /** `ownerExternalId`: only that creator's video, else 404 (see ImageService.deleteImage). */
   async deleteVideo(
     videoId: string,
     clientId: string,
+    ownerExternalId?: string,
   ): Promise<DeleteVideoResponseDto> {
     const video = await this.prisma.video.findFirst({
-      where: { id: videoId, clientId },
+      where: {
+        id: videoId,
+        clientId,
+        ...(ownerExternalId && { creator: { externalId: ownerExternalId } }),
+      },
     });
     if (!video) throw new NotFoundException('Video not found');
 

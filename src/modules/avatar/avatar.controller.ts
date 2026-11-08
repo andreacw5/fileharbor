@@ -10,6 +10,7 @@ import {
   UploadedFile,
   Res,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -57,7 +58,7 @@ export class AvatarController {
   @ApiOperation({
     summary: 'Upload or update creator avatar',
     description:
-      'Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes.',
+      'Upload new avatar or update existing one for a creator. Auto-converts to WebP, creates thumbnail, and optimizes. With X-User-Id it must equal externalUserId (403 NOT_AVATAR_OWNER).',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadAvatarDto })
@@ -77,6 +78,7 @@ export class AvatarController {
     @ClientId() clientId: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('externalUserId') externalUserId: string,
+    @CreatorExternalId() actorId: string | undefined,
   ): Promise<AvatarResponseDto> {
     if (!file) {
       this.logger.warn(
@@ -91,6 +93,7 @@ export class AvatarController {
       );
       throw new BadRequestException('externalUserId is required in form data');
     }
+    assertOwnAvatar(actorId, externalUserId);
 
     const result = await this.avatarService.uploadAvatar(
       clientId,
@@ -209,7 +212,7 @@ export class AvatarController {
   @ApiOperation({
     summary: 'Delete creator avatar',
     description:
-      'Delete the avatar for a specific creator. Requires only API key authentication.',
+      'Delete the avatar for a specific creator. With X-User-Id it must be that same user (403 NOT_AVATAR_OWNER); without it the client backend may delete any avatar of its client.',
   })
   @ApiOkData(DeleteAvatarResponseDto, 'Avatar deleted successfully')
   @ApiResponse({ status: 404, description: 'Avatar not found' })
@@ -220,7 +223,8 @@ export class AvatarController {
   async deleteAvatar(
     @ClientId() clientId: string,
     @Param('externalUserId') externalUserId: string,
-    // Who deletes, not whose avatar it is: that one is the path.
+    // Who deletes, not whose avatar it is: that one is the path. When sent,
+    // it must be the same user.
     @CreatorExternalId() actorId: string | undefined,
   ): Promise<DeleteAvatarResponseDto> {
     if (!externalUserId) {
@@ -229,6 +233,7 @@ export class AvatarController {
       );
       throw new BadRequestException('externalUserId is required in path');
     }
+    assertOwnAvatar(actorId, externalUserId);
 
     const result = await this.avatarService.deleteAvatar(
       clientId,
@@ -238,5 +243,19 @@ export class AvatarController {
       ownerExternalUserId: externalUserId,
     });
     return result;
+  }
+}
+
+/**
+ * A user acts only on their own avatar: when X-User-Id is sent it must match
+ * the target. Without it the caller is the client backend itself (cleanup,
+ * account erasure) and may touch any avatar of its client.
+ */
+function assertOwnAvatar(actorId: string | undefined, externalUserId: string) {
+  if (actorId && actorId !== externalUserId) {
+    throw new ForbiddenException({
+      code: 'NOT_AVATAR_OWNER',
+      message: 'X-User-Id can only change its own avatar',
+    });
   }
 }
