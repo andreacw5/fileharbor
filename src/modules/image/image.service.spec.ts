@@ -321,6 +321,32 @@ describe('ImageService', () => {
       expect(mockPrismaService.image.create).toHaveBeenCalled();
     });
 
+    it('checkDuplication with albumId adds the existing image to the album', async () => {
+      mockPrismaService.image.findFirst.mockResolvedValueOnce(mockImage);
+
+      const result = await service.uploadImage(
+        mockClientId,
+        mockExternalUserId,
+        mockFile,
+        'album-123',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(result.duplicate).toBe(true);
+      expect(mockAlbumService.addItemsToAlbum).toHaveBeenCalledWith(
+        'album-123',
+        mockClientId,
+        [{ id: mockImage.id, resourceType: 'IMAGE' }],
+        { force: true },
+      );
+      expect(mockPrismaService.image.create).not.toHaveBeenCalled();
+    });
+
     it('checkDuplication never matches a flat dHash', async () => {
       mockStorageService.computeDHash.mockResolvedValueOnce('0'.repeat(64));
 
